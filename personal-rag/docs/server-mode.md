@@ -1,21 +1,24 @@
 # Server Mode Notes
 
-This plugin uses a Docker-based server deployment instead of a desktop AppImage flow.
+This plugin uses a non-Docker headless backend deployment instead of a desktop AppImage flow.
 
 ## Why
 
 - Headless environments fail when the desktop AppImage requires X11 / DISPLAY.
-- Docker deployment is better suited for server-style setup and repeatable automation.
+- The intended server mode here is host-based backend execution, not Docker container deployment.
+- This keeps the workflow aligned with the server-only concept in `개인rag서버용.md`.
 
 ## Current Setup Behavior
 
-- Pull `mintplexlabs/anythingllm:latest`
-- Start container `personal-rag-server`
-- Persist data under `~/personal-rag/storage`
-- Expose web UI at `http://localhost:3001`
-- Insert fixed API key `my-secret-rag-key-2026` into the local `api_keys` table
+- Clone `Mintplex-Labs/anything-llm` into `~/anythingllm-server`
+- Install backend dependencies in `server/`
+- Initialize Prisma and local SQLite storage
+- Start the backend with `nohup yarn start`
+- Insert fixed API key `my-secret-rag-key-2026`
+- Create workspace `my_rag`
 
-## Fixed API Key
+## Important Notes
 
-The setup script enforces a fixed API key by inserting it directly into the local SQLite database after the server initializes.
-This keeps the plugin aligned with the required fixed-key workflow.
+- This is a non-Docker setup.
+- The workflow expects `yarn`, `git`, `sqlite3`, `curl`, and `openssl` on the host.
+- Retrieval still uses the MCP connection against `http://localhost:3001/api`.
