@@ -6,6 +6,37 @@ TARGET_RAG_FOLDER="$HOME/my_rag_docs"
 FIXED_API_KEY="my-secret-rag-key-2026"
 DB_PATH="$HOME/.config/anythingllm-desktop/storage/anythingllm.db"
 
+need_sudo() {
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "sudo"
+    fi
+}
+
+install_system_packages() {
+    local SUDO
+    SUDO="$(need_sudo)"
+
+    echo ">>> 0. 시스템 패키지 확인 및 설치..."
+
+    if command -v apt-get >/dev/null 2>&1; then
+        $SUDO apt-get update
+        $SUDO apt-get install -y libfuse2 sqlite3 curl
+    elif command -v dnf >/dev/null 2>&1; then
+        $SUDO dnf install -y fuse fuse-libs sqlite sqlite curl
+    elif command -v yum >/dev/null 2>&1; then
+        $SUDO yum install -y fuse fuse-libs sqlite sqlite curl
+    elif command -v zypper >/dev/null 2>&1; then
+        $SUDO zypper install -y fuse libfuse2 sqlite3 curl
+    elif command -v pacman >/dev/null 2>&1; then
+        $SUDO pacman -Sy --noconfirm fuse2 sqlite curl
+    else
+        echo "[ERROR] 지원되는 패키지 매니저를 찾지 못했습니다. libfuse.so.2 와 sqlite3를 수동 설치해 주세요." >&2
+        exit 1
+    fi
+}
+
+install_system_packages
+
 echo ">>> 1. 디렉토리 및 파일 준비..."
 mkdir -p "$APP_DIR"
 mkdir -p "$TARGET_RAG_FOLDER"
