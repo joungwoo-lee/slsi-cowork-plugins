@@ -54,7 +54,7 @@ sleep 15
 echo ">>> 7. 고정 API 키 주입 및 워크스페이스 생성..."
 sqlite3 "$DB_PATH" "INSERT OR IGNORE INTO api_keys (secret) VALUES ('$FIXED_API_KEY');"
 
-curl -s -X POST http://localhost:3001/api/workspace/new \
+curl -s -X POST http://localhost:3001/api/v1/workspace/new \
      -H "Authorization: Bearer $FIXED_API_KEY" \
      -H "Content-Type: application/json" \
      -d '{"name": "my_rag"}' > /dev/null

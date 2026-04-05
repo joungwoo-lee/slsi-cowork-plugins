@@ -55,7 +55,7 @@ sleep 15
 echo ">>> 7. 고정 API 키 주입 및 워크스페이스 생성..."
 sqlite3 "$DB_PATH" "INSERT OR IGNORE INTO api_keys (secret) VALUES ('$FIXED_API_KEY');"
 
-curl -s -X POST http://localhost:3001/api/workspace/new \
+curl -s -X POST http://localhost:3001/api/v1/workspace/new \
      -H "Authorization: Bearer $FIXED_API_KEY" \
      -H "Content-Type: application/json" \
      -d '{"name": "my_rag"}' > /dev/null
@@ -84,11 +84,11 @@ for file in "$TARGET_RAG_FOLDER"/*; do
     if [ -f "$file" ]; then
         echo "업로드 중: $(basename "$file")"
         # 1. 파일 업로드 후 저장된 경로(location) 추출
-        RES=$(curl -s -X POST http://localhost:3001/api/document/upload \
+        RES=$(curl -s -X POST http://localhost:3001/api/v1/document/upload \
              -H "Authorization: Bearer $FIXED_API_KEY" \
              -F "file=@$file")
         
-        LOC=$(echo $RES | jq -r '.documents[0].location // empty')
+        LOC=$(echo "$RES" | jq -r '.documents[0].location // empty')
         
         if [ -n "$LOC" ]; then
             DOC_LOCS="$DOC_LOCS\"$LOC\","
@@ -103,7 +103,7 @@ if [ "$DOC_LOCS" == "]" ]; then DOC_LOCS="[]"; fi
 if [ "$DOC_LOCS" != "[]" ]; then
     echo ">>> 워크스페이스에 벡터 임베딩 적용 중..."
     # 2. 업로드된 문서들의 경로를 배열로 전달하여 임베딩 실행
-    curl -s -X POST http://localhost:3001/api/workspace/$WORKSPACE_SLUG/update-embeddings \
+    curl -s -X POST http://localhost:3001/api/v1/workspace/$WORKSPACE_SLUG/update-embeddings \
          -H "Authorization: Bearer $FIXED_API_KEY" \
          -H "Content-Type: application/json" \
          -d "{\"adds\": $DOC_LOCS, \"deletes\": []}" > /dev/null
