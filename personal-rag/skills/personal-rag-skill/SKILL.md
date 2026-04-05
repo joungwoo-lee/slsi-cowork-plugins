@@ -1,18 +1,32 @@
 ---
 name: personal-rag-skill
-description: Operate a personal local RAG workflow through a non-Docker headless AnythingLLM server and MCP connection. Use when a user wants to initialize the personal RAG backend, ingest files from the personal document folder, refresh embeddings, or retrieve grounded answers from the local workspace.
+description: |
+  Search and answer questions grounded in the user's local document folder ($HOME/my_rag_docs).
+  Trigger when the user says: "문서 참고해서", "폴더 안의 문서 기반으로", "내 문서에서 찾아줘",
+  "RAG 검색", "로컬 문서 검색", "my_rag_docs 참고", or any request that references
+  personal/local documents for grounded retrieval answers.
+  Also use for RAG backend setup, document ingestion, and embedding refresh.
 ---
 
 # Personal RAG Skill
 
-Follow this skill when the user asks to use or manage the personal local RAG workflow.
+Follow this skill when the user asks questions that should be answered from their local document folder,
+or when they want to manage the personal RAG pipeline (setup / ingest / search).
+
+## Auto Retrieval Flow (default)
+
+When the user asks a question referencing local documents:
+
+1. **Freshness check** — run `scripts/check_and_ingest.sh` to detect new/changed files and auto-ingest them.
+2. **Vector search** — run `python3 scripts/rag_search.py --query "<user question>" --top-n 5`.
+3. **Answer** — summarize the retrieved `contexts`, cite `citations` (document title + similarity score).
 
 ## Action Rules
 
-- For first-time setup or reset requests, run `scripts/setup_rag.sh`.
-- For document ingestion or refresh requests, run `scripts/update_docs.sh`.
-- For retrieval requests, use the configured MCP server against the `my_rag` workspace.
-- Keep responses grounded in retrieved workspace content when answering questions from indexed files.
+- First-time setup or reset → run `scripts/setup_rag.sh`.
+- Explicit ingest/refresh request → run `scripts/update_docs.sh`.
+- Question or retrieval request → run the **Auto Retrieval Flow** above.
+- Keep responses grounded in retrieved content. If no relevant results, say so clearly.
 
 ## Default Operating Values
 
@@ -21,18 +35,32 @@ Follow this skill when the user asks to use or manage the personal local RAG wor
 - Server URL: `http://localhost:3001`
 - Workspace: `my_rag`
 - DB path: `$HOME/anythingllm-server/server/storage/anythingllm.db`
+- LanceDB path: `$HOME/anythingllm-server/server/storage/lancedb`
 - Fixed API key: `my-secret-rag-key-2026`
+- Embedding model: `all-MiniLM-L6-v2` (384-dim, cosine distance)
 
-## Resource Usage
+## Scripts
 
-- Read `../../references/concept.md` when you need the overall workflow intent.
-- Read `../../docs/server-mode.md` when you need deployment notes.
-- Execute `./scripts/setup_rag.sh` for non-Docker headless backend initialization.
-- Execute `./scripts/update_docs.sh` for upload + embedding refresh.
+| Script | Purpose |
+|--------|---------|
+| `scripts/setup_rag.sh` | One-time headless AnythingLLM server setup |
+| `scripts/update_docs.sh` | Upload all docs from `$HOME/my_rag_docs` and embed |
+| `scripts/check_and_ingest.sh` | Detect new/changed files only, ingest incrementally |
+| `scripts/rag_search.py` | Vector similarity search against LanceDB |
+
+## Search Usage
+
+```bash
+# Basic search
+python3 scripts/rag_search.py --query "검색할 질문" --top-n 5
+
+# With similarity threshold filter
+python3 scripts/rag_search.py --query "기술 스택" --top-n 8 --threshold 0.2
+```
 
 ## Response Pattern
 
-- If setup is missing, say setup is required and run or recommend the setup step.
-- If files changed, run the update step before retrieval.
-- When answering from retrieved content, summarize clearly and cite which local workspace was queried.
+- If server is not running, start it first or recommend setup.
+- If new files detected, ingest before searching.
+- Summarize retrieved content clearly and cite document titles.
 - Do not explain internal design unless the user asks.

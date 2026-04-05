@@ -31,6 +31,7 @@ echo ">>> 3. 콜렉터(Collector) 서버 셋업 및 구동 (포트 8888)..."
 cd "$APP_DIR/collector"
 yarn install
 cp .env.example .env
+echo "STORAGE_DIR='$APP_DIR/server/storage'" >> .env
 nohup yarn start > collector.log 2>&1 &
 sleep 5 # 콜렉터 예열 대기
 
