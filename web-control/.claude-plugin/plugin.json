@@ -1,0 +1,6 @@
+{
+  "name": "web-control",
+  "display_name": "Web Control",
+  "description": "Persistent browser control via Playwright daemon. Opens a visible (or headless-fallback) browser session and routes all commands to the same tab.",
+  "version": "0.1.0"
+}

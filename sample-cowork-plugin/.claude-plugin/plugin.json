@@ -1,6 +1,0 @@
-{
-  "name": "sample-cowork-plugin",
-  "display_name": "Sample Cowork Plugin",
-  "description": "Minimal sample plugin for SLSI Cowork environments with one example skill.",
-  "version": "0.1.0"
-}
