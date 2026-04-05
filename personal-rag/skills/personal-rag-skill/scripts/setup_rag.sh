@@ -1,5 +1,5 @@
 #!/bin/bash
-# setup_rag.sh - Adapted from integrated setup logic
+# setup_rag.sh - Headless AnythingLLM setup (no sudo)
 
 set -euo pipefail
 
@@ -8,19 +8,63 @@ TARGET_RAG_FOLDER="$HOME/my_rag_docs"
 FIXED_API_KEY="my-secret-rag-key-2026"
 DB_PATH="$APP_DIR/server/storage/anythingllm.db"
 
-echo ">>> 1. 필수 패키지 설치 (Node.js, Yarn, Python, jq, sqlite3 등)..."
-# Note: Using sudo if not root, assuming environment allows or asks for it.
-# In OpenClaw, exec might need permission.
-sudo apt-get update -y
-sudo apt-get install -y curl git sqlite3 python3 make g++ psmisc jq
+# ---------------------------------------------------------------------------
+# Helper: check if a system package is available; warn if missing
+# ---------------------------------------------------------------------------
+check_pkg() {
+    local cmd="$1" pkg="$2"
+    if ! command -v "$cmd" &> /dev/null; then
+        echo ""
+        echo "⚠️  '$cmd' 명령을 찾을 수 없습니다."
+        echo "   시스템 패키지 설치가 필요합니다: $pkg"
+        echo "   root 또는 sudo 권한을 가진 사용자가 다음을 실행하세요:"
+        echo "   → apt-get install -y $pkg"
+        echo ""
+        return 1
+    fi
+}
 
-if ! command -v node &> /dev/null; then
-    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-    sudo apt-get install -y nodejs
+# ---------------------------------------------------------------------------
+# Helper: install npm global package without sudo (via prefix)
+# ---------------------------------------------------------------------------
+ensure_yarn() {
+    if command -v yarn &> /dev/null; then return 0; fi
+    echo ">>> yarn이 없습니다. npm prefix 방식으로 로컬 설치합니다..."
+    npm install -g yarn --prefix "$HOME/.npm-global" 2>/dev/null || {
+        echo ""
+        echo "⚠️  yarn 설치 실패. 다음 중 하나를 시도하세요:"
+        echo "   1) root 권한 있을 때: npm install -g yarn"
+        echo "   2) nvm 사용 중이라면: nvm use <version> 후 npm install -g yarn"
+        echo "   3) corepack 활성화: corepack enable"
+        echo ""
+        exit 1
+    }
+    export PATH="$HOME/.npm-global/bin:$PATH"
+}
+
+echo ">>> 1. 필수 명령어 확인..."
+MISSING=0
+check_pkg curl   curl    || MISSING=1
+check_pkg git    git     || MISSING=1
+check_pkg sqlite3 sqlite3 || MISSING=1
+check_pkg python3 python3 || MISSING=1
+check_pkg jq     jq      || MISSING=1
+check_pkg openssl openssl || MISSING=1
+check_pkg make   make    || MISSING=1
+
+if [ "$MISSING" -eq 1 ]; then
+    echo "❌ 누락된 패키지가 있습니다. 위 안내를 따라 설치 후 다시 실행하세요."
+    exit 1
 fi
-if ! command -v yarn &> /dev/null; then
-    sudo npm install -g yarn
-fi
+
+check_pkg node nodejs || {
+    echo "   Node.js 설치 방법 (권한 없이):"
+    echo "   → nvm 사용: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash"
+    echo "      그 후: nvm install 20 && nvm use 20"
+    exit 1
+}
+
+ensure_yarn
 
 echo ">>> 2. AnythingLLM 소스 클론 (기존 찌꺼기 제거)..."
 rm -rf "$APP_DIR"
@@ -33,7 +77,7 @@ yarn install
 cp .env.example .env
 echo "STORAGE_DIR='$APP_DIR/server/storage'" >> .env
 nohup yarn start > collector.log 2>&1 &
-sleep 5 # 콜렉터 예열 대기
+sleep 5
 
 echo ">>> 4. API 백엔드 서버 셋업 (포트 3001)..."
 cd "$APP_DIR/server"
