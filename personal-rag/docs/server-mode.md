@@ -1,6 +1,6 @@
 # Server Mode Notes
 
-This plugin now uses a Docker-based server deployment instead of a desktop AppImage flow.
+This plugin uses a Docker-based server deployment instead of a desktop AppImage flow.
 
 ## Why
 
@@ -13,8 +13,9 @@ This plugin now uses a Docker-based server deployment instead of a desktop AppIm
 - Start container `personal-rag-server`
 - Persist data under `~/personal-rag/storage`
 - Expose web UI at `http://localhost:3001`
+- Insert fixed API key `my-secret-rag-key-2026` into the local `api_keys` table
 
-## Important Limitation
+## Fixed API Key
 
-The original fixed API key insertion flow was tied to desktop-local SQLite manipulation.
-In Docker mode, initial admin setup and API issuance may need to happen through the app itself.
+The setup script enforces a fixed API key by inserting it directly into the local SQLite database after the server initializes.
+This keeps the plugin aligned with the required fixed-key workflow.
