@@ -56,7 +56,7 @@ echo ">>> 4. 서버 환경변수(.env) 자동 설정..."
 cp .env.example .env
 JWT_SECRET=$(openssl rand -hex 16)
 sed -i "s/^JWT_SECRET=.*/JWT_SECRET='$JWT_SECRET'/" .env
-sed -i "s/^STORAGE_DIR=.*/STORAGE_DIR='\/storage'/" .env
+sed -i "s/^# STORAGE_DIR=.*/STORAGE_DIR='\/home\/joungwoolee\/anythingllm-server\/server\/storage'/" .env
 
 echo ">>> 5. 데이터베이스 마이그레이션 (초기화)..."
 npx prisma generate
