@@ -1,0 +1,6 @@
+{
+  "name": "rag-local-anythingllm",
+  "display_name": "RAG Local AnythingLLM",
+  "description": "Local RAG plugin for SLSI Cowork using AnythingLLM, automated workspace setup, document ingestion, and search-oriented skill instructions.",
+  "version": "0.1.0"
+}

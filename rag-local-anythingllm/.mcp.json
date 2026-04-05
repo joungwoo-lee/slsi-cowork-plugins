@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "anythingllm": {
+      "command": "npx",
+      "args": ["-y", "@mintplex-labs/anythingllm-mcp-server"],
+      "env": {
+        "ANYTHINGLLM_API_KEY": "my-secret-rag-key-2026",
+        "ANYTHINGLLM_BASE_URL": "http://localhost:3001/api"
+      }
+    }
+  }
+}

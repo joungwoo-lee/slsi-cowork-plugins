@@ -20,6 +20,7 @@ sample-cowork-plugin/
 | Plugin | Purpose |
 |--------|---------|
 | `sample-cowork-plugin` | Minimal example plugin for SLSI Cowork environments |
+| `rag-local-anythingllm` | Local AnythingLLM-based RAG workflow with setup, ingestion, and retrieval skill structure |
 
 ## Notes
 
