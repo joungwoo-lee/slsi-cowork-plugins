@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "anythingllm": {
+    "personal-rag": {
       "command": "npx",
       "args": ["-y", "@mintplex-labs/anythingllm-mcp-server"],
       "env": {

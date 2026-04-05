@@ -1,0 +1,6 @@
+{
+  "name": "personal-rag",
+  "display_name": "Personal RAG",
+  "description": "Personal local RAG plugin for SLSI Cowork with automated setup, document ingestion, and retrieval workflow.",
+  "version": "0.1.0"
+}

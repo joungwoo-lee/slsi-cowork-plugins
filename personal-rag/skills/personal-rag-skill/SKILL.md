@@ -1,18 +1,18 @@
 ---
-name: anythingllm-local-rag
-description: Set up and operate a local AnythingLLM-based RAG workflow for SLSI Cowork. Use when installing a self-contained local RAG pipeline, creating an AnythingLLM workspace automatically, uploading files from a watched folder, updating embeddings, or querying a local workspace through the AnythingLLM MCP server.
+name: personal-rag-skill
+description: Set up and operate a personal local RAG workflow for SLSI Cowork. Use when installing a self-contained local RAG pipeline, creating a dedicated workspace automatically, uploading files from a watched folder, updating embeddings, or querying a local workspace through the configured MCP server.
 ---
 
-# AnythingLLM Local RAG
+# Personal RAG Skill
 
-Use this skill to guide a local RAG workflow based on AnythingLLM.
+Use this skill to guide a personal local RAG workflow.
 
 ## Workflow
 
-1. Run the setup script to install or start AnythingLLM and create the dedicated workspace.
+1. Run the setup script to install or start the local RAG app and create the dedicated workspace.
 2. Drop source files into the configured local RAG folder.
 3. Run the update script to upload documents and refresh embeddings.
-4. Query the workspace through the AnythingLLM MCP integration.
+4. Query the workspace through the configured MCP integration.
 
 ## Default Conventions
 
@@ -24,7 +24,7 @@ Use this skill to guide a local RAG workflow based on AnythingLLM.
 
 ## Bundled Resources
 
-- `scripts/setup_rag.sh`: Install/start AnythingLLM, seed API key, and create the workspace.
+- `scripts/setup_rag.sh`: Install/start the local RAG app, seed API key, and create the workspace.
 - `scripts/update_docs.sh`: Upload files from the local folder and trigger embedding refresh.
 - `references/concept.md`: Original concept and usage pattern for this workflow.
 

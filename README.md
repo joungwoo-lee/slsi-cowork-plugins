@@ -2,7 +2,7 @@
 
 Plugins that extend Claude Cowork / Claude Code style workflows for SLSI cowork environments.
 
-This repository follows the general layout of Anthropic's `knowledge-work-plugins` project, but starts intentionally small with a single sample plugin.
+This repository follows the general layout of Anthropic's `knowledge-work-plugins` project, but starts intentionally small with a sample plugin and a personal RAG plugin.
 
 ## Structure
 
@@ -13,6 +13,18 @@ sample-cowork-plugin/
 └── skills/
     └── sample-cowork-skill/
         └── SKILL.md
+
+personal-rag/
+├── .claude-plugin/plugin.json
+├── .mcp.json
+├── references/
+│   └── concept.md
+├── scripts/
+│   ├── setup_rag.sh
+│   └── update_docs.sh
+└── skills/
+    └── personal-rag-skill/
+        └── SKILL.md
 ```
 
 ## Included Plugin
@@ -20,7 +32,7 @@ sample-cowork-plugin/
 | Plugin | Purpose |
 |--------|---------|
 | `sample-cowork-plugin` | Minimal example plugin for SLSI Cowork environments |
-| `rag-local-anythingllm` | Local AnythingLLM-based RAG workflow with setup, ingestion, and retrieval skill structure |
+| `personal-rag` | Personal local RAG workflow with setup, ingestion, and retrieval skill structure |
 
 ## Notes
 
