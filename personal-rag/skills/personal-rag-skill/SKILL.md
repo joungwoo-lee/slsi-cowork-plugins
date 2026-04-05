@@ -1,6 +1,6 @@
 ---
 name: personal-rag-skill
-description: Operate a personal local RAG workflow through its existing scripts and MCP connection. Use when a user wants to initialize a local RAG workspace, ingest files from the personal document folder, refresh embeddings, or retrieve grounded answers from the local workspace.
+description: Operate a personal local RAG workflow through a Docker-based local server and MCP connection. Use when a user wants to initialize the personal RAG server, ingest files from the personal document folder, refresh embeddings, or retrieve grounded answers from the local workspace.
 ---
 
 # Personal RAG Skill
@@ -17,13 +17,15 @@ Follow this skill when the user asks to use or manage the personal local RAG wor
 ## Default Operating Values
 
 - Document folder: `$HOME/my_rag_docs`
+- Server URL: `http://localhost:3001`
 - Workspace: `my_rag`
-- API endpoint: `http://localhost:3001/api`
+- Storage path: `$HOME/personal-rag/storage`
 
 ## Resource Usage
 
+- Read `../../docs/server-mode.md` when you need deployment context.
 - Read `../../references/concept.md` only if you need the original workflow intent.
-- Execute `../../scripts/setup_rag.sh` for initialization.
+- Execute `../../scripts/setup_rag.sh` for Docker-based initialization.
 - Execute `../../scripts/update_docs.sh` for upload + embedding refresh.
 
 ## Response Pattern

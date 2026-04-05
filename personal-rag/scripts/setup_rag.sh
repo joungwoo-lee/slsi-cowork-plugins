@@ -1,76 +1,51 @@
 #!/bin/bash
 set -euo pipefail
 
-APP_DIR="$HOME/AnythingLLM"
+APP_DIR="$HOME/personal-rag"
 TARGET_RAG_FOLDER="$HOME/my_rag_docs"
+STORAGE_DIR="$APP_DIR/storage"
 FIXED_API_KEY="my-secret-rag-key-2026"
-DB_PATH="$HOME/.config/anythingllm-desktop/storage/anythingllm.db"
+CONTAINER_NAME="personal-rag-server"
+IMAGE_NAME="mintplexlabs/anythingllm:latest"
 
-need_sudo() {
-    if [ "$(id -u)" -ne 0 ]; then
-        echo "sudo"
-    fi
-}
-
-install_system_packages() {
-    local SUDO
-    SUDO="$(need_sudo)"
-
-    echo ">>> 0. 시스템 패키지 확인 및 설치..."
-
-    if command -v apt-get >/dev/null 2>&1; then
-        $SUDO apt-get update
-        $SUDO apt-get install -y libfuse2 sqlite3 curl
-    elif command -v dnf >/dev/null 2>&1; then
-        $SUDO dnf install -y fuse fuse-libs sqlite sqlite curl
-    elif command -v yum >/dev/null 2>&1; then
-        $SUDO yum install -y fuse fuse-libs sqlite sqlite curl
-    elif command -v zypper >/dev/null 2>&1; then
-        $SUDO zypper install -y fuse libfuse2 sqlite3 curl
-    elif command -v pacman >/dev/null 2>&1; then
-        $SUDO pacman -Sy --noconfirm fuse2 sqlite curl
-    else
-        echo "[ERROR] 지원되는 패키지 매니저를 찾지 못했습니다. libfuse.so.2 와 sqlite3를 수동 설치해 주세요." >&2
-        exit 1
-    fi
-}
-
-install_system_packages
-
-echo ">>> 1. 디렉토리 및 파일 준비..."
+echo ">>> 1. 디렉토리 준비..."
 mkdir -p "$APP_DIR"
+mkdir -p "$STORAGE_DIR"
 mkdir -p "$TARGET_RAG_FOLDER"
-cd "$APP_DIR"
 
-echo ">>> 2. AppImage 다운로드..."
-if [ ! -f "AnythingLLM.AppImage" ]; then
-    curl -L https://cdn.anythingllm.com/latest/AnythingLLMDesktop.AppImage -o AnythingLLM.AppImage
-    chmod +x AnythingLLM.AppImage
+echo ">>> 2. Docker 확인..."
+if ! command -v docker >/dev/null 2>&1; then
+    echo "[ERROR] docker가 필요합니다. 먼저 docker를 설치해 주세요." >&2
+    exit 1
 fi
 
-echo ">>> 3. DB 초기화를 위한 임시 구동..."
-./AnythingLLM.AppImage --no-sandbox &
-APP_PID=$!
-sleep 12
-kill "$APP_PID" || true
-sleep 2
+echo ">>> 3. 이미지 준비..."
+docker pull "$IMAGE_NAME"
 
-echo ">>> 4. 고정 API 키 강제 주입..."
-sqlite3 "$DB_PATH" "INSERT OR IGNORE INTO api_keys (secret) VALUES ('$FIXED_API_KEY');"
+echo ">>> 4. 기존 컨테이너 정리..."
+if docker ps -a --format '{{.Names}}' | grep -Fxq "$CONTAINER_NAME"; then
+    docker rm -f "$CONTAINER_NAME" >/dev/null 2>&1 || true
+fi
 
-echo ">>> 5. 백그라운드 서버 구동..."
-nohup ./AnythingLLM.AppImage --no-sandbox > anythingllm.log 2>&1 &
+echo ">>> 5. 서버 컨테이너 실행..."
+docker run -d \
+  --name "$CONTAINER_NAME" \
+  -p 3001:3001 \
+  -e STORAGE_DIR=/app/server/storage \
+  -v "$STORAGE_DIR:/app/server/storage" \
+  "$IMAGE_NAME"
 
-echo ">>> 6. 서버 로딩 대기 (API 활성화 대기)..."
-sleep 15
+echo ">>> 6. 서버 기동 대기..."
+sleep 20
 
-echo ">>> 7. 'my_rag' 워크스페이스 자동 생성 (API 호출)..."
-curl -X POST http://localhost:3001/api/workspace/new \
-     -H "Authorization: Bearer $FIXED_API_KEY" \
-     -H "Content-Type: application/json" \
-     -d '{"name": "my_rag"}'
+echo ">>> 7. API 키 준비 안내..."
+echo "AnythingLLM docker 배포는 초기 관리자 설정을 통해 API 키를 발급하는 방식일 수 있습니다."
+echo "브라우저에서 http://localhost:3001 접속 후 관리자 설정을 완료해 주세요."
+echo "고정 키 사용이 꼭 필요하면 별도 API 생성 절차를 거쳐야 합니다."
 
 echo "===================================================="
-echo "✅ 셋업 완료! AnythingLLM 스킬 준비 완료."
-echo "📂 RAG 폴더: $TARGET_RAG_FOLDER"
+echo "✅ 서버형 personal-rag 기본 셋업 완료"
+echo "📂 문서 폴더: $TARGET_RAG_FOLDER"
+echo "🗄️ 저장소 폴더: $STORAGE_DIR"
+echo "🌐 접속 주소: http://localhost:3001"
 echo "===================================================="

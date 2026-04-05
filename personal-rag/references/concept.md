@@ -9,8 +9,6 @@ This reference captures the original concept behind the personal local RAG flow.
 3. Run the update script to upload files and refresh embeddings.
 4. Query workspace `my_rag` through the configured MCP connection.
 
-## Design Intent
+## Current Deployment Direction
 
-- Keep the workflow simple: setup → ingest → retrieve.
-- Keep the knowledge base local and folder-driven.
-- Make the workspace available through one stable name: `my_rag`.
+The workflow now uses a server-style Docker deployment instead of a desktop AppImage flow so it can operate in headless environments.
