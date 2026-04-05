@@ -32,7 +32,7 @@ personal-rag/
 | Plugin | Purpose |
 |--------|---------|
 | `sample-cowork-plugin` | Minimal example plugin for SLSI Cowork environments |
-| `personal-rag` | Personal local RAG workflow with setup, ingestion, and retrieval skill structure |
+| `personal-rag` | Agent-usable personal local RAG workflow with setup, ingestion, and retrieval skill structure |
 
 ## Notes
 

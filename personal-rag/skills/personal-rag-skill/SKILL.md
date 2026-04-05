@@ -1,36 +1,34 @@
 ---
 name: personal-rag-skill
-description: Set up and operate a personal local RAG workflow for SLSI Cowork. Use when installing a self-contained local RAG pipeline, creating a dedicated workspace automatically, uploading files from a watched folder, updating embeddings, or querying a local workspace through the configured MCP server.
+description: Operate a personal local RAG workflow through its existing scripts and MCP connection. Use when a user wants to initialize a local RAG workspace, ingest files from the personal document folder, refresh embeddings, or retrieve grounded answers from the local workspace.
 ---
 
 # Personal RAG Skill
 
-Use this skill to guide a personal local RAG workflow.
+Follow this skill when the user asks to use or manage the personal local RAG workflow.
 
-## Workflow
+## Action Rules
 
-1. Run the setup script to install or start the local RAG app and create the dedicated workspace.
-2. Drop source files into the configured local RAG folder.
-3. Run the update script to upload documents and refresh embeddings.
-4. Query the workspace through the configured MCP integration.
+- For first-time setup or reset requests, run `scripts/setup_rag.sh`.
+- For document ingestion or refresh requests, run `scripts/update_docs.sh`.
+- For retrieval requests, use the configured MCP server against the `my_rag` workspace.
+- Keep responses grounded in retrieved workspace content when answering questions from indexed files.
 
-## Default Conventions
+## Default Operating Values
 
-- App directory: `$HOME/AnythingLLM`
-- Local document folder: `$HOME/my_rag_docs`
-- Workspace name: `my_rag`
-- API base URL: `http://localhost:3001/api`
-- Fixed API key: `my-secret-rag-key-2026`
+- Document folder: `$HOME/my_rag_docs`
+- Workspace: `my_rag`
+- API endpoint: `http://localhost:3001/api`
 
-## Bundled Resources
+## Resource Usage
 
-- `scripts/setup_rag.sh`: Install/start the local RAG app, seed API key, and create the workspace.
-- `scripts/update_docs.sh`: Upload files from the local folder and trigger embedding refresh.
-- `references/concept.md`: Original concept and usage pattern for this workflow.
+- Read `../../references/concept.md` only if you need the original workflow intent.
+- Execute `../../scripts/setup_rag.sh` for initialization.
+- Execute `../../scripts/update_docs.sh` for upload + embedding refresh.
 
-## Instructions
+## Response Pattern
 
-- Use `scripts/setup_rag.sh` for first-time setup.
-- Use `scripts/update_docs.sh` after adding or changing files in `$HOME/my_rag_docs`.
-- Query the `my_rag` workspace when the user asks for grounded retrieval from the local document set.
-- Keep explanations task-oriented: setup, ingest, then retrieve.
+- If setup is missing, say setup is required and run or recommend the setup step.
+- If files changed, run the update step before retrieval.
+- When answering from retrieved content, summarize clearly and cite which local workspace was queried.
+- Do not explain internal design unless the user asks.
