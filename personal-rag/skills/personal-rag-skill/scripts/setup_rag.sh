@@ -23,8 +23,8 @@ wait_for_http() {
 echo ">>> 1. 디렉토리 및 필수 패키지 확인..."
 mkdir -p "$TARGET_RAG_FOLDER"
 if ! command -v yarn >/dev/null 2>&1; then
-    echo "[ERROR] yarn이 없습니다. npm install -g yarn 으로 먼저 설치해 주세요." >&2
-    exit 1
+    echo "yarn이 없습니다. npm install -g yarn 으로 설치합니다."
+    npm install -g yarn
 fi
 if ! command -v sqlite3 >/dev/null 2>&1; then
     echo "[ERROR] sqlite3가 필요합니다. 먼저 설치해 주세요." >&2
