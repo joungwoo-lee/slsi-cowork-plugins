@@ -27,8 +27,8 @@ Follow this skill when the user asks to use or manage the personal local RAG wor
 
 - Read `../../references/concept.md` when you need the overall workflow intent.
 - Read `../../docs/server-mode.md` when you need deployment notes.
-- Execute `../../scripts/setup_rag.sh` for non-Docker headless backend initialization.
-- Execute `../../scripts/update_docs.sh` for upload + embedding refresh.
+- Execute `../scripts/setup_rag.sh` for non-Docker headless backend initialization.
+- Execute `../scripts/update_docs.sh` for upload + embedding refresh.
 
 ## Response Pattern
 
