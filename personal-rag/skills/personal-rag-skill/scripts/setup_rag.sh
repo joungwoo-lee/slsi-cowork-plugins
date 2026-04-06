@@ -8,61 +8,70 @@ TARGET_RAG_FOLDER="$HOME/my_rag_docs"
 FIXED_API_KEY="my-secret-rag-key-2026"
 DB_PATH="$APP_DIR/server/storage/anythingllm.db"
 
-# ---------------------------------------------------------------------------
-# Helper: check if a system package is available; warn if missing
-# ---------------------------------------------------------------------------
-check_pkg() {
+if [ "${EUID:-$(id -u)}" -eq 0 ]; then
+    SUDO=()
+else
+    if ! command -v sudo &> /dev/null; then
+        echo "sudo가 없어서 시스템 패키지 설치를 진행할 수 없습니다. root로 실행하거나 sudo를 먼저 설치해 주세요." >&2
+        exit 1
+    fi
+    SUDO=(sudo)
+fi
+
+run_as_root() {
+    "${SUDO[@]}" "$@"
+}
+
+ensure_system_pkg() {
     local cmd="$1" pkg="$2"
+    if command -v "$cmd" &> /dev/null; then
+        return 0
+    fi
+
+    echo ">>> '$cmd' 명령이 없어서 '$pkg' 설치를 시도합니다..."
+    run_as_root apt-get install -y "$pkg"
+
     if ! command -v "$cmd" &> /dev/null; then
-        echo ""
-        echo "⚠️  '$cmd' 명령을 찾을 수 없습니다."
-        echo "   시스템 패키지 설치가 필요합니다: $pkg"
-        echo "   root 또는 sudo 권한을 가진 사용자가 다음을 실행하세요:"
-        echo "   → apt-get install -y $pkg"
-        echo ""
-        return 1
+        echo "❌ '$pkg' 설치 후에도 '$cmd' 명령을 찾을 수 없습니다." >&2
+        exit 1
     fi
 }
 
-# ---------------------------------------------------------------------------
-# Helper: install npm global package without sudo (via prefix)
-# ---------------------------------------------------------------------------
 ensure_yarn() {
-    if command -v yarn &> /dev/null; then return 0; fi
-    echo ">>> yarn이 없습니다. npm prefix 방식으로 로컬 설치합니다..."
-    npm install -g yarn --prefix "$HOME/.npm-global" 2>/dev/null || {
-        echo ""
-        echo "⚠️  yarn 설치 실패. 다음 중 하나를 시도하세요:"
-        echo "   1) root 권한 있을 때: npm install -g yarn"
-        echo "   2) nvm 사용 중이라면: nvm use <version> 후 npm install -g yarn"
-        echo "   3) corepack 활성화: corepack enable"
-        echo ""
+    if command -v yarn &> /dev/null; then
+        return 0
+    fi
+
+    echo ">>> yarn이 없습니다. 전역 설치를 시도합니다..."
+    if command -v corepack &> /dev/null; then
+        run_as_root corepack enable || true
+    fi
+    run_as_root npm install -g yarn
+
+    if ! command -v yarn &> /dev/null; then
+        echo "❌ yarn 설치 후에도 명령을 찾을 수 없습니다." >&2
         exit 1
-    }
-    export PATH="$HOME/.npm-global/bin:$PATH"
+    fi
 }
 
-echo ">>> 1. 필수 명령어 확인..."
-MISSING=0
-check_pkg curl   curl    || MISSING=1
-check_pkg git    git     || MISSING=1
-check_pkg sqlite3 sqlite3 || MISSING=1
-check_pkg python3 python3 || MISSING=1
-check_pkg jq     jq      || MISSING=1
-check_pkg openssl openssl || MISSING=1
-check_pkg make   make    || MISSING=1
+echo ">>> 1. 필수 패키지 설치/확인..."
+run_as_root apt-get update -y
+run_as_root apt-get install -y curl git sqlite3 python3 make g++ psmisc jq openssl
 
-if [ "$MISSING" -eq 1 ]; then
-    echo "❌ 누락된 패키지가 있습니다. 위 안내를 따라 설치 후 다시 실행하세요."
-    exit 1
+ensure_system_pkg curl curl
+ensure_system_pkg git git
+ensure_system_pkg sqlite3 sqlite3
+ensure_system_pkg python3 python3
+ensure_system_pkg jq jq
+ensure_system_pkg openssl openssl
+ensure_system_pkg make make
+
+if ! command -v node &> /dev/null; then
+    curl -fsSL https://deb.nodesource.com/setup_20.x | run_as_root bash -
+    run_as_root apt-get install -y nodejs
 fi
 
-check_pkg node nodejs || {
-    echo "   Node.js 설치 방법 (권한 없이):"
-    echo "   → nvm 사용: curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash"
-    echo "      그 후: nvm install 20 && nvm use 20"
-    exit 1
-}
+ensure_system_pkg node nodejs
 
 ensure_yarn
 
