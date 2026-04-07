@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "excel-mcp": {
-      "command": "EXCEL_MCP_EXE_PATH",
+      "command": "mcp-excel",
       "args": [],
       "env": {}
     }
