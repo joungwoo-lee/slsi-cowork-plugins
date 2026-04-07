@@ -21,11 +21,22 @@ public static class WordReader
             app.DisplayAlerts = WdAlertLevel.wdAlertsNone;
             watchdog.DetectNewProcess();
 
+            // Documents.Open positional: FileName, ConfirmConversions, ReadOnly, AddToRecentFiles,
+            // PasswordDocument, PasswordTemplate, Revert, WritePasswordDocument,
+            // WritePasswordTemplate, Format, Encoding, Visible
             doc = app.Documents.Open(
-                FileName: filePath,
-                ReadOnly: true,
-                AddToRecentFiles: false,
-                Visible: false
+                filePath,       // FileName
+                false,          // ConfirmConversions
+                true,           // ReadOnly
+                false,          // AddToRecentFiles
+                Type.Missing,   // PasswordDocument
+                Type.Missing,   // PasswordTemplate
+                false,          // Revert
+                Type.Missing,   // WritePasswordDocument
+                Type.Missing,   // WritePasswordTemplate
+                Type.Missing,   // Format
+                Type.Missing,   // Encoding
+                false           // Visible
             );
 
             WaitForDrmDecryption(doc, watchdog.TimeoutMs);
@@ -36,7 +47,7 @@ public static class WordReader
         }
         finally
         {
-            try { doc?.Close(SaveChanges: false); } catch { }
+            try { doc?.Close(false); } catch { }
             try { app?.Quit(); } catch { }
             try { app?.Dispose(); } catch { }
             watchdog.KillIfRunning();

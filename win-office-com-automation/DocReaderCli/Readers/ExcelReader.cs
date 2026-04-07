@@ -22,10 +22,23 @@ public static class ExcelReader
             app.ScreenUpdating = false;
             watchdog.DetectNewProcess();
 
+            // Workbooks.Open positional: Filename, UpdateLinks, ReadOnly, Format,
+            // Password, WriteResPassword, IgnoreReadOnlyRecommended, Origin,
+            // Delimiter, Editable, Notify, Converter, AddToMru
             wb = app.Workbooks.Open(
-                Filename: filePath,
-                ReadOnly: true,
-                AddToMru: false
+                filePath,       // Filename
+                0,              // UpdateLinks (don't update)
+                true,           // ReadOnly
+                Type.Missing,   // Format
+                Type.Missing,   // Password
+                Type.Missing,   // WriteResPassword
+                Type.Missing,   // IgnoreReadOnlyRecommended
+                Type.Missing,   // Origin
+                Type.Missing,   // Delimiter
+                Type.Missing,   // Editable
+                Type.Missing,   // Notify
+                Type.Missing,   // Converter
+                false           // AddToMru
             );
 
             WaitForDrmDecryption(wb, watchdog.TimeoutMs);
@@ -48,7 +61,7 @@ public static class ExcelReader
         }
         finally
         {
-            try { wb?.Close(SaveChanges: false); } catch { }
+            try { wb?.Close(false); } catch { }
             try { app?.Quit(); } catch { }
             try { app?.Dispose(); } catch { }
             watchdog.KillIfRunning();
@@ -116,7 +129,7 @@ public static class ExcelReader
                     }
                     else
                     {
-                        var cell = (Range)usedRange.Cells[r, c];
+                        var cell = (NetOffice.ExcelApi.Range)usedRange.Cells[r, c];
                         cellText = cell.Text?.ToString() ?? cell.Value?.ToString() ?? "";
                     }
                 }

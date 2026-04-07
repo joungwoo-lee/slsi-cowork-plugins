@@ -22,11 +22,12 @@ public static class PowerPointReader
             // so we open the file with window hidden.
             watchdog.DetectNewProcess();
 
+            // Presentations.Open positional: FileName, ReadOnly, Untitled, WithWindow
             pres = app.Presentations.Open(
-                FileName: filePath,
-                ReadOnly: NetOffice.OfficeApi.Enums.MsoTriState.msoTrue,
-                Untitled: NetOffice.OfficeApi.Enums.MsoTriState.msoFalse,
-                WithWindow: NetOffice.OfficeApi.Enums.MsoTriState.msoFalse
+                filePath,
+                NetOffice.OfficeApi.Enums.MsoTriState.msoTrue,   // ReadOnly
+                NetOffice.OfficeApi.Enums.MsoTriState.msoFalse,  // Untitled
+                NetOffice.OfficeApi.Enums.MsoTriState.msoFalse   // WithWindow
             );
 
             WaitForDrmDecryption(pres, watchdog.TimeoutMs);
