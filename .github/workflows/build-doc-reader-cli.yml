@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+    paths:
+      - 'win-office-com-automation/DocReaderCli/**'
   workflow_dispatch:
 
 permissions:
