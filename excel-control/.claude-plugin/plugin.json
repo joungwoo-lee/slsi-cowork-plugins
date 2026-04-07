@@ -1,0 +1,6 @@
+{
+  "name": "excel-control",
+  "display_name": "Excel Control",
+  "description": "Microsoft Excel automation via mcp-server-excel (stdio). Reads, writes, formats, charts, pivots, and queries Excel workbooks through COM automation on Windows.",
+  "version": "0.1.0"
+}
