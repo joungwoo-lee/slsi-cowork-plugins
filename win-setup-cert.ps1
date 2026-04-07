@@ -1,6 +1,7 @@
 # =========================================================
 # 사내 SSL 인증서 일괄 등록 스크립트 (Enterprise Final Version)
 # - 특징: 외부망 인증 유지, 중복 실행 방지(멱등성 보장), Python 완벽 지원
+# - 개선: BOM 없는 UTF-8 인코딩 적용(OpenSSL 파싱 에러 방지), pip 설정 추가
 # =========================================================
 
 # 0. 관리자 권한 체크
@@ -57,7 +58,7 @@ if (Get-Command git -ErrorAction SilentlyContinue) {
 }
 
 # ---------------------------------------------------------
-# Step 4. Python & CURL을 위한 '통합 CA 번들' 생성 및 적용
+# Step 4. Python & CURL을 위한 '통합 CA 번들' 생성 및 적용 (개선판)
 # ---------------------------------------------------------
 Write-Host "`n[4/4] Python 통합 인증서 번들 생성 및 설정 중..."
 $combinedCertPath = "C:\certs\company_combined_ca.pem"
@@ -76,18 +77,23 @@ if ($LASTEXITCODE -eq 0 -and (Test-Path $pythonCertPath)) {
             $combinedCerts = $baseCerts
             Write-Host " -> (이미 파이썬 기본 인증서에 사내 인증서가 포함되어 있습니다.)" -ForegroundColor Gray
         } else {
-            $combinedCerts = $baseCerts + "`n" + $companyCert
+            # 인증서 사이에 확실한 줄바꿈 보장
+            $combinedCerts = $baseCerts + "`n`n" + $companyCert
         }
         
-        # 통합 인증서 파일 생성 (항상 덮어쓰기 설정)
-        Set-Content -Path $combinedCertPath -Value $combinedCerts -Encoding UTF8
+        # [핵심 수정] BOM 없는 UTF-8(UTF-8 without BOM)로 파일 쓰기
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        [System.IO.File]::WriteAllText($combinedCertPath, $combinedCerts, $utf8NoBom)
         
         # Python 및 CURL이 통합 인증서를 바라보도록 환경 변수 덮어쓰기
-        # (통합 파일에는 퍼블릭 인증서도 들어있으므로 외부망 접속이 끊기지 않음)
         [Environment]::SetEnvironmentVariable("REQUESTS_CA_BUNDLE", $combinedCertPath, "Machine")
         [Environment]::SetEnvironmentVariable("CURL_CA_BUNDLE", $combinedCertPath, "Machine")
+
+        # [추가] pip 전용 인증서 설정 (에러 무시)
+        pip config set global.cert $combinedCertPath 2>$null | Out-Null
         
-        Write-Host " -> 통합 CA 번들($combinedCertPath) 생성 및 환경 변수 등록 완료!" -ForegroundColor Green
+        Write-Host " -> 통합 CA 번들($combinedCertPath) 생성 (BOM-Free) 및 환경 변수 등록 완료!" -ForegroundColor Green
+        Write-Host "    * 주의: 향후 pip 업그레이드로 certifi가 갱신되면 이 스크립트를 다시 실행해야 합니다." -ForegroundColor Yellow
     } catch {
         Write-Host " -> 통합 인증서 번들 생성 중 오류 발생: $_" -ForegroundColor Red
     }
