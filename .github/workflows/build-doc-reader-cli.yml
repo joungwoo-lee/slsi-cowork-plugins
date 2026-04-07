@@ -48,7 +48,6 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
 
     steps:
       - name: Download artifact
@@ -57,22 +56,24 @@ jobs:
           name: DocReaderCli-win-x64
           path: ./artifact
 
-      - name: Create GitHub Release
+      - name: Update latest release
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: DocReaderCli (latest)
+          prerelease: true
+          make_latest: false
+          files: ./artifact/DocReaderCli.exe
+          body: |
+            자동 빌드된 최신 DocReaderCli 바이너리입니다.
+            코드가 변경될 때마다 이 릴리즈의 바이너리가 갱신됩니다.
+
+            **Commit:** ${{ github.sha }}
+
+      - name: Create versioned release
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
           files: ./artifact/DocReaderCli.exe
           generate_release_notes: true
-          body: |
-            ## DocReaderCli - Windows Office COM Automation Reader
-
-            DRM이 적용된 MS Office 문서(.docx, .xlsx, .pptx)를 COM Automation으로 읽는 단일 실행 바이너리입니다.
-
-            ### 사용법
-            ```
-            DocReaderCli.exe --file "C:\path\to\document.docx"
-            ```
-
-            ### 요구사항
-            - Windows 10/11
-            - Microsoft Office 설치 필수
-            - .NET 런타임 불필요 (Self-Contained)
