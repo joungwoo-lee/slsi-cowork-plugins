@@ -6,19 +6,31 @@
 
 ```
 win-office-com-automation/
-├── DocReaderCli/              # C# .NET 8 단일 바이너리 CLI
-│   ├── DocReaderCli.csproj
-│   ├── Program.cs
-│   ├── ProcessWatchdog.cs     # 좀비 프로세스 감시/강제종료
-│   └── Readers/
-│       ├── WordReader.cs      # .docx/.doc 추출
-│       ├── ExcelReader.cs     # .xlsx/.xls 추출
-│       └── PowerPointReader.cs # .pptx/.ppt 추출
-└── skill/
-    └── read-secure-office-doc.md  # Claude Code 에이전트 스킬 정의
+├── SKILL.md               # 스킬 목록 및 설치 가이드
+├── setup.ps1              # 바이너리 설치 스크립트
+├── skills/
+│   ├── read-secure-office-doc.md  # Claude Code 에이전트 스킬 정의
+│   └── DocReaderCli.exe           # 바이너리 (setup.ps1이 설치)
+└── DocReaderCli/              # C# .NET 8 단일 바이너리 CLI 소스
+    ├── DocReaderCli.csproj
+    ├── Program.cs
+    ├── ProcessWatchdog.cs     # 좀비 프로세스 감시/강제종료
+    └── Readers/
+        ├── WordReader.cs      # .docx/.doc 추출
+        ├── ExcelReader.cs     # .xlsx/.xls 추출
+        └── PowerPointReader.cs # .pptx/.ppt 추출
 ```
 
-## 빌드
+## 설치
+
+```powershell
+.\setup.ps1
+```
+
+GitHub Release에서 `DocReaderCli.exe`를 `skills/` 폴더에 다운로드한다.
+스킬 MD와 바이너리가 같은 디렉토리에 위치하므로 별도 환경변수/PATH 설정이 필요 없다.
+
+## 빌드 (소스에서)
 
 ```bash
 cd DocReaderCli
