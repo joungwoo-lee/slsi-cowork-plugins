@@ -21,7 +21,7 @@ public static class ExcelReader
             app = new Application { Visible = true };
             Console.Error.WriteLine("[ExcelReader] Excel COM instance created OK.");
             app.DisplayAlerts = false;
-            app.ScreenUpdating = false;
+            app.ScreenUpdating = true;
             watchdog.DetectNewProcess();
 
             Console.Error.WriteLine($"[ExcelReader] Opening workbook: {filePath}");
@@ -41,8 +41,13 @@ public static class ExcelReader
                 false           // AddToMru
             );
 
-            try { wb.Activate(); } catch { }
             try { app.Visible = true; } catch { }
+            try { app.UserControl = true; } catch { }
+            try { app.Interactive = true; } catch { }
+            try { wb.Activate(); } catch { }
+            try { wb.Windows[1].Visible = true; } catch { }
+            try { wb.Windows[1].Activate(); } catch { }
+            try { app.ScreenUpdating = true; } catch { }
 
             Console.Error.WriteLine("[ExcelReader] Workbook opened. Checking DRM...");
             WaitForDrmDecryption(wb, watchdog.TimeoutMs);
