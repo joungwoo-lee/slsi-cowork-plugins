@@ -180,6 +180,22 @@ public static class ExcelReader
         if (hwnd == IntPtr.Zero)
             return null;
 
+        var app = TryGetAccessibleObject(hwnd);
+        if (app != null)
+            return app;
+
+        IntPtr childHwnd = FindExcelDocumentWindow(hwnd);
+        if (childHwnd == IntPtr.Zero)
+            return null;
+
+        return TryGetAccessibleObject(childHwnd);
+    }
+
+    private static object? TryGetAccessibleObject(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero)
+            return null;
+
         Guid iid = typeof(IDispatch).GUID;
         object? app;
         int hr = AccessibleObjectFromWindow(
@@ -192,6 +208,33 @@ public static class ExcelReader
             return null;
 
         return app;
+    }
+
+    private static IntPtr FindExcelDocumentWindow(IntPtr rootHwnd)
+    {
+        IntPtr match = IntPtr.Zero;
+
+        EnumChildWindows(rootHwnd, (hwnd, _) =>
+        {
+            var className = GetWindowClassName(hwnd);
+            if (string.Equals(className, "EXCEL7", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(className, "XLDESK", StringComparison.OrdinalIgnoreCase))
+            {
+                match = hwnd;
+                return false;
+            }
+
+            return true;
+        }, IntPtr.Zero);
+
+        return match;
+    }
+
+    private static string GetWindowClassName(IntPtr hwnd)
+    {
+        var sb = new StringBuilder(256);
+        int len = GetClassName(hwnd, sb, sb.Capacity);
+        return len > 0 ? sb.ToString(0, len) : string.Empty;
     }
 
     private static bool PathsMatch(string? left, string? right)
@@ -229,10 +272,18 @@ public static class ExcelReader
         ref Guid riid,
         [MarshalAs(UnmanagedType.Interface)] out object? ppvObject);
 
+    [DllImport("user32.dll")]
+    private static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
     [ComImport]
     [Guid("00020400-0000-0000-C000-000000000046")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IDispatch;
+
+    private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
 
     private const uint NativeObjectId = 0xFFFFFFF0;
 

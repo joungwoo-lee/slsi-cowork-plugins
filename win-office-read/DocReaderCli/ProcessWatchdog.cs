@@ -64,6 +64,8 @@ public sealed class ProcessWatchdog : IDisposable
 
     public int TimeoutMs => _timeoutMs;
 
+    public int? TrackedPid => _trackedPid;
+
     private static HashSet<int> GetCurrentPids(string processName)
     {
         return Process.GetProcessesByName(processName)
