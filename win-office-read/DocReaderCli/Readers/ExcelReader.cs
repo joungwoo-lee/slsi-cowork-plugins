@@ -18,15 +18,11 @@ public static class ExcelReader
 
         try
         {
-            Console.Error.WriteLine($"[ExcelReader] Opening workbook via shell: {filePath}");
-            Process.Start(new ProcessStartInfo(filePath)
-            {
-                UseShellExecute = true,
-                Verb = "open"
-            });
+            Console.Error.WriteLine($"[ExcelReader] Opening workbook in read-only Excel: {filePath}");
+            StartExcelReadOnly(filePath);
             watchdog.DetectNewProcess();
 
-            app = WaitForExcelApplication(watchdog.TimeoutMs);
+            app = WaitForExcelApplication(watchdog, watchdog.TimeoutMs);
             if (app == null)
                 throw new TimeoutException("Excel instance attached as null COM object.");
 
@@ -79,7 +75,26 @@ public static class ExcelReader
         }
     }
 
-    private static object WaitForExcelApplication(int timeoutMs)
+    private static void StartExcelReadOnly(string filePath)
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo("excel.exe", $"/r \"{filePath}\"")
+            {
+                UseShellExecute = true
+            });
+        }
+        catch
+        {
+            Process.Start(new ProcessStartInfo(filePath)
+            {
+                UseShellExecute = true,
+                Verb = "open"
+            });
+        }
+    }
+
+    private static object WaitForExcelApplication(ProcessWatchdog watchdog, int timeoutMs)
     {
         var sw = Stopwatch.StartNew();
         while (sw.ElapsedMilliseconds < timeoutMs)
@@ -87,6 +102,22 @@ public static class ExcelReader
             try
             {
                 return GetActiveComObject("Excel.Application");
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                if (watchdog.TrackedPid is int pid)
+                {
+                    var app = GetExcelApplicationFromWindow(pid);
+                    if (app != null)
+                    {
+                        Console.Error.WriteLine("[ExcelReader] Attached via Excel window handle fallback.");
+                        return app;
+                    }
+                }
             }
             catch
             {
@@ -141,6 +172,28 @@ public static class ExcelReader
         try { return Convert.ToInt32(value); } catch { return 0; }
     }
 
+    private static object? GetExcelApplicationFromWindow(int pid)
+    {
+        var proc = Process.GetProcessById(pid);
+        proc.Refresh();
+        IntPtr hwnd = proc.MainWindowHandle;
+        if (hwnd == IntPtr.Zero)
+            return null;
+
+        Guid iid = typeof(IDispatch).GUID;
+        object? app;
+        int hr = AccessibleObjectFromWindow(
+            hwnd,
+            NativeObjectId,
+            ref iid,
+            out app);
+
+        if (hr != 0 || app == null)
+            return null;
+
+        return app;
+    }
+
     private static bool PathsMatch(string? left, string? right)
     {
         if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
@@ -168,6 +221,20 @@ public static class ExcelReader
 
     [DllImport("oleaut32.dll")]
     private static extern int GetActiveObject(ref Guid rclsid, IntPtr reserved, [MarshalAs(UnmanagedType.IUnknown)] out object obj);
+
+    [DllImport("oleacc.dll")]
+    private static extern int AccessibleObjectFromWindow(
+        IntPtr hwnd,
+        uint dwObjectID,
+        ref Guid riid,
+        [MarshalAs(UnmanagedType.Interface)] out object? ppvObject);
+
+    [ComImport]
+    [Guid("00020400-0000-0000-C000-000000000046")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IDispatch;
+
+    private const uint NativeObjectId = 0xFFFFFFF0;
 
     private static void WaitForDrmDecryption(object wb, int timeoutMs)
     {
