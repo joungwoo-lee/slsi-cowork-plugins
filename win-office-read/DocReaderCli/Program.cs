@@ -22,7 +22,7 @@ class Program
         if (string.IsNullOrWhiteSpace(filePath))
         {
             Console.Error.WriteLine("Usage: DocReaderCli.exe --file <path>");
-            Console.Error.WriteLine("Supported formats: .docx, .doc, .pdf, .xlsx, .xls, .pptx, .ppt");
+            Console.Error.WriteLine("Supported formats: .docx, .doc, .pdf, .xlsx, .xls, .pptx, .ppt, .pptm, .ppsx, .pps, .potx, .potm");
             return 1;
         }
 
@@ -40,7 +40,7 @@ class Program
             {
                 ".docx" or ".doc" or ".pdf" => WordReader.Read(filePath),
                 ".xlsx" or ".xls" => ExcelReader.Read(filePath),
-                ".pptx" or ".ppt" => PowerPointReader.Read(filePath),
+                ".pptx" or ".ppt" or ".pptm" or ".ppsx" or ".pps" or ".potx" or ".potm" => PowerPointReader.Read(filePath),
                 _ => throw new NotSupportedException($"Unsupported file extension: {ext}")
             };
 
