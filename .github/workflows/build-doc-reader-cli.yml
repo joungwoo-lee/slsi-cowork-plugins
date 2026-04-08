@@ -2,8 +2,8 @@ name: Build & Release DocReaderCli
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches:
+      - main
     paths:
       - 'win-office-com-automation/DocReaderCli/**'
   workflow_dispatch:
