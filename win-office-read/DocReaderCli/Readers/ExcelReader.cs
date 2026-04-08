@@ -28,12 +28,17 @@ public static class ExcelReader
             watchdog.DetectNewProcess();
 
             app = WaitForExcelApplication(watchdog.TimeoutMs);
+            if (app == null)
+                throw new TimeoutException("Excel instance attached as null COM object.");
+
             Console.Error.WriteLine("[ExcelReader] Attached to running Excel instance.");
             app.DisplayAlerts = false;
             app.Visible = true;
             app.ScreenUpdating = true;
 
             wb = WaitForWorkbook(app, filePath, watchdog.TimeoutMs);
+            if (wb == null)
+                throw new TimeoutException("Workbook attached as null COM object.");
 
             try { app.Visible = true; } catch { }
             try { app.UserControl = true; } catch { }
@@ -79,8 +84,9 @@ public static class ExcelReader
         {
             try
             {
-                var app = (Application)GetActiveComObject("Excel.Application");
-                return app;
+                var app = GetActiveComObject("Excel.Application") as Application;
+                if (app != null)
+                    return app;
             }
             catch
             {
@@ -142,7 +148,12 @@ public static class ExcelReader
         var clsid = Type.GetTypeFromProgID(progId)?.GUID
             ?? throw new COMException($"Could not resolve COM ProgID '{progId}'.");
 
-        GetActiveObject(ref clsid, IntPtr.Zero, out var obj);
+        int hr = GetActiveObject(ref clsid, IntPtr.Zero, out var obj);
+        if (hr != 0)
+            Marshal.ThrowExceptionForHR(hr);
+        if (obj == null)
+            throw new COMException($"Active COM object '{progId}' was null.");
+
         return obj;
     }
 
