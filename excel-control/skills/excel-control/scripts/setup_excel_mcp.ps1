@@ -6,7 +6,7 @@
     2. MCP Server zip + CLI zip 다운로드 및 추출
     3. mcp-excel.exe 실제 위치를 찾아서 PATH 등록
     4. 플러그인 .mcp.json에 실행 경로 기입
-    5. (선택) Claude Code / OpenCode 설정 파일에 MCP 서버 등록
+    5. Claude Code / Claude Desktop / OpenCode / VS Code 설정 파일에 MCP 서버 등록
     6. stdio 핸드셰이크로 실제 동작 검증
 .NOTES
     실행: powershell -ExecutionPolicy Bypass -File setup_excel_mcp.ps1
@@ -26,6 +26,69 @@ function Log($msg)  { Write-Host ">>> $msg" }
 function Ok($msg)   { Write-Host "[OK] $msg" -ForegroundColor Green }
 function Warn($msg) { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
 function Fail($msg) { Write-Host "[FAIL] $msg" -ForegroundColor Red; exit 1 }
+function Remove-JsonComments($text) {
+    if ([string]::IsNullOrEmpty($text)) {
+        return $text
+    }
+
+    $sb = New-Object System.Text.StringBuilder
+    $inString = $false
+    $escapeNext = $false
+    $inLineComment = $false
+    $inBlockComment = $false
+
+    for ($i = 0; $i -lt $text.Length; $i++) {
+        $char = $text[$i]
+        $next = if ($i + 1 -lt $text.Length) { $text[$i + 1] } else { [char]0 }
+
+        if ($inLineComment) {
+            if ($char -eq "`r" -or $char -eq "`n") {
+                $inLineComment = $false
+                [void]$sb.Append($char)
+            }
+            continue
+        }
+
+        if ($inBlockComment) {
+            if ($char -eq '*' -and $next -eq '/') {
+                $inBlockComment = $false
+                $i++
+            }
+            continue
+        }
+
+        if ($inString) {
+            [void]$sb.Append($char)
+            if ($escapeNext) {
+                $escapeNext = $false
+            } elseif ($char -eq '\\') {
+                $escapeNext = $true
+            } elseif ($char -eq '"') {
+                $inString = $false
+            }
+            continue
+        }
+
+        if ($char -eq '/' -and $next -eq '/') {
+            $inLineComment = $true
+            $i++
+            continue
+        }
+
+        if ($char -eq '/' -and $next -eq '*') {
+            $inBlockComment = $true
+            $i++
+            continue
+        }
+
+        [void]$sb.Append($char)
+        if ($char -eq '"') {
+            $inString = $true
+        }
+    }
+
+    return $sb.ToString()
+}
 
 # ── 1. Windows + Excel 확인 ─────────────────────────────
 Log "1. 환경 확인..."
@@ -173,7 +236,7 @@ $mcpJsonContent = @"
 Set-Content -Path $mcpJsonPath -Value $mcpJsonContent -Encoding UTF8
 Ok ".mcp.json 설정 완료: $mcpJsonPath"
 
-# ── 6. Claude Code settings.json 등록 (선택) ────────────
+# ── 6. AI 에이전트 설정 파일 등록 (선택) ────────────────
 Log "6. AI 에이전트 설정 파일에 MCP 서버 등록..."
 
 $registeredTargets = @()
@@ -216,6 +279,46 @@ if (Test-Path $claudeDesktop) {
     } catch {
         Warn "Claude Desktop 설정 업데이트 실패: $_"
     }
+}
+
+# OpenCode
+$openCodeConfigDir = Join-Path $env:USERPROFILE ".config\opencode"
+$openCodeJsonPath = Join-Path $openCodeConfigDir "opencode.json"
+$openCodeJsoncPath = Join-Path $openCodeConfigDir "opencode.jsonc"
+$openCodeConfigPath = if (Test-Path $openCodeJsonPath) {
+    $openCodeJsonPath
+} elseif (Test-Path $openCodeJsoncPath) {
+    $openCodeJsoncPath
+} else {
+    $openCodeJsonPath
+}
+
+try {
+    if (-not (Test-Path $openCodeConfigDir)) {
+        New-Item -ItemType Directory -Path $openCodeConfigDir -Force | Out-Null
+    }
+
+    if (Test-Path $openCodeConfigPath) {
+        $openCodeConfigRaw = Get-Content $openCodeConfigPath -Raw -Encoding UTF8
+        $openCodeConfig = (Remove-JsonComments $openCodeConfigRaw) | ConvertFrom-Json
+    } else {
+        $openCodeConfig = [PSCustomObject]@{}
+    }
+
+    if (-not $openCodeConfig.PSObject.Properties["mcp"]) {
+        $openCodeConfig | Add-Member -NotePropertyName "mcp" -NotePropertyValue ([PSCustomObject]@{})
+    }
+
+    $openCodeConfig.mcp | Add-Member -NotePropertyName "excel-mcp" -NotePropertyValue ([PSCustomObject]@{
+        type = "local"
+        command = @($mcpExePath)
+        enabled = $true
+    }) -Force
+
+    $openCodeConfig | ConvertTo-Json -Depth 10 | Set-Content $openCodeConfigPath -Encoding UTF8
+    $registeredTargets += "OpenCode"
+} catch {
+    Warn "OpenCode 설정 업데이트 실패: $_"
 }
 
 # VS Code MCP (프로젝트 루트)

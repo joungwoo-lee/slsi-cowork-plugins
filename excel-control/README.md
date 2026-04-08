@@ -21,8 +21,11 @@ powershell -ExecutionPolicy Bypass -File "excel-control\skills\excel-control\scr
 2. zip에서 `mcp-excel.exe` 위치를 자동 탐색하여 `%USERPROFILE%\ExcelMcp\`에 설치
 3. Windows **PATH에 등록** → `mcp-excel` 명령으로 실행 가능
 4. `.mcp.json`에 stdio MCP 서버 경로 설정
-5. Claude Code / Claude Desktop / VS Code 설정 파일에 자동 등록
+5. Claude Code / Claude Desktop / OpenCode / VS Code 설정 파일에 자동 등록
 6. **stdio 핸드셰이크 테스트**로 실제 동작 검증
+
+OpenCode는 `~/.config/opencode/opencode.json` 또는 `~/.config/opencode/opencode.jsonc`를 자동 갱신합니다.
+기존 `jsonc` 파일에 주석이 있어도 주석을 제거한 뒤 안전하게 파싱하여 `excel-mcp` 서버를 추가합니다.
 
 ## 구조
 
@@ -60,6 +63,7 @@ excel-control/
     │   ├─ 플러그인 .mcp.json ← 풀패스로 command 기입
     │   ├─ ~/.claude/settings.json (Claude Code)
     │   ├─ %APPDATA%/Claude/claude_desktop_config.json (Claude Desktop)
+    │   ├─ ~/.config/opencode/opencode.json 또는 opencode.jsonc (OpenCode)
     │   └─ .vscode/mcp.json (VS Code)
     │
     └─ stdio 핸드셰이크 테스트
@@ -86,6 +90,20 @@ AI 에이전트(Claude Code, OpenCode 등) 실행
 ```
 
 이 시점에서 에이전트는 25개 MCP 도구(Files, Ranges, Charts, PivotTables 등)를 사용할 수 있는 상태가 됩니다.
+
+OpenCode에는 다음과 같은 형태로 등록됩니다:
+
+```json
+{
+  "mcp": {
+    "excel-mcp": {
+      "type": "local",
+      "command": ["C:\\Users\\이름\\ExcelMcp\\mcp-excel.exe"],
+      "enabled": true
+    }
+  }
+}
+```
 
 ### 3단계: 사용자 프롬프트 → Excel 제어
 
