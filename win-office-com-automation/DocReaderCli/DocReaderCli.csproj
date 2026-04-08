@@ -8,6 +8,7 @@
     <SelfContained>true</SelfContained>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
     <AssemblyName>DocReaderCli</AssemblyName>
     <RootNamespace>DocReaderCli</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
