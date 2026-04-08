@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'win-office-com-automation/DocReaderCli/**'
+      - 'win-office-read/DocReaderCli/**'
   workflow_dispatch:
 
 permissions:
@@ -26,7 +26,7 @@ jobs:
 
       - name: Restore dependencies
         run: dotnet restore
-        working-directory: win-office-com-automation/DocReaderCli
+        working-directory: win-office-read/DocReaderCli
 
       - name: Publish single-file binary
         run: |
@@ -38,13 +38,13 @@ jobs:
             -p:IncludeNativeLibrariesForSelfExtract=true `
             -p:IncludeAllContentForSelfExtract=true `
             -o ./publish
-        working-directory: win-office-com-automation/DocReaderCli
+        working-directory: win-office-read/DocReaderCli
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
           name: DocReaderCli-win-x64
-          path: win-office-com-automation/DocReaderCli/publish/DocReaderCli.exe
+          path: win-office-read/DocReaderCli/publish/DocReaderCli.exe
 
   release:
     needs: build
