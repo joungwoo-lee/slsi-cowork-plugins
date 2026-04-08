@@ -1,6 +1,6 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
-using NetOffice.WordApi;
-using NetOffice.WordApi.Enums;
 
 namespace DocReaderCli.Readers;
 
@@ -12,35 +12,25 @@ public static class WordReader
     public static string Read(string filePath)
     {
         using var watchdog = new ProcessWatchdog("WINWORD");
-        Application? app = null;
-        Document? doc = null;
+        dynamic? app = null;
+        dynamic? doc = null;
 
         try
         {
-            Console.Error.WriteLine("[WordReader] Creating Word COM instance...");
-            app = new Application { Visible = false };
-            Console.Error.WriteLine("[WordReader] Word COM instance created OK.");
-            app.DisplayAlerts = WdAlertLevel.wdAlertsNone;
+            Console.Error.WriteLine($"[WordReader] Opening document via shell: {filePath}");
+            Process.Start(new ProcessStartInfo(filePath)
+            {
+                UseShellExecute = true,
+                Verb = "open"
+            });
             watchdog.DetectNewProcess();
-            Console.Error.WriteLine($"[WordReader] Opening document: {filePath}");
 
-            // Documents.Open positional: FileName, ConfirmConversions, ReadOnly, AddToRecentFiles,
-            // PasswordDocument, PasswordTemplate, Revert, WritePasswordDocument,
-            // WritePasswordTemplate, Format, Encoding, Visible
-            doc = app.Documents.Open(
-                filePath,       // FileName
-                false,          // ConfirmConversions
-                true,           // ReadOnly
-                false,          // AddToRecentFiles
-                Type.Missing,   // PasswordDocument
-                Type.Missing,   // PasswordTemplate
-                false,          // Revert
-                Type.Missing,   // WritePasswordDocument
-                Type.Missing,   // WritePasswordTemplate
-                Type.Missing,   // Format
-                Type.Missing,   // Encoding
-                false           // Visible
-            );
+            app = WaitForWordApplication(watchdog.TimeoutMs);
+            Console.Error.WriteLine("[WordReader] Attached to running Word instance.");
+            try { app.Visible = true; } catch { }
+
+            doc = WaitForWordDocument(app, filePath, watchdog.TimeoutMs);
+            try { doc.Activate(); } catch { }
 
             Console.Error.WriteLine("[WordReader] Document opened. Checking DRM...");
             WaitForDrmDecryption(doc, watchdog.TimeoutMs);
@@ -53,20 +43,73 @@ public static class WordReader
         finally
         {
             try { doc?.Close(false); } catch { }
-            try { app?.Quit(); } catch { }
             try { app?.Dispose(); } catch { }
             watchdog.KillIfRunning();
         }
     }
 
-    private static void WaitForDrmDecryption(Document doc, int timeoutMs)
+    private static object WaitForWordApplication(int timeoutMs)
     {
+        var sw = Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            try
+            {
+                return GetActiveComObject("Word.Application");
+            }
+            catch
+            {
+            }
+
+            Thread.Sleep(DrmPollIntervalMs);
+        }
+
+        throw new TimeoutException($"Word instance was not available after {timeoutMs / 1000}s.");
+    }
+
+    private static object WaitForWordDocument(object app, string filePath, int timeoutMs)
+    {
+        dynamic wordApp = app;
+        var targetPath = Path.GetFullPath(filePath);
+        var sw = Stopwatch.StartNew();
+
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            try
+            {
+                dynamic docs = wordApp.Documents;
+                int count = SafeToInt(docs?.Count);
+                for (int i = 1; i <= count; i++)
+                {
+                    try
+                    {
+                        dynamic candidate = docs[i];
+                        if (PathsMatch(candidate.FullName, targetPath))
+                        {
+                            Console.Error.WriteLine($"[WordReader] Document attached after {sw.ElapsedMilliseconds}ms.");
+                            return candidate;
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+
+            Thread.Sleep(DrmPollIntervalMs);
+        }
+
+        throw new TimeoutException($"Document did not appear in Word after {timeoutMs / 1000}s.");
+    }
+
+    private static void WaitForDrmDecryption(object doc, int timeoutMs)
+    {
+        dynamic document = doc;
         var sw = System.Diagnostics.Stopwatch.StartNew();
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
             try
             {
-                var range = doc.Content;
+                var range = document.Content;
                 if (range != null && range.Text != null && range.Text.Trim().Length > 0)
                     return;
             }
@@ -81,7 +124,7 @@ public static class WordReader
         // Allow empty documents to pass (the file opened but has no content)
         try
         {
-            if (doc.Content?.Text?.Trim().Length == 0)
+            if (document.Content?.Text?.Trim().Length == 0)
                 return;
         }
         catch { }
@@ -90,17 +133,49 @@ public static class WordReader
             $"DRM decryption timed out after {timeoutMs / 1000}s. The document may require manual DRM authentication.");
     }
 
-    private static void ExtractContent(Document doc, StringBuilder sb)
+    private static int SafeToInt(object? value)
     {
+        try { return Convert.ToInt32(value); } catch { return 0; }
+    }
+
+    private static bool PathsMatch(string? left, string? right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+            return false;
+
+        return string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static object GetActiveComObject(string progId)
+    {
+        var clsid = Type.GetTypeFromProgID(progId)?.GUID
+            ?? throw new COMException($"Could not resolve COM ProgID '{progId}'.");
+
+        int hr = GetActiveObject(ref clsid, IntPtr.Zero, out var obj);
+        if (hr != 0)
+            Marshal.ThrowExceptionForHR(hr);
+        if (obj == null)
+            throw new COMException($"Active COM object '{progId}' was null.");
+
+        return obj;
+    }
+
+    [DllImport("oleaut32.dll")]
+    private static extern int GetActiveObject(ref Guid rclsid, IntPtr reserved, [MarshalAs(UnmanagedType.IUnknown)] out object obj);
+
+    private static void ExtractContent(object doc, StringBuilder sb)
+    {
+        dynamic document = doc;
         int tableIdx = 0;
         var tableRanges = new List<(int Start, int End)>();
 
         // Pre-collect table ranges to avoid duplicating table text in paragraphs
-        for (int i = 1; i <= doc.Tables.Count; i++)
+        int tableCount = SafeToInt(document.Tables?.Count);
+        for (int i = 1; i <= tableCount; i++)
         {
             try
             {
-                var table = doc.Tables[i];
+                var table = document.Tables[i];
                 var r = table.Range;
                 if (r != null)
                     tableRanges.Add((r.Start, r.End));
@@ -109,11 +184,12 @@ public static class WordReader
         }
 
         // Walk paragraphs in document order
-        for (int i = 1; i <= doc.Paragraphs.Count; i++)
+        int paraCount = SafeToInt(document.Paragraphs?.Count);
+        for (int i = 1; i <= paraCount; i++)
         {
             try
             {
-                var para = doc.Paragraphs[i];
+                var para = document.Paragraphs[i];
                 var range = para.Range;
                 if (range == null) continue;
 
@@ -127,7 +203,7 @@ public static class WordReader
                     var matchedTable = tableRanges.FindIndex(t => paraStart >= t.Start && paraStart <= t.End);
                     if (matchedTable >= 0 && matchedTable == tableIdx)
                     {
-                        EmitTable(doc.Tables[tableIdx + 1], sb); // 1-based index
+                        EmitTable(document.Tables[tableIdx + 1], sb); // 1-based index
                         tableIdx++;
                     }
                     continue;
@@ -137,7 +213,7 @@ public static class WordReader
                 if (string.IsNullOrWhiteSpace(text)) continue;
 
                 string styleName = "";
-                try { styleName = ((Style)para.Style).NameLocal ?? ""; } catch { }
+                try { styleName = para.Style?.NameLocal?.ToString() ?? para.Style?.ToString() ?? ""; } catch { }
 
                 if (styleName.Contains("Heading 1", StringComparison.OrdinalIgnoreCase))
                     sb.AppendLine($"# {text}");
@@ -156,16 +232,17 @@ public static class WordReader
         }
 
         // Emit any remaining tables not yet emitted
-        for (int i = tableIdx; i < doc.Tables.Count; i++)
+        for (int i = tableIdx; i < tableCount; i++)
         {
-            try { EmitTable(doc.Tables[i + 1], sb); } catch { }
+            try { EmitTable(document.Tables[i + 1], sb); } catch { }
         }
     }
 
-    private static void EmitTable(Table table, StringBuilder sb)
+    private static void EmitTable(object tableObj, StringBuilder sb)
     {
         try
         {
+            dynamic table = tableObj;
             int rows = table.Rows.Count;
             int cols = table.Columns.Count;
 

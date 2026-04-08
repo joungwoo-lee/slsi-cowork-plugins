@@ -1,5 +1,6 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
-using NetOffice.PowerPointApi;
 using NetOffice.OfficeApi.Enums;
 
 namespace DocReaderCli.Readers;
@@ -12,24 +13,23 @@ public static class PowerPointReader
     public static string Read(string filePath)
     {
         using var watchdog = new ProcessWatchdog("POWERPNT");
-        Application? app = null;
-        Presentation? pres = null;
+        dynamic? app = null;
+        dynamic? pres = null;
 
         try
         {
-            Console.Error.WriteLine("[PPTReader] Creating PowerPoint COM instance...");
-            app = new Application();
-            Console.Error.WriteLine("[PPTReader] PowerPoint COM instance created OK.");
+            Console.Error.WriteLine($"[PPTReader] Opening presentation via shell: {filePath}");
+            Process.Start(new ProcessStartInfo(filePath)
+            {
+                UseShellExecute = true,
+                Verb = "open"
+            });
             watchdog.DetectNewProcess();
-            Console.Error.WriteLine($"[PPTReader] Opening presentation: {filePath}");
 
-            // Presentations.Open positional: FileName, ReadOnly, Untitled, WithWindow
-            pres = app.Presentations.Open(
-                filePath,
-                NetOffice.OfficeApi.Enums.MsoTriState.msoTrue,   // ReadOnly
-                NetOffice.OfficeApi.Enums.MsoTriState.msoFalse,  // Untitled
-                NetOffice.OfficeApi.Enums.MsoTriState.msoFalse   // WithWindow
-            );
+            app = WaitForPowerPointApplication(watchdog.TimeoutMs);
+            Console.Error.WriteLine("[PPTReader] Attached to running PowerPoint instance.");
+            pres = WaitForPresentation(app, filePath, watchdog.TimeoutMs);
+            try { app.Visible = MsoTriState.msoTrue; } catch { }
 
             Console.Error.WriteLine("[PPTReader] Presentation opened. Checking DRM...");
             WaitForDrmDecryption(pres, watchdog.TimeoutMs);
@@ -37,15 +37,15 @@ public static class PowerPointReader
 
             var sb = new StringBuilder();
 
-            int slideNum = 0;
-            foreach (Slide slide in pres.Slides)
+            int slideCount = SafeToInt(pres.Slides?.Count);
+            for (int slideNum = 1; slideNum <= slideCount; slideNum++)
             {
-                slideNum++;
                 sb.AppendLine($"## Slide {slideNum}");
                 sb.AppendLine();
 
                 try
                 {
+                    var slide = pres.Slides[slideNum];
                     ExtractSlide(slide, sb);
                 }
                 catch (Exception ex)
@@ -61,23 +61,98 @@ public static class PowerPointReader
         finally
         {
             try { pres?.Close(); } catch { }
-            try { app?.Quit(); } catch { }
             try { app?.Dispose(); } catch { }
             watchdog.KillIfRunning();
         }
     }
 
-    private static void WaitForDrmDecryption(Presentation pres, int timeoutMs)
+    private static object WaitForPowerPointApplication(int timeoutMs)
     {
+        var sw = Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            try { return GetActiveComObject("PowerPoint.Application"); } catch { }
+            Thread.Sleep(DrmPollIntervalMs);
+        }
+
+        throw new TimeoutException($"PowerPoint instance was not available after {timeoutMs / 1000}s.");
+    }
+
+    private static object WaitForPresentation(object app, string filePath, int timeoutMs)
+    {
+        dynamic pptApp = app;
+        var targetPath = Path.GetFullPath(filePath);
+        var sw = Stopwatch.StartNew();
+
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            try
+            {
+                dynamic presentations = pptApp.Presentations;
+                int count = SafeToInt(presentations?.Count);
+                for (int i = 1; i <= count; i++)
+                {
+                    try
+                    {
+                        dynamic candidate = presentations[i];
+                        if (PathsMatch(candidate.FullName, targetPath))
+                        {
+                            Console.Error.WriteLine($"[PPTReader] Presentation attached after {sw.ElapsedMilliseconds}ms.");
+                            return candidate;
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { }
+
+            Thread.Sleep(DrmPollIntervalMs);
+        }
+
+        throw new TimeoutException($"Presentation did not appear in PowerPoint after {timeoutMs / 1000}s.");
+    }
+
+    private static int SafeToInt(object? value)
+    {
+        try { return Convert.ToInt32(value); } catch { return 0; }
+    }
+
+    private static bool PathsMatch(string? left, string? right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+            return false;
+
+        return string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static object GetActiveComObject(string progId)
+    {
+        var clsid = Type.GetTypeFromProgID(progId)?.GUID
+            ?? throw new COMException($"Could not resolve COM ProgID '{progId}'.");
+
+        int hr = GetActiveObject(ref clsid, IntPtr.Zero, out var obj);
+        if (hr != 0)
+            Marshal.ThrowExceptionForHR(hr);
+        if (obj == null)
+            throw new COMException($"Active COM object '{progId}' was null.");
+
+        return obj;
+    }
+
+    [DllImport("oleaut32.dll")]
+    private static extern int GetActiveObject(ref Guid rclsid, IntPtr reserved, [MarshalAs(UnmanagedType.IUnknown)] out object obj);
+
+    private static void WaitForDrmDecryption(object pres, int timeoutMs)
+    {
+        dynamic presentation = pres;
         var sw = System.Diagnostics.Stopwatch.StartNew();
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
             try
             {
-                if (pres.Slides.Count > 0)
+                if (SafeToInt(presentation.Slides?.Count) > 0)
                 {
-                    // Try to access first slide's shapes
-                    var firstSlide = pres.Slides[1];
+                    var firstSlide = presentation.Slides[1];
                     if (firstSlide.Shapes.Count >= 0)
                         return;
                 }
@@ -90,7 +165,7 @@ public static class PowerPointReader
         // Allow empty presentations
         try
         {
-            if (pres.Slides.Count == 0)
+            if (SafeToInt(presentation.Slides?.Count) == 0)
                 return;
         }
         catch { }
@@ -99,12 +174,13 @@ public static class PowerPointReader
             $"DRM decryption timed out after {timeoutMs / 1000}s.");
     }
 
-    private static void ExtractSlide(Slide slide, StringBuilder sb)
+    private static void ExtractSlide(object slideObj, StringBuilder sb)
     {
+        dynamic slide = slideObj;
         // Extract title if present
         try
         {
-            if (slide.Shapes.HasTitle == NetOffice.OfficeApi.Enums.MsoTriState.msoTrue)
+            if (slide.Shapes.HasTitle == MsoTriState.msoTrue)
             {
                 var titleText = slide.Shapes.Title?.TextFrame?.TextRange?.Text;
                 if (!string.IsNullOrWhiteSpace(titleText))
@@ -117,8 +193,10 @@ public static class PowerPointReader
         catch { }
 
         // Extract all text shapes
-        foreach (Shape shape in slide.Shapes)
+        int shapeCount = SafeToInt(slide.Shapes?.Count);
+        for (int i = 1; i <= shapeCount; i++)
         {
+            dynamic shape = slide.Shapes[i];
             try
             {
                 if (shape.HasTextFrame == MsoTriState.msoTrue)
@@ -155,8 +233,10 @@ public static class PowerPointReader
             var notes = slide.NotesPage?.Shapes;
             if (notes != null)
             {
-                foreach (Shape noteShape in notes)
+                int noteCount = SafeToInt(notes.Count);
+                for (int i = 1; i <= noteCount; i++)
                 {
+                    dynamic noteShape = notes[i];
                     try
                     {
                         if (noteShape.HasTextFrame == MsoTriState.msoTrue)
@@ -177,10 +257,11 @@ public static class PowerPointReader
         catch { }
     }
 
-    private static void ExtractTable(NetOffice.PowerPointApi.Table table, StringBuilder sb)
+    private static void ExtractTable(object tableObj, StringBuilder sb)
     {
         try
         {
+            dynamic table = tableObj;
             int rows = table.Rows.Count;
             int cols = table.Columns.Count;
 
