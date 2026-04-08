@@ -19,6 +19,7 @@
     <PackageReference Include="NetOfficeFw.Word" Version="1.9.4" />
     <PackageReference Include="NetOfficeFw.Excel" Version="1.9.4" />
     <PackageReference Include="NetOfficeFw.PowerPoint" Version="1.9.4" />
+    <PackageReference Include="Microsoft.Office.Interop.Excel" Version="15.0.4795.1001" />
   </ItemGroup>
 
 </Project>

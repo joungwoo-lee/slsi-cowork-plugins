@@ -8,21 +8,36 @@ class Program
     static int Main(string[] args)
     {
         string? filePath = null;
+        string excelEngine = "netoffice";
 
-        // Parse --file argument
+        // Parse arguments
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == "--file" && i + 1 < args.Length)
             {
                 filePath = args[i + 1];
-                break;
+                i++;
+                continue;
+            }
+
+            if (args[i] == "--excel-engine" && i + 1 < args.Length)
+            {
+                excelEngine = args[i + 1].ToLowerInvariant();
+                i++;
             }
         }
 
         if (string.IsNullOrWhiteSpace(filePath))
         {
             Console.Error.WriteLine("Usage: DocReaderCli.exe --file <path>");
+            Console.Error.WriteLine("Optional: --excel-engine netoffice|interop");
             Console.Error.WriteLine("Supported formats: .docx, .doc, .pdf, .xlsx, .xls, .pptx, .ppt, .pptm, .ppsx, .pps, .potx, .potm");
+            return 1;
+        }
+
+        if (excelEngine is not ("netoffice" or "interop"))
+        {
+            Console.Error.WriteLine($"Error: Unsupported Excel engine '{excelEngine}'. Use 'netoffice' or 'interop'.");
             return 1;
         }
 
@@ -39,7 +54,9 @@ class Program
             string result = ext switch
             {
                 ".docx" or ".doc" or ".pdf" => WordReader.Read(filePath),
-                ".xlsx" or ".xls" => ExcelReader.Read(filePath),
+                ".xlsx" or ".xls" => excelEngine == "interop"
+                    ? ExcelInteropReader.Read(filePath)
+                    : ExcelReader.Read(filePath),
                 ".pptx" or ".ppt" or ".pptm" or ".ppsx" or ".pps" or ".potx" or ".potm" => PowerPointReader.Read(filePath),
                 _ => throw new NotSupportedException($"Unsupported file extension: {ext}")
             };
