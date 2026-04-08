@@ -18,7 +18,7 @@ public static class ExcelReader
         try
         {
             Console.Error.WriteLine("[ExcelReader] Creating Excel COM instance...");
-            app = new Application { Visible = false };
+            app = new Application { Visible = true };
             Console.Error.WriteLine("[ExcelReader] Excel COM instance created OK.");
             app.DisplayAlerts = false;
             app.ScreenUpdating = false;
@@ -40,6 +40,9 @@ public static class ExcelReader
                 Type.Missing,   // Converter
                 false           // AddToMru
             );
+
+            try { wb.Activate(); } catch { }
+            try { app.Visible = true; } catch { }
 
             Console.Error.WriteLine("[ExcelReader] Workbook opened. Checking DRM...");
             WaitForDrmDecryption(wb, watchdog.TimeoutMs);
@@ -79,9 +82,33 @@ public static class ExcelReader
             attempt++;
             try
             {
-                var sheet = (Worksheet)wb.Worksheets[1];
+                var sheets = wb.Worksheets;
+                if (sheets.Count <= 0)
+                {
+                    Thread.Sleep(DrmPollIntervalMs);
+                    continue;
+                }
+
+                var sheet = sheets[1] as Worksheet;
+                if (sheet == null)
+                {
+                    Thread.Sleep(DrmPollIntervalMs);
+                    continue;
+                }
+
+                _ = sheet.Name;
+
                 var used = sheet.UsedRange;
-                if (used != null && used.Rows.Count > 0)
+                if (used == null)
+                {
+                    Thread.Sleep(DrmPollIntervalMs);
+                    continue;
+                }
+
+                object? rowCountObj = null;
+                try { rowCountObj = used.Rows?.Count; } catch { }
+
+                if (TryGetPositiveCount(rowCountObj, out _) || rowCountObj != null)
                 {
                     Console.Error.WriteLine($"[ExcelReader] DRM check OK on attempt {attempt} ({sw.ElapsedMilliseconds}ms)");
                     return;
@@ -97,6 +124,31 @@ public static class ExcelReader
 
         throw new TimeoutException(
             $"DRM decryption timed out after {timeoutMs / 1000}s.");
+    }
+
+    private static bool TryGetPositiveCount(object? value, out int count)
+    {
+        count = 0;
+        if (value == null) return false;
+
+        try
+        {
+            count = value switch
+            {
+                int i => i,
+                short s => s,
+                long l when l <= int.MaxValue => (int)l,
+                float f => (int)f,
+                double d => (int)d,
+                decimal m => (int)m,
+                _ => Convert.ToInt32(value)
+            };
+            return count > 0;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void ExtractSheet(Worksheet sheet, StringBuilder sb)

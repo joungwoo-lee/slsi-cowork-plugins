@@ -4,6 +4,7 @@ namespace DocReaderCli;
 
 class Program
 {
+    [STAThread]
     static int Main(string[] args)
     {
         string? filePath = null;
