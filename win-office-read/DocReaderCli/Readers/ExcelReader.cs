@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
-using NetOffice.ExcelApi;
 using NetOffice.ExcelApi.Enums;
 
 namespace DocReaderCli.Readers;
@@ -14,8 +13,8 @@ public static class ExcelReader
     public static string Read(string filePath)
     {
         using var watchdog = new ProcessWatchdog("EXCEL");
-        Application? app = null;
-        Workbook? wb = null;
+        dynamic? app = null;
+        dynamic? wb = null;
 
         try
         {
@@ -54,16 +53,19 @@ public static class ExcelReader
             Console.Error.WriteLine("[ExcelReader] DRM check passed. Reading sheets...");
 
             var sb = new StringBuilder();
+            var sheets = wb.Worksheets;
+            int sheetCount = SafeToInt(sheets?.Count);
 
-            foreach (Worksheet sheet in wb.Worksheets)
+            for (int i = 1; i <= sheetCount; i++)
             {
                 try
                 {
+                    var sheet = sheets[i];
                     ExtractSheet(sheet, sb);
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"[ExcelReader] Error reading sheet '{sheet.Name}': {ex.Message}");
+                    Console.Error.WriteLine($"[ExcelReader] Error reading sheet #{i}: {ex.Message}");
                 }
             }
 
@@ -77,16 +79,14 @@ public static class ExcelReader
         }
     }
 
-    private static Application WaitForExcelApplication(int timeoutMs)
+    private static object WaitForExcelApplication(int timeoutMs)
     {
         var sw = Stopwatch.StartNew();
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
             try
             {
-                var app = GetActiveComObject("Excel.Application") as Application;
-                if (app != null)
-                    return app;
+                return GetActiveComObject("Excel.Application");
             }
             catch
             {
@@ -98,8 +98,9 @@ public static class ExcelReader
         throw new TimeoutException($"Excel instance was not available after {timeoutMs / 1000}s.");
     }
 
-    private static Workbook WaitForWorkbook(Application app, string filePath, int timeoutMs)
+    private static object WaitForWorkbook(object app, string filePath, int timeoutMs)
     {
+        dynamic excelApp = app;
         var targetPath = Path.GetFullPath(filePath);
         var sw = Stopwatch.StartNew();
 
@@ -107,10 +108,13 @@ public static class ExcelReader
         {
             try
             {
-                foreach (Workbook workbook in app.Workbooks)
+                dynamic workbooks = excelApp.Workbooks;
+                int count = SafeToInt(workbooks?.Count);
+                for (int i = 1; i <= count; i++)
                 {
                     try
                     {
+                        dynamic workbook = workbooks[i];
                         if (PathsMatch(workbook.FullName, targetPath))
                         {
                             Console.Error.WriteLine($"[ExcelReader] Workbook attached after {sw.ElapsedMilliseconds}ms.");
@@ -130,6 +134,11 @@ public static class ExcelReader
         }
 
         throw new TimeoutException($"Workbook did not appear in Excel after {timeoutMs / 1000}s.");
+    }
+
+    private static int SafeToInt(object? value)
+    {
+        try { return Convert.ToInt32(value); } catch { return 0; }
     }
 
     private static bool PathsMatch(string? left, string? right)
@@ -160,8 +169,9 @@ public static class ExcelReader
     [DllImport("oleaut32.dll")]
     private static extern int GetActiveObject(ref Guid rclsid, IntPtr reserved, [MarshalAs(UnmanagedType.IUnknown)] out object obj);
 
-    private static void WaitForDrmDecryption(Workbook wb, int timeoutMs)
+    private static void WaitForDrmDecryption(object wb, int timeoutMs)
     {
+        dynamic workbook = wb;
         var sw = System.Diagnostics.Stopwatch.StartNew();
         int attempt = 0;
         while (sw.ElapsedMilliseconds < timeoutMs)
@@ -169,14 +179,14 @@ public static class ExcelReader
             attempt++;
             try
             {
-                var sheets = wb.Worksheets;
-                if (sheets.Count <= 0)
+                var sheets = workbook.Worksheets;
+                if (SafeToInt(sheets?.Count) <= 0)
                 {
                     Thread.Sleep(DrmPollIntervalMs);
                     continue;
                 }
 
-                var sheet = sheets[1] as Worksheet;
+                dynamic sheet = sheets[1];
                 if (sheet == null)
                 {
                     Thread.Sleep(DrmPollIntervalMs);
@@ -238,18 +248,17 @@ public static class ExcelReader
         }
     }
 
-    private static void ExtractSheet(Worksheet sheet, StringBuilder sb)
+    private static void ExtractSheet(object sheetObj, StringBuilder sb)
     {
+        dynamic sheet = sheetObj;
         sb.AppendLine($"## Sheet: {sheet.Name}");
         sb.AppendLine();
 
         var usedRange = sheet.UsedRange;
         if (usedRange == null) return;
 
-        int rowCount = usedRange.Rows.Count;
-        int colCount = usedRange.Columns.Count;
-        int startRow = usedRange.Row;
-        int startCol = usedRange.Column;
+        int rowCount = SafeToInt(usedRange.Rows.Count);
+        int colCount = SafeToInt(usedRange.Columns.Count);
 
         if (rowCount == 0 || colCount == 0) return;
 
@@ -278,7 +287,7 @@ public static class ExcelReader
                     }
                     else
                     {
-                        var cell = (NetOffice.ExcelApi.Range)usedRange.Cells[r, c];
+                        dynamic cell = usedRange.Cells[r, c];
                         cellText = cell.Text?.ToString() ?? cell.Value?.ToString() ?? "";
                     }
                 }

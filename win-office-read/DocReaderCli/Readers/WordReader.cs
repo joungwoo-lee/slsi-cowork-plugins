@@ -96,10 +96,11 @@ public static class WordReader
         var tableRanges = new List<(int Start, int End)>();
 
         // Pre-collect table ranges to avoid duplicating table text in paragraphs
-        foreach (Table table in doc.Tables)
+        for (int i = 1; i <= doc.Tables.Count; i++)
         {
             try
             {
+                var table = doc.Tables[i];
                 var r = table.Range;
                 if (r != null)
                     tableRanges.Add((r.Start, r.End));
@@ -108,10 +109,11 @@ public static class WordReader
         }
 
         // Walk paragraphs in document order
-        foreach (Paragraph para in doc.Paragraphs)
+        for (int i = 1; i <= doc.Paragraphs.Count; i++)
         {
             try
             {
+                var para = doc.Paragraphs[i];
                 var range = para.Range;
                 if (range == null) continue;
 
