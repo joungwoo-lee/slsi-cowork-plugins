@@ -79,17 +79,19 @@ public static class ExcelReader
     {
         try
         {
-            Process.Start(new ProcessStartInfo("excel.exe", $"/r \"{filePath}\"")
-            {
-                UseShellExecute = true
-            });
-        }
-        catch
-        {
+            // Let Windows open the file through the registered Excel handler first.
+            // This is more reliable for DRM/protected files than invoking excel.exe directly.
             Process.Start(new ProcessStartInfo(filePath)
             {
                 UseShellExecute = true,
                 Verb = "open"
+            });
+        }
+        catch
+        {
+            Process.Start(new ProcessStartInfo("excel.exe", $"/r \"{filePath}\"")
+            {
+                UseShellExecute = true
             });
         }
     }
@@ -156,6 +158,13 @@ public static class ExcelReader
                     {
                     }
                 }
+
+                var protectedWorkbook = TryGetWorkbookFromProtectedView(excelApp, targetPath);
+                if (protectedWorkbook != null)
+                {
+                    Console.Error.WriteLine($"[ExcelReader] Workbook attached from Protected View after {sw.ElapsedMilliseconds}ms.");
+                    return protectedWorkbook;
+                }
             }
             catch
             {
@@ -170,6 +179,54 @@ public static class ExcelReader
     private static int SafeToInt(object? value)
     {
         try { return Convert.ToInt32(value); } catch { return 0; }
+    }
+
+    private static object? TryGetWorkbookFromProtectedView(dynamic excelApp, string targetPath)
+    {
+        try
+        {
+            dynamic protectedViewWindows = excelApp.ProtectedViewWindows;
+            int count = SafeToInt(protectedViewWindows?.Count);
+            for (int i = 1; i <= count; i++)
+            {
+                try
+                {
+                    dynamic window = protectedViewWindows[i];
+
+                    string? sourcePath = null;
+                    try { sourcePath = window.SourceFullName?.ToString(); } catch { }
+
+                    if (!PathsMatch(sourcePath, targetPath))
+                        continue;
+
+                    try
+                    {
+                        var workbook = window.Workbook;
+                        if (workbook != null)
+                            return workbook;
+                    }
+                    catch
+                    {
+                    }
+
+                    try
+                    {
+                        window.Edit();
+                    }
+                    catch
+                    {
+                    }
+                }
+                catch
+                {
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
     }
 
     private static object? GetExcelApplicationFromWindow(int pid)
