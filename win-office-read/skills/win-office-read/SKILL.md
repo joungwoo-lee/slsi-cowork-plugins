@@ -7,11 +7,10 @@ description: "Windows 네이티브 환경에서 MS Office 문서(.docx, .xlsx, .
 
 ## 절대 경로 파악
 
-사용자가 파일명이나 상대 경로만 언급한 경우, 실행 전에 반드시 절대 경로를 먼저 확인한다.
+사용자가 파일명이나 상대 경로만 언급한 경우, 실행 전에 PowerShell로 절대 경로를 확인한다.
 
-```bash
-# Windows 절대경로 확인 (WSL/Git Bash 환경)
-wslpath -w "$(realpath '<파일명 또는 상대경로>')"
+```powershell
+(Get-Item '<파일명 또는 상대경로>').FullName
 ```
 
 경로를 이미 알고 있거나 사용자가 직접 절대 경로를 제공한 경우 이 단계를 건너뛴다.
