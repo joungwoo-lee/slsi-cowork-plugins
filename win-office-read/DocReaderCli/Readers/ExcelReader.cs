@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using NetOffice.ExcelApi;
 using NetOffice.ExcelApi.Enums;
@@ -17,33 +19,26 @@ public static class ExcelReader
 
         try
         {
-            Console.Error.WriteLine("[ExcelReader] Creating Excel COM instance...");
-            app = new Application { Visible = true };
-            Console.Error.WriteLine("[ExcelReader] Excel COM instance created OK.");
-            app.DisplayAlerts = false;
-            app.ScreenUpdating = true;
+            Console.Error.WriteLine($"[ExcelReader] Opening workbook via shell: {filePath}");
+            Process.Start(new ProcessStartInfo(filePath)
+            {
+                UseShellExecute = true,
+                Verb = "open"
+            });
             watchdog.DetectNewProcess();
 
-            Console.Error.WriteLine($"[ExcelReader] Opening workbook: {filePath}");
-            wb = app.Workbooks.Open(
-                filePath,       // Filename
-                0,              // UpdateLinks (don't update)
-                true,           // ReadOnly
-                Type.Missing,   // Format
-                Type.Missing,   // Password
-                Type.Missing,   // WriteResPassword
-                Type.Missing,   // IgnoreReadOnlyRecommended
-                Type.Missing,   // Origin
-                Type.Missing,   // Delimiter
-                Type.Missing,   // Editable
-                Type.Missing,   // Notify
-                Type.Missing,   // Converter
-                false           // AddToMru
-            );
+            app = WaitForExcelApplication(watchdog.TimeoutMs);
+            Console.Error.WriteLine("[ExcelReader] Attached to running Excel instance.");
+            app.DisplayAlerts = false;
+            app.Visible = true;
+            app.ScreenUpdating = true;
+
+            wb = WaitForWorkbook(app, filePath, watchdog.TimeoutMs);
 
             try { app.Visible = true; } catch { }
             try { app.UserControl = true; } catch { }
             try { app.Interactive = true; } catch { }
+            try { wb.ChangeFileAccess(XlFileAccess.xlReadOnly); } catch { }
             try { wb.Activate(); } catch { }
             try { wb.Windows[1].Visible = true; } catch { }
             try { wb.Windows[1].Activate(); } catch { }
@@ -72,10 +67,74 @@ public static class ExcelReader
         finally
         {
             try { wb?.Close(false); } catch { }
-            try { app?.Quit(); } catch { }
             try { app?.Dispose(); } catch { }
             watchdog.KillIfRunning();
         }
+    }
+
+    private static Application WaitForExcelApplication(int timeoutMs)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            try
+            {
+                var app = (Application)Marshal.GetActiveObject("Excel.Application");
+                return app;
+            }
+            catch
+            {
+            }
+
+            Thread.Sleep(DrmPollIntervalMs);
+        }
+
+        throw new TimeoutException($"Excel instance was not available after {timeoutMs / 1000}s.");
+    }
+
+    private static Workbook WaitForWorkbook(Application app, string filePath, int timeoutMs)
+    {
+        var targetPath = Path.GetFullPath(filePath);
+        var sw = Stopwatch.StartNew();
+
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            try
+            {
+                foreach (Workbook workbook in app.Workbooks)
+                {
+                    try
+                    {
+                        if (PathsMatch(workbook.FullName, targetPath))
+                        {
+                            Console.Error.WriteLine($"[ExcelReader] Workbook attached after {sw.ElapsedMilliseconds}ms.");
+                            return workbook;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            Thread.Sleep(DrmPollIntervalMs);
+        }
+
+        throw new TimeoutException($"Workbook did not appear in Excel after {timeoutMs / 1000}s.");
+    }
+
+    private static bool PathsMatch(string? left, string? right)
+    {
+        if (string.IsNullOrWhiteSpace(left) || string.IsNullOrWhiteSpace(right))
+            return false;
+
+        return string.Equals(
+            Path.GetFullPath(left),
+            Path.GetFullPath(right),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private static void WaitForDrmDecryption(Workbook wb, int timeoutMs)
