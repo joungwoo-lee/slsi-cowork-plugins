@@ -9,6 +9,8 @@ description: "Windows 네이티브 환경에서 MS Office 문서(.docx, .xlsx, .
 
 ## 실행 명령
 
+필요하면 먼저 이 폴더에서 `setup.ps1`를 실행해 릴리즈된 `DocReaderCli.exe`를 이 파일 옆에 설치한다.
+
 `DocReaderCli.exe`는 이 스킬 파일 바로 옆에 있다. 상대경로로 실행:
 
 ```bash
