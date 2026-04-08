@@ -46,6 +46,16 @@ jobs:
           name: DocReaderCli-win-x64
           path: win-office-read/DocReaderCli/publish/DocReaderCli.exe
 
+      - name: Create release zip
+        run: Compress-Archive -Path .\publish\DocReaderCli.exe -DestinationPath .\publish\DocReaderCli-win-x64.zip -Force
+        working-directory: win-office-read/DocReaderCli
+
+      - name: Upload release zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DocReaderCli-win-x64-zip
+          path: win-office-read/DocReaderCli/publish/DocReaderCli-win-x64.zip
+
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -57,6 +67,12 @@ jobs:
           name: DocReaderCli-win-x64
           path: ./artifact
 
+      - name: Download zip artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: DocReaderCli-win-x64-zip
+          path: ./artifact
+
       - name: Update latest release
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         uses: softprops/action-gh-release@v2
@@ -65,7 +81,9 @@ jobs:
           name: DocReaderCli (latest)
           prerelease: true
           make_latest: false
-          files: ./artifact/DocReaderCli.exe
+          files: |
+            ./artifact/DocReaderCli.exe
+            ./artifact/DocReaderCli-win-x64.zip
           body: |
             자동 빌드된 최신 DocReaderCli 바이너리입니다.
             코드가 변경될 때마다 이 릴리즈의 바이너리가 갱신됩니다.
@@ -76,5 +94,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: ./artifact/DocReaderCli.exe
+          files: |
+            ./artifact/DocReaderCli.exe
+            ./artifact/DocReaderCli-win-x64.zip
           generate_release_notes: true
