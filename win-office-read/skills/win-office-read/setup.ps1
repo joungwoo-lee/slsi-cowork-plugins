@@ -25,7 +25,7 @@ Write-Host "=== DocReaderCli Setup ===" -ForegroundColor Cyan
 
 if ($Version -eq "latest") {
     Write-Host "[1/3] Fetching latest release..." -ForegroundColor Yellow
-    $releaseUrl = "https://api.github.com/repos/$RepoOwner/$RepoName/releases/latest"
+    $releaseUrl = "https://api.github.com/repos/$RepoOwner/$RepoName/releases/tags/latest"
     try {
         $release = Invoke-RestMethod -Uri $releaseUrl -Headers @{ "User-Agent" = "DocReaderCli-Setup" }
         $asset = $release.assets | Where-Object { $_.name -eq $ZipName } | Select-Object -First 1
