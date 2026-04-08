@@ -79,7 +79,7 @@ public static class ExcelReader
         {
             try
             {
-                var app = (Application)Marshal.GetActiveObject("Excel.Application");
+                var app = (Application)GetActiveComObject("Excel.Application");
                 return app;
             }
             catch
@@ -136,6 +136,18 @@ public static class ExcelReader
             Path.GetFullPath(right),
             StringComparison.OrdinalIgnoreCase);
     }
+
+    private static object GetActiveComObject(string progId)
+    {
+        var clsid = Type.GetTypeFromProgID(progId)?.GUID
+            ?? throw new COMException($"Could not resolve COM ProgID '{progId}'.");
+
+        GetActiveObject(ref clsid, IntPtr.Zero, out var obj);
+        return obj;
+    }
+
+    [DllImport("oleaut32.dll")]
+    private static extern int GetActiveObject(ref Guid rclsid, IntPtr reserved, [MarshalAs(UnmanagedType.IUnknown)] out object obj);
 
     private static void WaitForDrmDecryption(Workbook wb, int timeoutMs)
     {
