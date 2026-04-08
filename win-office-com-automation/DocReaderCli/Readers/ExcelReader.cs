@@ -17,14 +17,14 @@ public static class ExcelReader
 
         try
         {
+            Console.Error.WriteLine("[ExcelReader] Creating Excel COM instance...");
             app = new Application { Visible = false };
+            Console.Error.WriteLine("[ExcelReader] Excel COM instance created OK.");
             app.DisplayAlerts = false;
             app.ScreenUpdating = false;
             watchdog.DetectNewProcess();
 
-            // Workbooks.Open positional: Filename, UpdateLinks, ReadOnly, Format,
-            // Password, WriteResPassword, IgnoreReadOnlyRecommended, Origin,
-            // Delimiter, Editable, Notify, Converter, AddToMru
+            Console.Error.WriteLine($"[ExcelReader] Opening workbook: {filePath}");
             wb = app.Workbooks.Open(
                 filePath,       // Filename
                 0,              // UpdateLinks (don't update)
@@ -41,7 +41,9 @@ public static class ExcelReader
                 false           // AddToMru
             );
 
+            Console.Error.WriteLine("[ExcelReader] Workbook opened. Checking DRM...");
             WaitForDrmDecryption(wb, watchdog.TimeoutMs);
+            Console.Error.WriteLine("[ExcelReader] DRM check passed. Reading sheets...");
 
             var sb = new StringBuilder();
 
@@ -71,16 +73,24 @@ public static class ExcelReader
     private static void WaitForDrmDecryption(Workbook wb, int timeoutMs)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
+        int attempt = 0;
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
+            attempt++;
             try
             {
                 var sheet = (Worksheet)wb.Worksheets[1];
                 var used = sheet.UsedRange;
                 if (used != null && used.Rows.Count > 0)
+                {
+                    Console.Error.WriteLine($"[ExcelReader] DRM check OK on attempt {attempt} ({sw.ElapsedMilliseconds}ms)");
                     return;
+                }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[ExcelReader] DRM poll attempt {attempt}: {ex.GetType().Name}: {ex.Message}");
+            }
 
             Thread.Sleep(DrmPollIntervalMs);
         }

@@ -54,6 +54,7 @@ class Program
         catch (NotSupportedException ex)
         {
             Console.Error.WriteLine($"Error: {ex.Message}");
+            Console.Error.WriteLine(ex.StackTrace);
             return 4;
         }
         catch (Exception ex)

@@ -17,9 +17,12 @@ public static class WordReader
 
         try
         {
+            Console.Error.WriteLine("[WordReader] Creating Word COM instance...");
             app = new Application { Visible = false };
+            Console.Error.WriteLine("[WordReader] Word COM instance created OK.");
             app.DisplayAlerts = WdAlertLevel.wdAlertsNone;
             watchdog.DetectNewProcess();
+            Console.Error.WriteLine($"[WordReader] Opening document: {filePath}");
 
             // Documents.Open positional: FileName, ConfirmConversions, ReadOnly, AddToRecentFiles,
             // PasswordDocument, PasswordTemplate, Revert, WritePasswordDocument,
@@ -39,7 +42,9 @@ public static class WordReader
                 false           // Visible
             );
 
+            Console.Error.WriteLine("[WordReader] Document opened. Checking DRM...");
             WaitForDrmDecryption(doc, watchdog.TimeoutMs);
+            Console.Error.WriteLine("[WordReader] DRM check passed. Extracting content...");
 
             var sb = new StringBuilder();
             ExtractContent(doc, sb);
@@ -65,7 +70,10 @@ public static class WordReader
                 if (range != null && range.Text != null && range.Text.Trim().Length > 0)
                     return;
             }
-            catch { }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[WordReader] DRM poll: {ex.GetType().Name}: {ex.Message}");
+            }
 
             Thread.Sleep(DrmPollIntervalMs);
         }

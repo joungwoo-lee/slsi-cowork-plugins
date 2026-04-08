@@ -17,10 +17,11 @@ public static class PowerPointReader
 
         try
         {
+            Console.Error.WriteLine("[PPTReader] Creating PowerPoint COM instance...");
             app = new Application();
-            // PowerPoint doesn't support Visible=false at app level in all versions,
-            // so we open the file with window hidden.
+            Console.Error.WriteLine("[PPTReader] PowerPoint COM instance created OK.");
             watchdog.DetectNewProcess();
+            Console.Error.WriteLine($"[PPTReader] Opening presentation: {filePath}");
 
             // Presentations.Open positional: FileName, ReadOnly, Untitled, WithWindow
             pres = app.Presentations.Open(
@@ -30,7 +31,9 @@ public static class PowerPointReader
                 NetOffice.OfficeApi.Enums.MsoTriState.msoFalse   // WithWindow
             );
 
+            Console.Error.WriteLine("[PPTReader] Presentation opened. Checking DRM...");
             WaitForDrmDecryption(pres, watchdog.TimeoutMs);
+            Console.Error.WriteLine("[PPTReader] DRM check passed. Reading slides...");
 
             var sb = new StringBuilder();
 
