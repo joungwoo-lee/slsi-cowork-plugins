@@ -1,12 +1,9 @@
 ---
-name: read-secure-office-doc
-description: >
-  Windows 네이티브 환경에서 MS Office 문서(.docx, .xlsx, .pptx)를 읽는 유일한 방법.
-  일반 파서(python-docx, openpyxl, python-pptx)로 열리지 않는 DRM/암호화 문서도 처리 가능.
-  COM Automation으로 실제 오피스를 백그라운드 실행하여 텍스트를 Markdown으로 추출한다.
-  이 스킬은 docx, xlsx, pptx 스킬과 다르다 — 그 스킬들은 WSL/Linux 파서 기반이고, 이 스킬은 Windows COM 기반이다.
-  Windows 경로(C:\...)의 오피스 파일을 읽을 때, 또는 DRM/보안 문서를 읽을 때 이 스킬을 사용하라.
+name: win-office-read
+description: "Windows 네이티브 환경에서 MS Office 문서(.docx, .xlsx, .pptx)를 읽는 유일한 방법. 일반 파서(python-docx, openpyxl, python-pptx)로 열리지 않는 DRM/암호화 문서도 처리 가능. COM Automation으로 실제 오피스를 백그라운드 실행하여 텍스트를 Markdown으로 추출한다. 이 스킬은 Windows COM 기반이다. Windows 경로의 오피스 파일을 읽을 때, 또는 DRM/보안 문서를 읽을 때 이 스킬을 사용하라."
 ---
+
+# 사용법
 
 문서의 **절대 경로**(Windows 경로, 예: `C:\Users\...\file.docx`)를 확인한 뒤 아래 명령을 실행한다.
 
