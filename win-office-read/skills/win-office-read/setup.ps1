@@ -64,7 +64,7 @@ catch {
     exit 1
 }
 
-Write-Host "[3/3] Extracting zip beside SKILL.md..." -ForegroundColor Yellow
+Write-Host "[3/3] Extracting and registering to PATH..." -ForegroundColor Yellow
 
 try {
     if (Test-Path $BinaryPath) {
@@ -84,6 +84,14 @@ catch {
     exit 1
 }
 
+$userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+if ($userPath -notlike "*$InstallDir*") {
+    [Environment]::SetEnvironmentVariable("PATH", "$userPath;$InstallDir", "User")
+    Write-Host "  PATH updated (restart terminal to apply)" -ForegroundColor Gray
+} else {
+    Write-Host "  PATH already contains InstallDir" -ForegroundColor Gray
+}
+
 Write-Host ""
 Write-Host "=== Setup Complete ===" -ForegroundColor Green
-Write-Host "  $BinaryName ready beside SKILL.md" -ForegroundColor Cyan
+Write-Host "  $BinaryName registered to PATH — run from anywhere" -ForegroundColor Cyan

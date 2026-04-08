@@ -9,15 +9,13 @@ description: "Windows 네이티브 환경에서 MS Office 문서(.docx, .xlsx, .
 
 ## 실행 명령
 
-필요하면 먼저 이 폴더에서 `setup.ps1`를 실행해 릴리즈된 `DocReaderCli.exe`를 이 파일 옆에 설치한다.
+최초 1회 `setup.ps1`을 실행하면 `DocReaderCli.exe`가 설치되고 사용자 PATH에 등록된다.
 
-`DocReaderCli.exe`는 이 스킬 파일 바로 옆에 있다. 상대경로로 실행:
+이후 어느 디렉토리에서나 실행:
 
 ```bash
-./DocReaderCli.exe --file "<문서_절대경로>"
+DocReaderCli.exe --file "<문서_절대경로>"
 ```
-
-> 작업 디렉토리를 이 스킬 파일이 있는 `skills/` 폴더로 이동한 뒤 실행한다.
 
 - 타임아웃: **30초**
 - **stdout** → 추출된 Markdown 텍스트. 사용자에게 컨텍스트로 제공.
