@@ -1,6 +1,0 @@
-# Local virtual environment created by setup.ps1
-skills/win-office-read-py/.venv/
-
-# Python cache
-**/__pycache__/
-**/*.pyc
