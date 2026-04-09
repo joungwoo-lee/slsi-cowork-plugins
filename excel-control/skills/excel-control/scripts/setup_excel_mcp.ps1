@@ -15,13 +15,24 @@
 
 $ErrorActionPreference = "Stop"
 $script:CurrentStage = "초기화"
+$script:CurrentAction = "시작 전"
 
 trap {
+    $invocation = $_.InvocationInfo
     Write-Host "" 
     Write-Host "[FAIL] 단계: $script:CurrentStage" -ForegroundColor Red
+    Write-Host "[FAIL] 작업: $script:CurrentAction" -ForegroundColor Red
     Write-Host "[FAIL] 오류: $($_.Exception.Message)" -ForegroundColor Red
-    if ($_.InvocationInfo -and $_.InvocationInfo.PositionMessage) {
-        Write-Host $_.InvocationInfo.PositionMessage -ForegroundColor DarkRed
+    if ($invocation) {
+        if ($invocation.ScriptLineNumber) {
+            Write-Host "[FAIL] 줄: $($invocation.ScriptLineNumber)" -ForegroundColor Red
+        }
+        if ($invocation.Line) {
+            Write-Host "[FAIL] 코드: $($invocation.Line.Trim())" -ForegroundColor DarkRed
+        }
+        if ($invocation.PositionMessage) {
+            Write-Host $invocation.PositionMessage -ForegroundColor DarkRed
+        }
     }
     exit 1
 }
@@ -39,13 +50,19 @@ function Ok($msg)   { Write-Host "[OK] $msg" -ForegroundColor Green }
 function Warn($msg) { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
 function Fail($msg) {
     Write-Host "[FAIL] 단계: $script:CurrentStage" -ForegroundColor Red
+    Write-Host "[FAIL] 작업: $script:CurrentAction" -ForegroundColor Red
     Write-Host "[FAIL] $msg" -ForegroundColor Red
     exit 1
 }
 function Start-Step($msg) {
     $script:CurrentStage = $msg
+    $script:CurrentAction = "대기"
     Write-Host ""
     Write-Host "=== $msg ===" -ForegroundColor Cyan
+}
+function Start-Action($msg) {
+    $script:CurrentAction = $msg
+    Write-Host " -> $msg"
 }
 function Remove-JsonComments($text) {
     if ([string]::IsNullOrEmpty($text)) {
@@ -117,6 +134,7 @@ function Remove-JsonComments($text) {
 
 # ── 1. Windows 확인 ─────────────────────────────────────
 Start-Step "1. Windows 환경 확인"
+Start-Action "운영체제 확인"
 
 if ($env:OS -ne "Windows_NT") {
     Fail "Windows 환경에서만 실행 가능합니다."
@@ -126,6 +144,7 @@ if ($env:OS -ne "Windows_NT") {
 Start-Step "2. 최신 릴리즈 확인"
 
 try {
+    Start-Action "GitHub API 호출"
     # TLS 1.2 강제 (Windows 10 이전 호환)
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $release = Invoke-RestMethod -Uri $GH_API -Headers @{ "User-Agent" = "excel-mcp-setup" }
@@ -159,9 +178,11 @@ Start-Step "3. 다운로드 및 설치"
 
 # 설치 디렉토리 준비
 if (Test-Path $INSTALL_DIR) {
+    Start-Action "기존 설치 디렉토리 삭제"
     Log "   기존 설치 디렉토리 정리: $INSTALL_DIR"
     Remove-Item $INSTALL_DIR -Recurse -Force
 }
+Start-Action "설치 및 임시 디렉토리 생성"
 New-Item -ItemType Directory -Path $INSTALL_DIR -Force | Out-Null
 
 $tempDir = Join-Path $env:TEMP "excel-mcp-setup-$(Get-Random)"
@@ -170,14 +191,17 @@ New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
 try {
     # MCP Server 다운로드
     $mcpZip = Join-Path $tempDir "mcp-server.zip"
+    Start-Action "MCP Server ZIP 다운로드"
     Log "   MCP Server 다운로드 중... ($mcpUrl)"
     Invoke-WebRequest -Uri $mcpUrl -OutFile $mcpZip -UseBasicParsing
 
     # 추출 (임시 폴더에 먼저 풀고 구조 확인)
     $extractDir = Join-Path $tempDir "extracted-mcp"
+    Start-Action "MCP Server ZIP 압축 해제"
     Expand-Archive -Path $mcpZip -DestinationPath $extractDir -Force
 
     # mcp-excel.exe 실제 위치 찾기 (zip 내부 구조가 다를 수 있음)
+    Start-Action "mcp-excel.exe 위치 탐색"
     $foundExe = Get-ChildItem -Path $extractDir -Filter $EXE_NAME -Recurse | Select-Object -First 1
     if (-not $foundExe) {
         Fail "zip 내에서 $EXE_NAME 을 찾을 수 없습니다.`n   추출 경로: $extractDir`n   내용: $(Get-ChildItem $extractDir -Recurse | Select-Object -ExpandProperty FullName)"
@@ -185,18 +209,23 @@ try {
 
     # exe가 있는 디렉토리의 모든 파일을 설치 디렉토리로 복사
     $exeSourceDir = $foundExe.DirectoryName
+    Start-Action "MCP Server 파일 설치 폴더로 복사"
     Copy-Item -Path "$exeSourceDir\*" -Destination $INSTALL_DIR -Recurse -Force
     Ok "MCP Server 설치 완료"
 
     # CLI 다운로드 (선택)
     if ($cliUrl) {
         $cliZip = Join-Path $tempDir "cli.zip"
+        Start-Action "CLI ZIP 다운로드"
         Log "   CLI 다운로드 중..."
         Invoke-WebRequest -Uri $cliUrl -OutFile $cliZip -UseBasicParsing
         $extractCliDir = Join-Path $tempDir "extracted-cli"
+        Start-Action "CLI ZIP 압축 해제"
         Expand-Archive -Path $cliZip -DestinationPath $extractCliDir -Force
+        Start-Action "excelcli.exe 위치 탐색"
         $foundCli = Get-ChildItem -Path $extractCliDir -Filter $CLI_NAME -Recurse | Select-Object -First 1
         if ($foundCli) {
+            Start-Action "CLI 파일 설치 폴더로 복사"
             Copy-Item -Path "$($foundCli.DirectoryName)\*" -Destination $INSTALL_DIR -Recurse -Force
             Ok "CLI 설치 완료"
         } else {
@@ -205,6 +234,7 @@ try {
     }
 } finally {
     # 임시 파일 정리
+    Start-Action "임시 폴더 정리"
     Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
 }
 
@@ -222,10 +252,12 @@ Start-Step "4. PATH 환경변수 등록"
 
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($userPath -notlike "*$INSTALL_DIR*") {
+    Start-Action "사용자 PATH에 설치 폴더 추가"
     [Environment]::SetEnvironmentVariable("Path", "$userPath;$INSTALL_DIR", "User")
     $env:Path = "$env:Path;$INSTALL_DIR"
     Ok "PATH에 $INSTALL_DIR 추가됨 (현재 세션 + 영구)"
 } else {
+    Start-Action "기존 PATH 등록 상태 확인"
     Log "   이미 PATH에 등록되어 있습니다."
 }
 
@@ -233,6 +265,7 @@ if ($userPath -notlike "*$INSTALL_DIR*") {
 Start-Step "5. 플러그인 .mcp.json 설정"
 
 # 스크립트 위치 기준으로 플러그인 루트 계산
+Start-Action "플러그인 루트 계산"
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $pluginRoot = (Resolve-Path (Join-Path $scriptDir "..\..\..")).Path
 $mcpJsonPath = Join-Path $pluginRoot ".mcp.json"
@@ -250,6 +283,7 @@ $mcpJsonContent = @"
 }
 "@
 
+Start-Action ".mcp.json 파일 쓰기"
 Set-Content -Path $mcpJsonPath -Value $mcpJsonContent -Encoding UTF8
 Ok ".mcp.json 설정 완료: $mcpJsonPath"
 
@@ -262,6 +296,7 @@ $registeredTargets = @()
 $claudeSettings = Join-Path $env:USERPROFILE ".claude\settings.json"
 if (Test-Path $claudeSettings) {
     try {
+        Start-Action "Claude Code 설정 업데이트"
         $settings = Get-Content $claudeSettings -Raw -Encoding UTF8 | ConvertFrom-Json
         if (-not $settings.PSObject.Properties["mcpServers"]) {
             $settings | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([PSCustomObject]@{})
@@ -282,6 +317,7 @@ if (Test-Path $claudeSettings) {
 $claudeDesktop = Join-Path $env:APPDATA "Claude\claude_desktop_config.json"
 if (Test-Path $claudeDesktop) {
     try {
+        Start-Action "Claude Desktop 설정 업데이트"
         $cdConfig = Get-Content $claudeDesktop -Raw -Encoding UTF8 | ConvertFrom-Json
         if (-not $cdConfig.PSObject.Properties["mcpServers"]) {
             $cdConfig | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([PSCustomObject]@{})
@@ -311,6 +347,7 @@ if (Test-Path $openCodeJsonPath) {
 }
 
 try {
+    Start-Action "OpenCode 설정 업데이트"
     if (-not (Test-Path $openCodeConfigDir)) {
         New-Item -ItemType Directory -Path $openCodeConfigDir -Force | Out-Null
     }
@@ -341,6 +378,7 @@ try {
 # VS Code MCP (프로젝트 루트)
 $vscodeMcp = Join-Path $pluginRoot ".vscode\mcp.json"
 if (-not (Test-Path (Join-Path $pluginRoot ".vscode"))) {
+    Start-Action "VS Code 설정 디렉토리 생성"
     New-Item -ItemType Directory -Path (Join-Path $pluginRoot ".vscode") -Force | Out-Null
 }
 $vscodeMcpContent = @"
@@ -352,6 +390,7 @@ $vscodeMcpContent = @"
   }
 }
 "@
+Start-Action "VS Code MCP 설정 파일 쓰기"
 Set-Content -Path $vscodeMcp -Value $vscodeMcpContent -Encoding UTF8
 $registeredTargets += "VS Code"
 
@@ -369,6 +408,7 @@ $initMsg = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVer
 
 $testPassed = $false
 try {
+    Start-Action "mcp-excel 프로세스 시작"
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName = $mcpExePath
     $psi.UseShellExecute = $false
@@ -381,10 +421,12 @@ try {
 
     # Content-Length 헤더 + 본문 전송 (일부 MCP 서버는 LSP 스타일 프레이밍 사용)
     # 먼저 raw JSON 시도
+    Start-Action "initialize 요청 전송"
     $proc.StandardInput.WriteLine($initMsg)
     $proc.StandardInput.Flush()
 
     # 10초 대기하며 응답 읽기
+    Start-Action "서버 응답 대기"
     $sw = [System.Diagnostics.Stopwatch]::StartNew()
     $response = ""
     while ($sw.ElapsedMilliseconds -lt 10000) {
