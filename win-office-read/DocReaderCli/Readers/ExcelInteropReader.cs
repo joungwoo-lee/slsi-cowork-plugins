@@ -1,15 +1,19 @@
 using System.Runtime.InteropServices;
 using System.Text;
-using Excel = Microsoft.Office.Interop.Excel;
 
 namespace DocReaderCli.Readers;
 
+/// <summary>
+/// Reads Excel files via COM Automation using ProgID-based late binding (dynamic).
+/// This avoids a hard dependency on the Microsoft.Office.Interop.Excel assembly at
+/// runtime, which fails under PublishSingleFile / SelfContained deployments.
+/// </summary>
 public static class ExcelInteropReader
 {
     public static string Read(string filePath)
     {
-        Excel.Application? app = null;
-        Excel.Workbook? workbook = null;
+        dynamic? app = null;
+        dynamic? workbook = null;
 
         using var messageFilter = OleMessageFilter.Register();
 
@@ -17,14 +21,19 @@ public static class ExcelInteropReader
         {
             Console.Error.WriteLine($"[ExcelInteropReader] Opening workbook with Interop: {filePath}");
 
-            app = new Excel.Application
-            {
-                Visible = false,
-                DisplayAlerts = false,
-                ScreenUpdating = false,
-                EnableEvents = false,
-                AskToUpdateLinks = false
-            };
+            var excelType = Type.GetTypeFromProgID("Excel.Application")
+                ?? throw new InvalidOperationException(
+                    "Excel is not installed or 'Excel.Application' COM class is not registered.");
+
+            app = Activator.CreateInstance(excelType)
+                ?? throw new InvalidOperationException(
+                    "Failed to create Excel.Application COM instance.");
+
+            app.Visible = false;
+            app.DisplayAlerts = false;
+            app.ScreenUpdating = false;
+            app.EnableEvents = false;
+            app.AskToUpdateLinks = false;
 
             workbook = app.Workbooks.Open(
                 filePath,
@@ -32,18 +41,18 @@ public static class ExcelInteropReader
                 ReadOnly: true,
                 IgnoreReadOnlyRecommended: true,
                 AddToMru: false,
-                CorruptLoad: Excel.XlCorruptLoad.xlNormalLoad);
+                CorruptLoad: 0 /* xlNormalLoad */);
 
             var sb = new StringBuilder();
-            int sheetCount = workbook.Worksheets.Count;
+            int sheetCount = (int)workbook.Worksheets.Count;
 
             for (int i = 1; i <= sheetCount; i++)
             {
-                Excel.Worksheet? sheet = null;
-                Excel.Range? usedRange = null;
+                dynamic? sheet = null;
+                dynamic? usedRange = null;
                 try
                 {
-                    sheet = workbook.Worksheets[i] as Excel.Worksheet;
+                    sheet = workbook.Worksheets[i];
                     if (sheet == null)
                         continue;
 
@@ -51,8 +60,8 @@ public static class ExcelInteropReader
                     sb.AppendLine();
 
                     usedRange = sheet.UsedRange;
-                    int rowCount = usedRange?.Rows.Count ?? 0;
-                    int colCount = usedRange?.Columns.Count ?? 0;
+                    int rowCount = usedRange != null ? (int)usedRange.Rows.Count : 0;
+                    int colCount = usedRange != null ? (int)usedRange.Columns.Count : 0;
                     if (rowCount == 0 || colCount == 0)
                     {
                         sb.AppendLine();
@@ -64,7 +73,7 @@ public static class ExcelInteropReader
 
                     for (int r = 1; r <= rowCount; r++)
                     {
-                        sb.Append("|");
+                        sb.Append('|');
                         for (int c = 1; c <= colCount; c++)
                         {
                             string cellText = ReadCellText(usedRange, rawValues, r, c);
@@ -75,7 +84,7 @@ public static class ExcelInteropReader
 
                         if (r == 1)
                         {
-                            sb.Append("|");
+                            sb.Append('|');
                             for (int c = 0; c < colCount; c++)
                                 sb.Append(" --- |");
                             sb.AppendLine();
@@ -86,8 +95,8 @@ public static class ExcelInteropReader
                 }
                 finally
                 {
-                    ReleaseComObject(usedRange);
-                    ReleaseComObject(sheet);
+                    ReleaseComObject(ref usedRange);
+                    ReleaseComObject(ref sheet);
                 }
             }
 
@@ -98,14 +107,12 @@ public static class ExcelInteropReader
             try { workbook?.Close(false); } catch { }
             try { app?.Quit(); } catch { }
 
-            ReleaseComObject(workbook);
-            workbook = null;
-            ReleaseComObject(app);
-            app = null;
+            ReleaseComObject(ref workbook);
+            ReleaseComObject(ref app);
         }
     }
 
-    private static string ReadCellText(Excel.Range? usedRange, object? rawValues, int row, int col)
+    private static string ReadCellText(dynamic? usedRange, object? rawValues, int row, int col)
     {
         try
         {
@@ -119,11 +126,16 @@ public static class ExcelInteropReader
         {
         }
 
-        Excel.Range? cell = null;
+        dynamic? cell = null;
         try
         {
-            cell = usedRange?.Cells[row, col] as Excel.Range;
-            return cell?.Text?.ToString() ?? cell?.Value2?.ToString() ?? "";
+            cell = usedRange?.Cells[row, col];
+            if (cell == null) return "";
+            string? text = null;
+            try { text = cell.Text?.ToString(); } catch { }
+            if (!string.IsNullOrEmpty(text)) return text!;
+            try { text = cell.Value2?.ToString(); } catch { }
+            return text ?? "";
         }
         catch
         {
@@ -131,11 +143,11 @@ public static class ExcelInteropReader
         }
         finally
         {
-            ReleaseComObject(cell);
+            ReleaseComObject(ref cell);
         }
     }
 
-    private static void ReleaseComObject(object? obj)
+    private static void ReleaseComObject<T>(ref T? obj) where T : class
     {
         if (obj == null) return;
         try
@@ -146,5 +158,6 @@ public static class ExcelInteropReader
         catch
         {
         }
+        obj = null;
     }
 }
