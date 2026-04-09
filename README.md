@@ -33,6 +33,7 @@ personal-rag/
 |--------|---------|
 | `sample-cowork-plugin` | Minimal example plugin for SLSI Cowork environments |
 | `personal-rag` | Agent-usable personal local RAG workflow with setup, ingestion, and retrieval skill structure |
+| `win-cert-setup` | Windows SSL certificate installation skill for enterprise CA trust issues in AI and CLI tools |
 
 ## Notes
 

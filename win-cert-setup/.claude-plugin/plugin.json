@@ -1,0 +1,6 @@
+{
+  "name": "win-cert-setup",
+  "display_name": "Win Cert Setup",
+  "description": "Windows enterprise SSL certificate setup skill for fixing internal CA trust failures in AI and CLI tools.",
+  "version": "0.1.0"
+}
