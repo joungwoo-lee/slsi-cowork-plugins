@@ -2,17 +2,29 @@
 .SYNOPSIS
     mcp-server-excel 원클릭 설치 스크립트 (Windows PowerShell 5.1+)
 .DESCRIPTION
-    1. GitHub API에서 최신 릴리즈를 자동 감지
-    2. MCP Server zip + CLI zip 다운로드 및 추출
-    3. mcp-excel.exe 실제 위치를 찾아서 PATH 등록
-    4. 플러그인 .mcp.json에 실행 경로 기입
-    5. Claude Code / Claude Desktop / OpenCode / VS Code 설정 파일에 MCP 서버 등록
-    6. stdio 핸드셰이크로 실제 동작 검증
+    1. Windows 환경 확인
+    2. GitHub API에서 최신 릴리즈를 자동 감지
+    3. MCP Server zip + CLI zip 다운로드 및 추출
+    4. mcp-excel.exe 실제 위치를 찾아서 PATH 등록
+    5. 플러그인 .mcp.json에 실행 경로 기입
+    6. Claude Code / Claude Desktop / OpenCode / VS Code 설정 파일에 MCP 서버 등록
+    7. stdio 핸드셰이크로 실제 동작 검증
 .NOTES
     실행: powershell -ExecutionPolicy Bypass -File setup_excel_mcp.ps1
 #>
 
 $ErrorActionPreference = "Stop"
+$script:CurrentStage = "초기화"
+
+trap {
+    Write-Host "" 
+    Write-Host "[FAIL] 단계: $script:CurrentStage" -ForegroundColor Red
+    Write-Host "[FAIL] 오류: $($_.Exception.Message)" -ForegroundColor Red
+    if ($_.InvocationInfo -and $_.InvocationInfo.PositionMessage) {
+        Write-Host $_.InvocationInfo.PositionMessage -ForegroundColor DarkRed
+    }
+    exit 1
+}
 
 # ── 설정 ────────────────────────────────────────────────
 $GH_REPO       = "sbroenne/mcp-server-excel"
@@ -25,7 +37,16 @@ $CLI_NAME      = "excelcli.exe"
 function Log($msg)  { Write-Host ">>> $msg" }
 function Ok($msg)   { Write-Host "[OK] $msg" -ForegroundColor Green }
 function Warn($msg) { Write-Host "[WARN] $msg" -ForegroundColor Yellow }
-function Fail($msg) { Write-Host "[FAIL] $msg" -ForegroundColor Red; exit 1 }
+function Fail($msg) {
+    Write-Host "[FAIL] 단계: $script:CurrentStage" -ForegroundColor Red
+    Write-Host "[FAIL] $msg" -ForegroundColor Red
+    exit 1
+}
+function Start-Step($msg) {
+    $script:CurrentStage = $msg
+    Write-Host ""
+    Write-Host "=== $msg ===" -ForegroundColor Cyan
+}
 function Remove-JsonComments($text) {
     if ([string]::IsNullOrEmpty($text)) {
         return $text
@@ -94,27 +115,15 @@ function Remove-JsonComments($text) {
     return $sb.ToString()
 }
 
-# ── 1. Windows + Excel 확인 ─────────────────────────────
-Log "1. 환경 확인..."
+# ── 1. Windows 확인 ─────────────────────────────────────
+Start-Step "1. Windows 환경 확인"
 
 if ($env:OS -ne "Windows_NT") {
     Fail "Windows 환경에서만 실행 가능합니다."
 }
 
-# Excel COM 객체 생성으로 확실하게 확인
-try {
-    $excel = New-Object -ComObject Excel.Application
-    $excelVer = $excel.Version
-    $excel.Quit()
-    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
-    Log "   Excel $excelVer 확인됨"
-} catch {
-    Warn "Excel COM 객체를 생성할 수 없습니다. Excel 2016+ 설치를 확인해 주세요."
-    Warn "   설치는 계속 진행합니다. 실행 시점에 Excel이 필요합니다."
-}
-
 # ── 2. GitHub API로 최신 릴리즈 감지 ────────────────────
-Log "2. 최신 릴리즈 확인 중..."
+Start-Step "2. 최신 릴리즈 확인"
 
 try {
     # TLS 1.2 강제 (Windows 10 이전 호환)
@@ -146,7 +155,7 @@ Log "   MCP Server: $($mcpAsset.name)"
 if ($cliUrl) { Log "   CLI:        $($cliAsset.name)" }
 
 # ── 3. 다운로드 및 추출 ─────────────────────────────────
-Log "3. 다운로드 및 설치..."
+Start-Step "3. 다운로드 및 설치"
 
 # 설치 디렉토리 준비
 if (Test-Path $INSTALL_DIR) {
@@ -209,7 +218,7 @@ if (-not (Test-Path $mcpExePath)) {
 Log "   설치 경로: $mcpExePath"
 
 # ── 4. PATH 등록 ────────────────────────────────────────
-Log "4. PATH 환경변수 등록..."
+Start-Step "4. PATH 환경변수 등록"
 
 $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($userPath -notlike "*$INSTALL_DIR*") {
@@ -221,7 +230,7 @@ if ($userPath -notlike "*$INSTALL_DIR*") {
 }
 
 # ── 5. .mcp.json 생성 ──────────────────────────────────
-Log "5. 플러그인 .mcp.json 설정..."
+Start-Step "5. 플러그인 .mcp.json 설정"
 
 # 스크립트 위치 기준으로 플러그인 루트 계산
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -245,7 +254,7 @@ Set-Content -Path $mcpJsonPath -Value $mcpJsonContent -Encoding UTF8
 Ok ".mcp.json 설정 완료: $mcpJsonPath"
 
 # ── 6. AI 에이전트 설정 파일 등록 (선택) ────────────────
-Log "6. AI 에이전트 설정 파일에 MCP 서버 등록..."
+Start-Step "6. AI 에이전트 설정 파일 등록"
 
 $registeredTargets = @()
 
@@ -353,7 +362,7 @@ if ($registeredTargets.Count -gt 0) {
 }
 
 # ── 7. stdio 핸드셰이크 테스트 ──────────────────────────
-Log "7. MCP stdio 핸드셰이크 테스트..."
+Start-Step "7. MCP stdio 핸드셰이크 테스트"
 
 # JSON-RPC initialize 요청 (MCP 프로토콜 스펙)
 $initMsg = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"setup-test","version":"1.0.0"}}}'
