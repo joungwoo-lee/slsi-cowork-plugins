@@ -18,7 +18,7 @@ $script:CurrentStage = "Init"
 $script:CurrentAction = "Before start"
 
 $GH_REPO = "sbroenne/mcp-server-excel"
-$GH_API = "https://api.github.com/repos/$GH_REPO/releases/latest"
+$GH_LATEST = "https://github.com/$GH_REPO/releases/latest"
 $INSTALL_DIR = Join-Path $env:USERPROFILE "ExcelMcp"
 $EXE_NAME = "mcp-excel.exe"
 $CLI_NAME = "excelcli.exe"
@@ -62,6 +62,26 @@ function DownloadReleaseFile($url, $destinationPath, $userAgent) {
     } finally {
         $webClient.Dispose()
     }
+}
+
+function ResolveLatestReleaseTag($url, $userAgent) {
+    $request = [System.Net.HttpWebRequest]::Create($url)
+    $request.AllowAutoRedirect = $true
+    $request.UserAgent = $userAgent
+    $request.Method = "GET"
+    $request.Timeout = 30000
+    $response = $request.GetResponse()
+    try {
+        $finalUrl = $response.ResponseUri.AbsoluteUri
+    } finally {
+        $response.Close()
+    }
+
+    if ($finalUrl -match '/tag/(v[^/]+)$') {
+        return $Matches[1]
+    }
+
+    throw "Could not resolve the latest release tag from $finalUrl"
 }
 
 function RemoveJsonComments($text) {
@@ -140,31 +160,18 @@ try {
     }
 
     StartStep "2. Resolve release"
-    StartAction "Call GitHub API"
+    StartAction "Resolve latest GitHub release"
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    $release = Invoke-RestMethod -Uri $GH_API -Headers @{ "User-Agent" = "excel-mcp-setup" }
-
-    $version = $release.tag_name
+    $version = ResolveLatestReleaseTag $GH_LATEST "excel-mcp-setup"
+    $versionNumber = $version.TrimStart('v')
     Log "Latest version: $version"
+    $mcpAssetName = "ExcelMcp-MCP-Server-$versionNumber-windows.zip"
+    $cliAssetName = "ExcelMcp-CLI-$versionNumber-windows.zip"
+    $mcpUrl = "https://github.com/$GH_REPO/releases/download/$version/$mcpAssetName"
+    $cliUrl = "https://github.com/$GH_REPO/releases/download/$version/$cliAssetName"
 
-    $mcpAsset = $release.assets | Where-Object { $_.name -like "ExcelMcp-MCP-Server-*-windows.zip" } | Select-Object -First 1
-    $cliAsset = $release.assets | Where-Object { $_.name -like "ExcelMcp-CLI-*-windows.zip" } | Select-Object -First 1
-
-    if (-not $mcpAsset) {
-        Fail "Could not find the MCP Server zip asset. See https://github.com/$GH_REPO/releases/latest"
-    }
-
-    $mcpUrl = $mcpAsset.browser_download_url
-    if ($cliAsset) {
-        $cliUrl = $cliAsset.browser_download_url
-    } else {
-        $cliUrl = $null
-    }
-
-    Log "MCP Server asset: $($mcpAsset.name)"
-    if ($cliUrl) {
-        Log "CLI asset: $($cliAsset.name)"
-    }
+    Log "MCP Server asset: $mcpAssetName"
+    Log "CLI asset: $cliAssetName"
 
     StartStep "3. Download and install"
     if (Test-Path $INSTALL_DIR) {
