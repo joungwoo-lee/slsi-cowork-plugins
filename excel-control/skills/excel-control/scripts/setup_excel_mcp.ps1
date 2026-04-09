@@ -39,7 +39,11 @@ function Remove-JsonComments($text) {
 
     for ($i = 0; $i -lt $text.Length; $i++) {
         $char = $text[$i]
-        $next = if ($i + 1 -lt $text.Length) { $text[$i + 1] } else { [char]0 }
+        if ($i + 1 -lt $text.Length) {
+            $next = $text[$i + 1]
+        } else {
+            $next = [char]0
+        }
 
         if ($inLineComment) {
             if ($char -eq "`r" -or $char -eq "`n") {
@@ -132,7 +136,11 @@ if (-not $mcpAsset) {
 }
 
 $mcpUrl = $mcpAsset.browser_download_url
-$cliUrl = if ($cliAsset) { $cliAsset.browser_download_url } else { $null }
+if ($cliAsset) {
+    $cliUrl = $cliAsset.browser_download_url
+} else {
+    $cliUrl = $null
+}
 
 Log "   MCP Server: $($mcpAsset.name)"
 if ($cliUrl) { Log "   CLI:        $($cliAsset.name)" }
@@ -285,12 +293,12 @@ if (Test-Path $claudeDesktop) {
 $openCodeConfigDir = Join-Path $env:USERPROFILE ".config\opencode"
 $openCodeJsonPath = Join-Path $openCodeConfigDir "opencode.json"
 $openCodeJsoncPath = Join-Path $openCodeConfigDir "opencode.jsonc"
-$openCodeConfigPath = if (Test-Path $openCodeJsonPath) {
-    $openCodeJsonPath
+if (Test-Path $openCodeJsonPath) {
+    $openCodeConfigPath = $openCodeJsonPath
 } elseif (Test-Path $openCodeJsoncPath) {
-    $openCodeJsoncPath
+    $openCodeConfigPath = $openCodeJsoncPath
 } else {
-    $openCodeJsonPath
+    $openCodeConfigPath = $openCodeJsonPath
 }
 
 try {
