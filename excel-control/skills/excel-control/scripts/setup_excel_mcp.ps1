@@ -44,6 +44,15 @@ function StartAction($msg) {
     $script:CurrentAction = $msg
     Write-Host " -> $msg"
 }
+function DownloadReleaseFile($url, $destinationPath, $userAgent) {
+    $webClient = New-Object System.Net.WebClient
+    $webClient.Headers.Add("User-Agent", $userAgent)
+    try {
+        $webClient.DownloadFile($url, $destinationPath)
+    } finally {
+        $webClient.Dispose()
+    }
+}
 function Remove-JsonComments($text) {
     if ([string]::IsNullOrEmpty($text)) {
         return $text
@@ -165,7 +174,9 @@ try {
         $mcpZip = Join-Path $tempDir "mcp-server.zip"
         StartAction "MCP Server ZIP 다운로드"
         Log "   MCP Server 다운로드 중... ($mcpUrl)"
-        Invoke-WebRequest -Uri $mcpUrl -OutFile $mcpZip -UseBasicParsing
+        DownloadReleaseFile $mcpUrl $mcpZip "excel-mcp-setup"
+        $mcpZipSize = (Get-Item $mcpZip).Length / 1MB
+        Log "   다운로드 완료: $mcpZip ($([math]::Round($mcpZipSize, 1)) MB)"
 
         $extractDir = Join-Path $tempDir "extracted-mcp"
         StartAction "MCP Server ZIP 압축 해제"
@@ -186,7 +197,9 @@ try {
             $cliZip = Join-Path $tempDir "cli.zip"
             StartAction "CLI ZIP 다운로드"
             Log "   CLI 다운로드 중..."
-            Invoke-WebRequest -Uri $cliUrl -OutFile $cliZip -UseBasicParsing
+            DownloadReleaseFile $cliUrl $cliZip "excel-mcp-setup"
+            $cliZipSize = (Get-Item $cliZip).Length / 1MB
+            Log "   다운로드 완료: $cliZip ($([math]::Round($cliZipSize, 1)) MB)"
 
             $extractCliDir = Join-Path $tempDir "extracted-cli"
             StartAction "CLI ZIP 압축 해제"
