@@ -1,6 +1,6 @@
 ---
-name: win-office-read
-description: "Windows 네이티브 환경에서 MS Office 문서(.docx, .xlsx, .pptx)를 읽는 유일한 방법. 일반 파서(python-docx, openpyxl, python-pptx)로 열리지 않는 DRM/암호화 문서도 처리 가능. COM Automation으로 실제 오피스를 백그라운드 실행하여 텍스트를 Markdown으로 추출한다. 이 스킬은 Windows COM 기반이다. Windows 경로의 오피스 파일을 읽을 때, 또는 DRM/보안 문서를 읽을 때 이 스킬을 사용하라."
+name: drm-docx-xlsx
+description: "Windows 네이티브 환경에서 DRM이 걸린 .docx 또는 .xlsx 문서를 읽기 위한 스킬. 일반 파서(python-docx, openpyxl)로 열리지 않는 DRM/보안 문서도 COM Automation으로 실제 Word/Excel을 백그라운드 실행하여 Markdown 텍스트로 추출한다. Windows 경로의 DRM/보안 .docx 또는 .xlsx 파일을 읽을 때 이 스킬을 사용하라."
 ---
 
 # 사용법
@@ -19,12 +19,15 @@ description: "Windows 네이티브 환경에서 MS Office 문서(.docx, .xlsx, .
 
 최초 1회 `setup.ps1`을 실행하면 `DocReaderCli.exe`가 설치되고 사용자 PATH에 등록된다.
 
+`DocReaderCli.exe`가 아직 없거나 명령을 찾지 못하면, 먼저 스킬 폴더 안의 `setup.ps1`을 실행한 뒤 다시 시도한다.
+
 이후 어느 디렉토리에서나 실행:
 
 ```bash
-DocReaderCli.exe --file "<문서_절대경로>"
+DocReaderCli.exe --file "<DRM_DOCX_또는_XLSX_절대경로>"
 ```
 
+- 지원 형식: `.docx`, `.doc`, `.xlsx`, `.xls`
 - 타임아웃: **30초**
 - **stdout** → 추출된 Markdown 텍스트. 사용자에게 컨텍스트로 제공.
 - **stderr** → 로그/에러. 실패 시 원인 분석용.
