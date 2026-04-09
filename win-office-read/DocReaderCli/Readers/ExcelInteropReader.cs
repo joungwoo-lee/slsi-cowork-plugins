@@ -11,6 +11,8 @@ public static class ExcelInteropReader
         Excel.Application? app = null;
         Excel.Workbook? workbook = null;
 
+        using var messageFilter = OleMessageFilter.Register();
+
         try
         {
             Console.Error.WriteLine($"[ExcelInteropReader] Opening workbook with Interop: {filePath}");
@@ -97,7 +99,9 @@ public static class ExcelInteropReader
             try { app?.Quit(); } catch { }
 
             ReleaseComObject(workbook);
+            workbook = null;
             ReleaseComObject(app);
+            app = null;
         }
     }
 
@@ -133,9 +137,10 @@ public static class ExcelInteropReader
 
     private static void ReleaseComObject(object? obj)
     {
+        if (obj == null) return;
         try
         {
-            if (obj != null && Marshal.IsComObject(obj))
+            if (Marshal.IsComObject(obj))
                 Marshal.ReleaseComObject(obj);
         }
         catch

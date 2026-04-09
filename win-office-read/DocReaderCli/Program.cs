@@ -8,7 +8,7 @@ class Program
     static int Main(string[] args)
     {
         string? filePath = null;
-        string excelEngine = "netoffice";
+        string excelEngine = "interop";
 
         // Parse arguments
         for (int i = 0; i < args.Length; i++)
