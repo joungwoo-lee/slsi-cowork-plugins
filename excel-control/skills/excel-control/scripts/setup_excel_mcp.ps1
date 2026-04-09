@@ -7,7 +7,7 @@
     3. Download and extract MCP Server zip and optional CLI zip
     4. Find mcp-excel.exe and add it to PATH
     5. Write plugin .mcp.json
-    6. Register the MCP server in Claude Code, Claude Desktop, OpenCode, and VS Code settings
+    6. Register the MCP server in Claude Code, Claude Desktop, and VS Code settings
     7. Run a stdio handshake test
 .NOTES
     Run: powershell -ExecutionPolicy Bypass -File setup_excel_mcp.ps1
@@ -310,42 +310,6 @@ try {
         } catch {
             Warn "Failed to update Claude Desktop config: $_"
         }
-    }
-
-    $openCodeConfigDir = Join-Path $env:USERPROFILE ".config\opencode"
-    $openCodeJsonPath = Join-Path $openCodeConfigDir "opencode.json"
-    $openCodeJsoncPath = Join-Path $openCodeConfigDir "opencode.jsonc"
-    if (Test-Path $openCodeJsonPath) {
-        $openCodeConfigPath = $openCodeJsonPath
-    } elseif (Test-Path $openCodeJsoncPath) {
-        $openCodeConfigPath = $openCodeJsoncPath
-    } else {
-        $openCodeConfigPath = $openCodeJsonPath
-    }
-
-    try {
-        StartAction "Update OpenCode settings"
-        if (-not (Test-Path $openCodeConfigDir)) {
-            New-Item -ItemType Directory -Path $openCodeConfigDir -Force | Out-Null
-        }
-        if (Test-Path $openCodeConfigPath) {
-            $openCodeConfigRaw = Get-Content $openCodeConfigPath -Raw -Encoding UTF8
-            $openCodeConfig = (RemoveJsonComments $openCodeConfigRaw) | ConvertFrom-Json
-        } else {
-            $openCodeConfig = [PSCustomObject]@{}
-        }
-        if (-not $openCodeConfig.PSObject.Properties["mcp"]) {
-            $openCodeConfig | Add-Member -NotePropertyName "mcp" -NotePropertyValue ([PSCustomObject]@{})
-        }
-        $openCodeConfig.mcp | Add-Member -NotePropertyName "excel-mcp" -NotePropertyValue ([PSCustomObject]@{
-            type = "local"
-            command = @($mcpExePath)
-            enabled = $true
-        }) -Force
-        $openCodeConfig | ConvertTo-Json -Depth 10 | Set-Content $openCodeConfigPath -Encoding UTF8
-        $registeredTargets += "OpenCode"
-    } catch {
-        Warn "Failed to update OpenCode config: $_"
     }
 
     $vscodeMcp = Join-Path $pluginRoot ".vscode\mcp.json"
