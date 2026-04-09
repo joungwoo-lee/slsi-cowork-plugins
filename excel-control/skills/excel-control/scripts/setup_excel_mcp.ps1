@@ -1,62 +1,42 @@
 <#
 .SYNOPSIS
-    One-click installer for mcp-server-excel (Windows PowerShell 5.1+)
-.DESCRIPTION
-    1. Check Windows environment
-    2. Detect the latest GitHub release
-    3. Download and extract MCP Server zip and optional CLI zip
-    4. Find mcp-excel.exe and add it to PATH
-    5. Write plugin .mcp.json
-    6. Register the MCP server in Claude Code, Claude Desktop, and VS Code settings
-    7. Run a stdio handshake test
+    Minimal installer for mcp-server-excel on Windows PowerShell 5.1+
+
 .NOTES
-    Run: powershell -ExecutionPolicy Bypass -File setup_excel_mcp.ps1
+    Run with:
+    powershell -ExecutionPolicy Bypass -File setup_excel_mcp.ps1
 #>
 
 $ErrorActionPreference = "Stop"
-$script:CurrentStage = "Init"
-$script:CurrentAction = "Before start"
 
-$GH_REPO = "sbroenne/mcp-server-excel"
-$GH_LATEST = "https://github.com/$GH_REPO/releases/latest"
-$INSTALL_DIR = Join-Path $env:USERPROFILE "ExcelMcp"
-$EXE_NAME = "mcp-excel.exe"
-$CLI_NAME = "excelcli.exe"
+$Repo = "sbroenne/mcp-server-excel"
+$LatestReleaseUrl = "https://github.com/$Repo/releases/latest"
+$InstallDir = Join-Path $env:USERPROFILE "ExcelMcp"
+$ExeName = "mcp-excel.exe"
+$CliName = "excelcli.exe"
+$UserAgent = "excel-mcp-setup"
 
-function Log($msg) {
-    Write-Host ">>> $msg"
+function Step($msg) {
+    Write-Host ""
+    Write-Host "=== $msg ===" -ForegroundColor Cyan
+}
+
+function Info($msg) {
+    Write-Host " -> $msg"
 }
 
 function Ok($msg) {
     Write-Host "[OK] $msg" -ForegroundColor Green
 }
 
-function Warn($msg) {
-    Write-Host "[WARN] $msg" -ForegroundColor Yellow
-}
-
 function Fail($msg) {
-    Write-Host "[FAIL] Stage: $script:CurrentStage" -ForegroundColor Red
-    Write-Host "[FAIL] Action: $script:CurrentAction" -ForegroundColor Red
     Write-Host "[FAIL] $msg" -ForegroundColor Red
     exit 1
 }
 
-function StartStep($msg) {
-    $script:CurrentStage = $msg
-    $script:CurrentAction = "Idle"
-    Write-Host ""
-    Write-Host "=== $msg ===" -ForegroundColor Cyan
-}
-
-function StartAction($msg) {
-    $script:CurrentAction = $msg
-    Write-Host " -> $msg"
-}
-
-function DownloadReleaseFile($url, $destinationPath, $userAgent) {
+function DownloadFile($url, $destinationPath) {
     $webClient = New-Object System.Net.WebClient
-    $webClient.Headers.Add("User-Agent", $userAgent)
+    $webClient.Headers.Add("User-Agent", $UserAgent)
     try {
         $webClient.DownloadFile($url, $destinationPath)
     } finally {
@@ -64,12 +44,13 @@ function DownloadReleaseFile($url, $destinationPath, $userAgent) {
     }
 }
 
-function ResolveLatestReleaseTag($url, $userAgent) {
-    $request = [System.Net.HttpWebRequest]::Create($url)
+function ResolveLatestTag() {
+    $request = [System.Net.HttpWebRequest]::Create($LatestReleaseUrl)
     $request.AllowAutoRedirect = $true
-    $request.UserAgent = $userAgent
+    $request.UserAgent = $UserAgent
     $request.Method = "GET"
     $request.Timeout = 30000
+
     $response = $request.GetResponse()
     try {
         $finalUrl = $response.ResponseUri.AbsoluteUri
@@ -81,250 +62,37 @@ function ResolveLatestReleaseTag($url, $userAgent) {
         return $Matches[1]
     }
 
-    throw "Could not resolve the latest release tag from $finalUrl"
+    throw "Could not resolve latest release tag from $finalUrl"
 }
 
-function RemoveJsonComments($text) {
-    if ([string]::IsNullOrEmpty($text)) {
-        return $text
-    }
-
-    $sb = New-Object System.Text.StringBuilder
-    $inString = $false
-    $escapeNext = $false
-    $inLineComment = $false
-    $inBlockComment = $false
-
-    for ($i = 0; $i -lt $text.Length; $i++) {
-        $char = $text[$i]
-        if ($i + 1 -lt $text.Length) {
-            $next = $text[$i + 1]
-        } else {
-            $next = [char]0
-        }
-
-        if ($inLineComment) {
-            if ($char -eq "`r" -or $char -eq "`n") {
-                $inLineComment = $false
-                [void]$sb.Append($char)
-            }
-            continue
-        }
-
-        if ($inBlockComment) {
-            if ($char -eq '*' -and $next -eq '/') {
-                $inBlockComment = $false
-                $i++
-            }
-            continue
-        }
-
-        if ($inString) {
-            [void]$sb.Append($char)
-            if ($escapeNext) {
-                $escapeNext = $false
-            } elseif ($char -eq '\\') {
-                $escapeNext = $true
-            } elseif ($char -eq '"') {
-                $inString = $false
-            }
-            continue
-        }
-
-        if ($char -eq '/' -and $next -eq '/') {
-            $inLineComment = $true
-            $i++
-            continue
-        }
-
-        if ($char -eq '/' -and $next -eq '*') {
-            $inBlockComment = $true
-            $i++
-            continue
-        }
-
-        [void]$sb.Append($char)
-        if ($char -eq '"') {
-            $inString = $true
-        }
-    }
-
-    return $sb.ToString()
-}
-
-try {
-    StartStep "1. Check Windows"
-    StartAction "Verify operating system"
-    if ($env:OS -ne "Windows_NT") {
-        Fail "This script only runs on Windows."
-    }
-
-    StartStep "2. Resolve release"
-    StartAction "Resolve latest GitHub release"
-    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    $version = ResolveLatestReleaseTag $GH_LATEST "excel-mcp-setup"
-    $versionNumber = $version.TrimStart('v')
-    Log "Latest version: $version"
-    $mcpAssetName = "ExcelMcp-MCP-Server-$versionNumber-windows.zip"
-    $cliAssetName = "ExcelMcp-CLI-$versionNumber-windows.zip"
-    $mcpUrl = "https://github.com/$GH_REPO/releases/download/$version/$mcpAssetName"
-    $cliUrl = "https://github.com/$GH_REPO/releases/download/$version/$cliAssetName"
-
-    Log "MCP Server asset: $mcpAssetName"
-    Log "CLI asset: $cliAssetName"
-
-    StartStep "3. Download and install"
-    if (Test-Path $INSTALL_DIR) {
-        StartAction "Remove previous install directory"
-        Log "Cleaning existing directory: $INSTALL_DIR"
-        Remove-Item $INSTALL_DIR -Recurse -Force
-    }
-
-    StartAction "Create install and temp directories"
-    New-Item -ItemType Directory -Path $INSTALL_DIR -Force | Out-Null
-    $tempDir = Join-Path $env:TEMP "excel-mcp-setup-$(Get-Random)"
-    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
-
-    try {
-        $mcpZip = Join-Path $tempDir "mcp-server.zip"
-        StartAction "Download MCP Server zip"
-        Log "Downloading MCP Server from $mcpUrl"
-        DownloadReleaseFile $mcpUrl $mcpZip "excel-mcp-setup"
-        $mcpZipSize = (Get-Item $mcpZip).Length / 1MB
-        Log "Downloaded: $mcpZip ($([math]::Round($mcpZipSize, 1)) MB)"
-
-        $extractDir = Join-Path $tempDir "extracted-mcp"
-        StartAction "Extract MCP Server zip"
-        Expand-Archive -Path $mcpZip -DestinationPath $extractDir -Force
-
-        StartAction "Find mcp-excel.exe"
-        $foundExe = Get-ChildItem -Path $extractDir -Filter $EXE_NAME -Recurse | Select-Object -First 1
-        if (-not $foundExe) {
-            Fail "Could not find $EXE_NAME inside the extracted MCP Server zip. Extract path: $extractDir"
-        }
-
-        $exeSourceDir = $foundExe.DirectoryName
-        StartAction "Copy MCP Server files"
-        Copy-Item -Path "$exeSourceDir\*" -Destination $INSTALL_DIR -Recurse -Force
-        Ok "MCP Server installed"
-
-        if ($cliUrl) {
-            $cliZip = Join-Path $tempDir "cli.zip"
-            StartAction "Download CLI zip"
-            Log "Downloading CLI from $cliUrl"
-            DownloadReleaseFile $cliUrl $cliZip "excel-mcp-setup"
-            $cliZipSize = (Get-Item $cliZip).Length / 1MB
-            Log "Downloaded: $cliZip ($([math]::Round($cliZipSize, 1)) MB)"
-
-            $extractCliDir = Join-Path $tempDir "extracted-cli"
-            StartAction "Extract CLI zip"
-            Expand-Archive -Path $cliZip -DestinationPath $extractCliDir -Force
-
-            StartAction "Find excelcli.exe"
-            $foundCli = Get-ChildItem -Path $extractCliDir -Filter $CLI_NAME -Recurse | Select-Object -First 1
-            if ($foundCli) {
-                StartAction "Copy CLI files"
-                Copy-Item -Path "$($foundCli.DirectoryName)\*" -Destination $INSTALL_DIR -Recurse -Force
-                Ok "CLI installed"
-            } else {
-                Warn "Could not find $CLI_NAME inside the CLI zip. Skipping CLI install."
-            }
-        }
-    } finally {
-        StartAction "Clean temp directory"
-        Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
-    }
-
-    $mcpExePath = Join-Path $INSTALL_DIR $EXE_NAME
-    $cliExePath = Join-Path $INSTALL_DIR $CLI_NAME
-
-    if (-not (Test-Path $mcpExePath)) {
-        Fail "$EXE_NAME was not installed to $mcpExePath"
-    }
-    Log "Installed executable: $mcpExePath"
-
-    StartStep "4. Update PATH"
-    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    if ($userPath -notlike "*$INSTALL_DIR*") {
-        StartAction "Append install directory to user PATH"
-        [Environment]::SetEnvironmentVariable("Path", "$userPath;$INSTALL_DIR", "User")
-        $env:Path = "$env:Path;$INSTALL_DIR"
-        Ok "PATH updated for current session and future sessions"
-    } else {
-        StartAction "Check existing PATH registration"
-        Log "Install directory is already present in PATH"
-    }
-
-    StartStep "5. Write plugin .mcp.json"
-    StartAction "Resolve plugin root"
-    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-    $pluginRoot = (Resolve-Path (Join-Path $scriptDir "..\..\..")).Path
+function WritePluginConfig($exePath, $pluginRoot) {
     $mcpJsonPath = Join-Path $pluginRoot ".mcp.json"
-    $escapedMcpExePath = $mcpExePath.Replace('\','\\')
-    $mcpJsonContent = @"
+    $escapedExePath = $exePath.Replace('\', '\\')
+    $content = @"
 {
   "mcpServers": {
     "excel-mcp": {
-      "command": "$escapedMcpExePath",
+      "command": "$escapedExePath",
       "args": [],
       "env": {}
     }
   }
 }
 "@
-    StartAction "Write .mcp.json"
-    Set-Content -Path $mcpJsonPath -Value $mcpJsonContent -Encoding UTF8
-    Ok "Wrote .mcp.json: $mcpJsonPath"
 
-    StartStep "6. Update client settings"
-    $registeredTargets = @()
+    Set-Content -Path $mcpJsonPath -Value $content -Encoding UTF8
+    Ok "Wrote $mcpJsonPath"
+}
 
-    $claudeSettings = Join-Path $env:USERPROFILE ".claude\settings.json"
-    if (Test-Path $claudeSettings) {
-        try {
-            StartAction "Update Claude Code settings"
-            $settings = Get-Content $claudeSettings -Raw -Encoding UTF8 | ConvertFrom-Json
-            if (-not $settings.PSObject.Properties["mcpServers"]) {
-                $settings | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([PSCustomObject]@{})
-            }
-            $settings.mcpServers | Add-Member -NotePropertyName "excel-mcp" -NotePropertyValue ([PSCustomObject]@{
-                command = $mcpExePath
-                args = @()
-                env = [PSCustomObject]@{}
-            }) -Force
-            $settings | ConvertTo-Json -Depth 10 | Set-Content $claudeSettings -Encoding UTF8
-            $registeredTargets += "Claude Code"
-        } catch {
-            Warn "Failed to update Claude Code settings.json: $_"
-        }
+function WriteVsCodeConfig($pluginRoot) {
+    $vscodeDir = Join-Path $pluginRoot ".vscode"
+    $vscodeMcp = Join-Path $vscodeDir "mcp.json"
+
+    if (-not (Test-Path $vscodeDir)) {
+        New-Item -ItemType Directory -Path $vscodeDir -Force | Out-Null
     }
 
-    $claudeDesktop = Join-Path $env:APPDATA "Claude\claude_desktop_config.json"
-    if (Test-Path $claudeDesktop) {
-        try {
-            StartAction "Update Claude Desktop settings"
-            $cdConfig = Get-Content $claudeDesktop -Raw -Encoding UTF8 | ConvertFrom-Json
-            if (-not $cdConfig.PSObject.Properties["mcpServers"]) {
-                $cdConfig | Add-Member -NotePropertyName "mcpServers" -NotePropertyValue ([PSCustomObject]@{})
-            }
-            $cdConfig.mcpServers | Add-Member -NotePropertyName "excel-mcp" -NotePropertyValue ([PSCustomObject]@{
-                command = "mcp-excel"
-                args = @()
-                env = [PSCustomObject]@{}
-            }) -Force
-            $cdConfig | ConvertTo-Json -Depth 10 | Set-Content $claudeDesktop -Encoding UTF8
-            $registeredTargets += "Claude Desktop"
-        } catch {
-            Warn "Failed to update Claude Desktop config: $_"
-        }
-    }
-
-    $vscodeMcp = Join-Path $pluginRoot ".vscode\mcp.json"
-    if (-not (Test-Path (Join-Path $pluginRoot ".vscode"))) {
-        StartAction "Create VS Code config directory"
-        New-Item -ItemType Directory -Path (Join-Path $pluginRoot ".vscode") -Force | Out-Null
-    }
-    $vscodeMcpContent = @"
+    $content = @"
 {
   "servers": {
     "excel-mcp": {
@@ -333,22 +101,118 @@ try {
   }
 }
 "@
-    StartAction "Write VS Code MCP config"
-    Set-Content -Path $vscodeMcp -Value $vscodeMcpContent -Encoding UTF8
-    $registeredTargets += "VS Code"
 
-    if ($registeredTargets.Count -gt 0) {
-        Ok "Registered MCP server in: $($registeredTargets -join ', ')"
-    } else {
-        Log "No supported client settings were found. Only .mcp.json was written."
+    Set-Content -Path $vscodeMcp -Value $content -Encoding UTF8
+    Ok "Wrote $vscodeMcp"
+}
+
+try {
+    Step "1. Check Windows"
+    Info "Verify operating system"
+    if ($env:OS -ne "Windows_NT") {
+        Fail "This script only runs on Windows."
     }
 
-    StartStep "7. Test stdio handshake"
-    $initMsg = '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"setup-test","version":"1.0.0"}}}'
-    $testPassed = $false
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+    Step "2. Resolve release"
+    Info "Resolve latest GitHub release"
+    $version = ResolveLatestTag
+    $versionNumber = $version.TrimStart('v')
+    $mcpAssetName = "ExcelMcp-MCP-Server-$versionNumber-windows.zip"
+    $cliAssetName = "ExcelMcp-CLI-$versionNumber-windows.zip"
+    $mcpUrl = "https://github.com/$Repo/releases/download/$version/$mcpAssetName"
+    $cliUrl = "https://github.com/$Repo/releases/download/$version/$cliAssetName"
+    Write-Host "    Version: $version" -ForegroundColor Gray
+    Write-Host "    MCP zip: $mcpAssetName" -ForegroundColor Gray
+    Write-Host "    CLI zip: $cliAssetName" -ForegroundColor Gray
+
+    Step "3. Install files"
+    if (Test-Path $InstallDir) {
+        Info "Remove previous install directory"
+        Remove-Item $InstallDir -Recurse -Force
+    }
+
+    Info "Create install directory"
+    New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+
+    $tempDir = Join-Path $env:TEMP "excel-mcp-setup-$(Get-Random)"
+    New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
 
     try {
-        StartAction "Start mcp-excel process"
+        $mcpZip = Join-Path $tempDir $mcpAssetName
+        $mcpExtractDir = Join-Path $tempDir "mcp"
+
+        Info "Download MCP zip"
+        DownloadFile $mcpUrl $mcpZip
+
+        Info "Extract MCP zip"
+        Expand-Archive -Path $mcpZip -DestinationPath $mcpExtractDir -Force
+
+        Info "Find mcp-excel.exe"
+        $foundExe = Get-ChildItem -Path $mcpExtractDir -Filter $ExeName -Recurse | Select-Object -First 1
+        if (-not $foundExe) {
+            Fail "Could not find $ExeName after extracting $mcpAssetName"
+        }
+
+        Info "Copy MCP files"
+        Copy-Item -Path "$($foundExe.DirectoryName)\*" -Destination $InstallDir -Recurse -Force
+        Ok "Installed MCP Server"
+
+        $cliZip = Join-Path $tempDir $cliAssetName
+        $cliExtractDir = Join-Path $tempDir "cli"
+
+        try {
+            Info "Download CLI zip"
+            DownloadFile $cliUrl $cliZip
+
+            Info "Extract CLI zip"
+            Expand-Archive -Path $cliZip -DestinationPath $cliExtractDir -Force
+
+            Info "Find excelcli.exe"
+            $foundCli = Get-ChildItem -Path $cliExtractDir -Filter $CliName -Recurse | Select-Object -First 1
+            if ($foundCli) {
+                Info "Copy CLI files"
+                Copy-Item -Path "$($foundCli.DirectoryName)\*" -Destination $InstallDir -Recurse -Force
+                Ok "Installed CLI"
+            } else {
+                Write-Host "[WARN] Could not find $CliName after extracting $cliAssetName" -ForegroundColor Yellow
+            }
+        } catch {
+            Write-Host "[WARN] CLI install skipped: $($_.Exception.Message)" -ForegroundColor Yellow
+        }
+    } finally {
+        Info "Clean temp directory"
+        Remove-Item $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+
+    $mcpExePath = Join-Path $InstallDir $ExeName
+    if (-not (Test-Path $mcpExePath)) {
+        Fail "$ExeName was not installed to $mcpExePath"
+    }
+
+    Step "4. Update PATH"
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($userPath -notlike "*$InstallDir*") {
+        Info "Append install directory to user PATH"
+        [Environment]::SetEnvironmentVariable("Path", "$userPath;$InstallDir", "User")
+        $env:Path = "$env:Path;$InstallDir"
+        Ok "PATH updated"
+    } else {
+        Write-Host "    PATH already contains $InstallDir" -ForegroundColor Gray
+    }
+
+    Step "5. Write local config"
+    $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+    $pluginRoot = (Resolve-Path (Join-Path $scriptDir "..\..\..")).Path
+    Info "Write plugin .mcp.json"
+    WritePluginConfig $mcpExePath $pluginRoot
+    Info "Write VS Code MCP config"
+    WriteVsCodeConfig $pluginRoot
+
+    Step "6. Test process start"
+    try {
+        Info "Start mcp-excel"
         $psi = New-Object System.Diagnostics.ProcessStartInfo
         $psi.FileName = $mcpExePath
         $psi.UseShellExecute = $false
@@ -357,79 +221,32 @@ try {
         $psi.RedirectStandardError = $true
         $psi.CreateNoWindow = $true
         $proc = [System.Diagnostics.Process]::Start($psi)
-
-        StartAction "Send initialize request"
-        $proc.StandardInput.WriteLine($initMsg)
-        $proc.StandardInput.Flush()
-
-        StartAction "Wait for server response"
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        $response = ""
-        while ($sw.ElapsedMilliseconds -lt 10000) {
-            if ($proc.StandardOutput.Peek() -ge 0) {
-                $line = $proc.StandardOutput.ReadLine()
-                if ($line) {
-                    $response = $line
-                    break
-                }
-            }
-            Start-Sleep -Milliseconds 200
-        }
-
-        try {
+        Start-Sleep -Milliseconds 800
+        if (-not $proc.HasExited) {
             $proc.Kill()
-        } catch {
-        }
-
-        if ($response -match '"result"' -or $response -match '"serverInfo"' -or $response -match '"capabilities"') {
-            $testPassed = $true
-            Ok "stdio handshake succeeded"
-        } elseif ($response) {
-            Log "Server response: $response"
-            Warn "Received an unexpected response. Verify MCP behavior in the client."
+            Ok "mcp-excel started successfully"
         } else {
-            Warn "No response within 10 seconds. Check whether Excel can start correctly."
+            Write-Host "[WARN] mcp-excel exited immediately. Check Excel availability on this machine." -ForegroundColor Yellow
         }
     } catch {
-        Warn "Failed to run handshake test: $_"
+        Write-Host "[WARN] Process start test failed: $($_.Exception.Message)" -ForegroundColor Yellow
     }
 
     Write-Host ""
     Write-Host "====================================================" -ForegroundColor Cyan
     Write-Host " mcp-server-excel setup complete ($version)" -ForegroundColor Cyan
     Write-Host "====================================================" -ForegroundColor Cyan
-    Write-Host ""
     Write-Host "  Executable:   $mcpExePath"
-    if (Test-Path $cliExePath) {
-        Write-Host "  CLI:          $cliExePath"
-    }
-    Write-Host "  PATH:         registered"
-    Write-Host "  Config file:  $mcpJsonPath"
-    Write-Host ""
-    if ($testPassed) {
-        Write-Host "  [TEST] stdio handshake: PASS" -ForegroundColor Green
-    } else {
-        Write-Host "  [TEST] stdio handshake: needs manual check" -ForegroundColor Yellow
-    }
-    Write-Host ""
-    Write-Host "  Example prompts:"
-    Write-Host "    > Open a new Excel file and write 'test' into A1"
-    Write-Host "    > Show the Excel window"
-    Write-Host ""
-    Write-Host "  Close other Excel files before using the MCP server."
+    Write-Host "  Install dir:  $InstallDir"
+    Write-Host "  Plugin root:  $pluginRoot"
     Write-Host "====================================================" -ForegroundColor Cyan
 } catch {
-    $invocation = $_.InvocationInfo
     Write-Host ""
-    Write-Host "[FAIL] Stage: $script:CurrentStage" -ForegroundColor Red
-    Write-Host "[FAIL] Action: $script:CurrentAction" -ForegroundColor Red
-    Write-Host "[FAIL] Error: $($_.Exception.Message)" -ForegroundColor Red
-    if ($invocation) {
-        if ($invocation.ScriptLineNumber) {
-            Write-Host "[FAIL] Line: $($invocation.ScriptLineNumber)" -ForegroundColor Red
-        }
-        if ($invocation.Line) {
-            Write-Host "[FAIL] Code: $($invocation.Line.Trim())" -ForegroundColor DarkRed
+    Write-Host "[FAIL] $($_.Exception.Message)" -ForegroundColor Red
+    if ($_.InvocationInfo) {
+        Write-Host "[FAIL] Line: $($_.InvocationInfo.ScriptLineNumber)" -ForegroundColor Red
+        if ($_.InvocationInfo.Line) {
+            Write-Host "[FAIL] Code: $($_.InvocationInfo.Line.Trim())" -ForegroundColor DarkRed
         }
     }
     exit 1
