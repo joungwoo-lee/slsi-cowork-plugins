@@ -38,10 +38,23 @@ DocCopyCli.exe --file "<폴더_경로>" --all --output "<출력_폴더_경로>"
 ```
 
 - 지원 형식: `.docx`, `.doc`, `.xlsx`, `.xls`, `.pptx`, `.ppt`, `.pptm`, `.ppsx`, `.pps`, `.potx`, `.potm`
-- stdout → 저장된 파일의 절대 경로(파일마다 한 줄씩). 사용자에게 경로를 알려준다.
-- stderr → 진행 로그/에러. 실패 시 원인 분석용.
-- `--all` 모드: 파일별로 성공/실패를 계속 진행하며, 마지막에 성공/실패 수를 요약 출력.
+- 지원 형식: `.docx`, `.doc`, `.xlsx`, `.xls`, `.pptx`, `.ppt`, `.pptm`, `.ppsx`, `.pps`, `.potx`, `.potm`
+- stdout → 저장된 파일의 절대 경로(파일마다 한 줄씩). 에이전트는 이 경로를 파싱하여 사용자에게 알려준다.
+- stderr → 진행 로그/에러. 실패 시 원인 분석용. 에이전트는 stderr를 직접 사용자에게 표시하지 말고 오류 분석에만 활용한다.
+- `--all` 모드: 파일별로 성공/실패를 계속 진행하며, stderr 마지막 줄에 `Done: N succeeded, N failed.` 요약 출력.
 - Excel 기본 엔진: `netoffice` (셸 오픈, DRM 인증 다이얼로그 지원). DRM 없는 파일은 `--excel-engine interop` 사용 가능.
+
+## --all 모드 결과 처리
+
+```bash
+# stdout 한 줄 = 성공한 파일 경로 1개
+DocCopyCli.exe --file "<폴더>" --all
+```
+
+에이전트는 실행 후:
+1. stdout의 각 줄 = 성공한 복사본 경로 → 사용자에게 목록으로 안내
+2. stderr 마지막 줄의 `Done: N succeeded, N failed.` → 요약으로 전달
+3. 실패한 파일이 있으면 stderr에서 `TIMEOUT` / `FAILED` 줄을 찾아 원인 분석 후 안내
 
 ## DRM 인증이 필요한 경우
 
