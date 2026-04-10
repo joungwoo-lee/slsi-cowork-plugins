@@ -12,15 +12,14 @@ public static class WordCopier
         using var watchdog = new ProcessWatchdog("WINWORD");
         dynamic? app = null;
         dynamic? doc = null;
+        dynamic? freshApp = null;
+        dynamic? newDoc = null;
 
         try
         {
+            // 1. Shell-open the DRM document so the DRM agent can authenticate
             Console.Error.WriteLine($"[WordCopier] Opening document via shell: {filePath}");
-            Process.Start(new ProcessStartInfo(filePath)
-            {
-                UseShellExecute = true,
-                Verb = "open"
-            });
+            Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true, Verb = "open" });
             watchdog.DetectNewProcess();
 
             app = WaitForWordApplication(watchdog.TimeoutMs);
@@ -32,18 +31,40 @@ public static class WordCopier
 
             Console.Error.WriteLine("[WordCopier] Document opened. Checking DRM...");
             WaitForDrmDecryption(doc, watchdog.TimeoutMs);
-            Console.Error.WriteLine("[WordCopier] DRM check passed. Saving copy...");
+            Console.Error.WriteLine("[WordCopier] DRM check passed. Copying content to clipboard...");
 
+            // 2. Copy all content to clipboard while it is decrypted in memory
+            doc.Content.Copy();
+
+            // 3. Spin up a completely fresh Word instance (no DRM context)
+            Console.Error.WriteLine("[WordCopier] Opening fresh Word instance for DRM-free save...");
+            var wordType = Type.GetTypeFromProgID("Word.Application")
+                ?? throw new InvalidOperationException("Word.Application COM class not registered.");
+            freshApp = Activator.CreateInstance(wordType)
+                ?? throw new InvalidOperationException("Failed to create Word.Application COM instance.");
+
+            freshApp.Visible = false;
+            freshApp.DisplayAlerts = false;
+
+            // 4. Create a new blank document and paste — the fresh instance has no DRM association
+            newDoc = freshApp.Documents.Add();
+            newDoc.Content.Paste();
+            Console.Error.WriteLine("[WordCopier] Content pasted into fresh document.");
+
+            // 5. Save from the fresh instance — DRM driver will not intercept this
             EnsureDirectory(outputPath);
-
-            // SaveCopyAs saves the in-memory (DRM-decrypted) content to a new file
-            // without changing the current document's path or modifying the original.
-            doc.SaveCopyAs(outputPath);
+            int fileFormat = Path.GetExtension(filePath).ToLowerInvariant() == ".doc" ? 0 : 16;
+            newDoc.SaveAs2(
+                FileName: outputPath,
+                FileFormat: fileFormat,
+                AddToRecentFiles: false);
 
             Console.Error.WriteLine($"[WordCopier] Saved: {outputPath}");
         }
         finally
         {
+            try { newDoc?.Close(false); } catch { }
+            try { freshApp?.Quit(false); } catch { }
             try { doc?.Close(false); } catch { }
             try { app?.Dispose(); } catch { }
             watchdog.KillIfRunning();
@@ -66,7 +87,6 @@ public static class WordCopier
         dynamic wordApp = app;
         var targetPath = Path.GetFullPath(filePath);
         var sw = Stopwatch.StartNew();
-
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
             try
@@ -111,9 +131,7 @@ public static class WordCopier
             }
             Thread.Sleep(PollIntervalMs);
         }
-
         try { if (document.Content?.Text?.Trim().Length == 0) return; } catch { }
-
         throw new TimeoutException(
             $"DRM decryption timed out after {timeoutMs / 1000}s. " +
             "Open the document manually to authenticate DRM first, then retry.");
@@ -122,8 +140,7 @@ public static class WordCopier
     private static void EnsureDirectory(string filePath)
     {
         string? dir = Path.GetDirectoryName(filePath);
-        if (!string.IsNullOrEmpty(dir))
-            Directory.CreateDirectory(dir);
+        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
     }
 
     private static int SafeToInt(object? value)
