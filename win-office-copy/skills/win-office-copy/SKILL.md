@@ -24,16 +24,23 @@ description: "Windows 네이티브 환경에서 DRM이 걸린 Office 문서(.doc
 이후 어느 디렉토리에서나 실행:
 
 ```bash
-# 기본: 같은 폴더에 <원본명>_copy.<확장자>로 저장
+# 단일 파일: 같은 폴더에 <원본명>_copy.<확장자>로 저장
 DocCopyCli.exe --file "<DRM_문서_절대경로>"
 
-# 출력 경로 직접 지정
+# 단일 파일: 출력 경로 직접 지정
 DocCopyCli.exe --file "<DRM_문서_절대경로>" --output "<저장할_경로>"
+
+# 폴더 일괄: 폴더 안의 지원 형식 파일을 모두 DRM 해제 복사
+DocCopyCli.exe --file "<폴더_경로>" --all
+
+# 폴더 일괄: 출력 폴더 직접 지정 (기본: <입력폴더>\drm-free\)
+DocCopyCli.exe --file "<폴더_경로>" --all --output "<출력_폴더_경로>"
 ```
 
 - 지원 형식: `.docx`, `.doc`, `.xlsx`, `.xls`, `.pptx`, `.ppt`, `.pptm`, `.ppsx`, `.pps`, `.potx`, `.potm`
-- stdout → 저장된 파일의 절대 경로. 사용자에게 경로를 알려준다.
-- stderr → 로그/에러. 실패 시 원인 분석용.
+- stdout → 저장된 파일의 절대 경로(파일마다 한 줄씩). 사용자에게 경로를 알려준다.
+- stderr → 진행 로그/에러. 실패 시 원인 분석용.
+- `--all` 모드: 파일별로 성공/실패를 계속 진행하며, 마지막에 성공/실패 수를 요약 출력.
 - Excel 기본 엔진: `netoffice` (셸 오픈, DRM 인증 다이얼로그 지원). DRM 없는 파일은 `--excel-engine interop` 사용 가능.
 
 ## DRM 인증이 필요한 경우
