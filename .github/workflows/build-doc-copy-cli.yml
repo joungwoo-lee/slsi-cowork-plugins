@@ -1,0 +1,100 @@
+name: Build & Release DocCopyCli
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'win-office-copy/DocCopyCli/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+        working-directory: win-office-copy/DocCopyCli
+
+      - name: Publish single-file binary
+        run: |
+          dotnet publish -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:EnableCompressionInSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:IncludeAllContentForSelfExtract=true `
+            -o ./publish
+        working-directory: win-office-copy/DocCopyCli
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DocCopyCli-win-x64
+          path: win-office-copy/DocCopyCli/publish/DocCopyCli.exe
+
+      - name: Create release zip
+        run: Compress-Archive -Path .\publish\DocCopyCli.exe -DestinationPath .\publish\DocCopyCli-win-x64.zip -Force
+        working-directory: win-office-copy/DocCopyCli
+
+      - name: Upload release zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DocCopyCli-win-x64-zip
+          path: win-office-copy/DocCopyCli/publish/DocCopyCli-win-x64.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: DocCopyCli-win-x64
+          path: ./artifact
+
+      - name: Download zip artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: DocCopyCli-win-x64-zip
+          path: ./artifact
+
+      - name: Update latest release
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: DocCopyCli (latest)
+          prerelease: true
+          make_latest: false
+          files: |
+            ./artifact/DocCopyCli.exe
+            ./artifact/DocCopyCli-win-x64.zip
+          body: |
+            자동 빌드된 최신 DocCopyCli 바이너리입니다.
+            코드가 변경될 때마다 이 릴리즈의 바이너리가 갱신됩니다.
+
+            **Commit:** ${{ github.sha }}
+
+      - name: Create versioned release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ./artifact/DocCopyCli.exe
+            ./artifact/DocCopyCli-win-x64.zip
+          generate_release_notes: true
