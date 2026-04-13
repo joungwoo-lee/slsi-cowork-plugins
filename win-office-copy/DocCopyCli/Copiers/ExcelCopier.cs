@@ -62,6 +62,7 @@ public static class ExcelCopier
         var sw = Stopwatch.StartNew();
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
+            watchdog.DetectNewProcess();
             try { return GetActiveComObject("Excel.Application"); } catch { }
             try
             {
@@ -70,6 +71,12 @@ public static class ExcelCopier
                     var a = GetExcelApplicationFromWindow(pid);
                     if (a != null) { Console.Error.WriteLine("[ExcelCopier] Attached via window handle fallback."); return a; }
                 }
+            }
+            catch { }
+            try
+            {
+                var a = GetExcelApplicationFromAnyWindow();
+                if (a != null) { Console.Error.WriteLine("[ExcelCopier] Attached via global window scan fallback."); return a; }
             }
             catch { }
             Thread.Sleep(PollIntervalMs);
@@ -251,17 +258,40 @@ public static class ExcelCopier
     {
         try
         {
-            var proc = Process.GetProcessById(pid);
-            proc.Refresh();
-            IntPtr hwnd = proc.MainWindowHandle;
-            if (hwnd == IntPtr.Zero) return null;
-            var a = TryGetAccessibleObject(hwnd);
-            if (a != null) return a;
-            IntPtr childHwnd = FindExcelDocumentWindow(hwnd);
-            if (childHwnd == IntPtr.Zero) return null;
-            return TryGetAccessibleObject(childHwnd);
+            foreach (IntPtr hwnd in GetProcessWindows(pid))
+            {
+                var a = TryGetAccessibleObject(hwnd);
+                if (a != null) return a;
+
+                IntPtr childHwnd = FindExcelDocumentWindow(hwnd);
+                if (childHwnd == IntPtr.Zero) continue;
+
+                a = TryGetAccessibleObject(childHwnd);
+                if (a != null) return a;
+            }
+
+            return null;
         }
         catch { return null; }
+    }
+
+    private static object? GetExcelApplicationFromAnyWindow()
+    {
+        foreach (var proc in Process.GetProcessesByName("EXCEL"))
+        {
+            try
+            {
+                var app = GetExcelApplicationFromWindow(proc.Id);
+                if (app != null) return app;
+            }
+            catch { }
+            finally
+            {
+                try { proc.Dispose(); } catch { }
+            }
+        }
+
+        return null;
     }
 
     private static object? TryGetAccessibleObject(IntPtr hwnd)
@@ -286,6 +316,33 @@ public static class ExcelCopier
             return true;
         }, IntPtr.Zero);
         return match;
+    }
+
+    private static List<IntPtr> GetProcessWindows(int pid)
+    {
+        var result = new List<IntPtr>();
+
+        EnumWindows((hwnd, lParam) =>
+        {
+            GetWindowThreadProcessId(hwnd, out uint windowPid);
+            if ((int)windowPid != pid) return true;
+
+            if (!IsWindowVisible(hwnd)) return true;
+
+            var sb = new StringBuilder(256);
+            int len = GetClassName(hwnd, sb, sb.Capacity);
+            string cls = len > 0 ? sb.ToString(0, len) : string.Empty;
+            if (string.Equals(cls, "XLMAIN", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(cls, "EXCEL7", StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(cls, "XLDESK", StringComparison.OrdinalIgnoreCase))
+            {
+                result.Add(hwnd);
+            }
+
+            return true;
+        }, IntPtr.Zero);
+
+        return result;
     }
 
     private static void EnsureDirectory(string filePath)
@@ -324,7 +381,16 @@ public static class ExcelCopier
         ref Guid riid, [MarshalAs(UnmanagedType.Interface)] out object? ppvObject);
 
     [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
     private static extern bool EnumChildWindows(IntPtr hWndParent, EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);

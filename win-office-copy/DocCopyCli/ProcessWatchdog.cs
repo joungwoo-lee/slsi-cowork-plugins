@@ -23,11 +23,23 @@ public sealed class ProcessWatchdog : IDisposable
 
     public void DetectNewProcess()
     {
+        if (_trackedPid is int trackedPid)
+        {
+            try
+            {
+                using var proc = Process.GetProcessById(trackedPid);
+                if (!proc.HasExited) return;
+            }
+            catch (ArgumentException)
+            {
+            }
+        }
+
         var currentPids = GetCurrentPids(_processName);
         var newPids = currentPids.Except(_preExistingPids).ToList();
         if (newPids.Count > 0)
         {
-            _trackedPid = newPids.First();
+            _trackedPid = newPids.Max();
             Log($"Tracked new {_processName} PID: {_trackedPid}");
         }
     }
