@@ -213,80 +213,89 @@ Z5:ERR|403,insufficient_scope|"권한 부족 시 403 INSUFFICIENT_SCOPE"|3|trust
 
 ---
 
-## 4. 재사용할 코드 (레포별 파일 + 함수)
+## 4. 실제 재사용/참고 코드
+
+이 절은 현재 `docs-index-build` 구현 기준으로 사실인 내용만 적는다.
 
 ### 4.1 MemPalace — `mempalace/miner.py`
 
-| 재사용 대상 | 위치 | 용도 |
-|---|---|---|
-| `READABLE_EXTENSIONS` | L20-50 | 인제스트 가능 파일 확장자 필터 |
-| `CHUNK_SIZE = 800` | L52 | 청크 크기 (800자) |
-| `CHUNK_OVERLAP = 100` | L53 | 청크 오버랩 |
-| `MIN_CHUNK_SIZE = 50` | L54 | 최소 청크 크기 |
-| `GitignoreMatcher` | L63 (class) | .gitignore 패턴 파일 제외 |
-| `GitignoreMatcher.from_dir()` | L71 | 디렉토리에서 .gitignore 로드 |
-| `is_gitignored()` | L186 | 파일이 gitignore 대상인지 체크 |
-| `should_skip_dir()` | L196 | `node_modules`, `__pycache__` 등 스킵 |
-| `chunk_text()` | L323 | 텍스트 → 오버랩 청크 리스트 변환 |
-| `detect_room()` | L276 | 파일 경로+내용 기반 룸 자동 분류 |
-| `scan_project()` | L469 | 폴더 재귀 스캔, 파일 목록 반환 |
+현재 스크립트에서 직접 가져왔거나 거의 그대로 옮긴 것은 아래다.
 
-**ChromaDB 관련 (`add_drawer`, `process_file`)은 재사용하지 않는다.**  
-저장소는 마크다운 파일이며 ChromaDB가 아니다.
+| 항목 | 현재 상태 | 용도 |
+|---|---|---|
+| `READABLE_EXTENSIONS` | 직접 참고/부분 복사 | 인제스트 가능 파일 확장자 필터 |
+| `CHUNK_SIZE`, `CHUNK_OVERLAP`, `MIN_CHUNK_SIZE` | 직접 참고 | 청킹 파라미터 |
+| `GitignoreMatcher` | 직접 참고/부분 복사 | `.gitignore` 해석 |
+| `is_gitignored()` | 직접 참고/부분 복사 | ignore 대상 판별 |
+| `chunk_text()`의 경계 분할 아이디어 | 직접 참고/부분 복사 | 문단 경계 우선 청킹 |
+
+아래 항목은 현재 구현에서 직접 재사용하지 않는다.
+
+| 항목 | 현재 상태 | 비고 |
+|---|---|---|
+| `detect_room()` | 미사용 | 현재 스킬은 경로 기반 자체 `detect_room()` 구현 사용 |
+| `scan_project()` | 미사용 | 현재 스킬은 자체 `scan_folder()` 구현 사용 |
+| `should_skip_dir()` | 미사용 | 동일한 취지의 로직을 스크립트 내부에서 직접 구현 |
 
 ### 4.2 MemPalace — `mempalace/dialect.py`
 
-| 재사용 대상 | 위치 | 용도 |
-|---|---|---|
-| `Dialect` (class) | L298 | AAAK 인코더 |
-| `Dialect.compress(text, metadata)` | L559 | 텍스트 → AAAK Zettel 문자열 |
-| `Dialect.encode_entity(name)` | L387 | 엔티티명 → 3자 코드 |
-| `Dialect.encode_emotions(emotions)` | L401 | 감정 리스트 → 코드 문자열 |
-| `Dialect.encode_zettel(zettel_dict)` | L701 | Zettel dict → AAAK 줄 |
-| `Dialect.encode_tunnel(tunnel_dict)` | L732 | Tunnel → `T:ZID<->ZID|label` |
-| `Dialect.from_config(config_path)` | L349 | entities.json에서 엔티티 매핑 로드 |
-| `EMOTION_CODES` (dict) | 상단 | 감정 코드 사전 |
+`dialect.py`는 현재 코드에서 직접 import 해서 재사용하지 않는다.
 
-**단, `Dialect.compress()`는 regex 기반 휴리스틱이므로**  
-일반 기술 문서에서는 단독 사용 불가. LLM 요약 후 AAAK 인코딩으로 2단계 처리 필요.
+실제로 참고하는 것은 코드 자체보다 포맷 규약이다.
+
+| 항목 | 현재 상태 | 용도 |
+|---|---|---|
+| AAAK header/zettel/tunnel 형식 | 개념 참고 | closet 파일 텍스트 형식 설계 |
+| entity/flag 개념 | 개념 참고 | AAAK 작성 규칙 정의 |
+
+주의:
+
+- 현재 `docs-index-build`는 `Dialect.compress()`를 호출하지 않는다.
+- AAAK는 `AAAK_WRITING_GUIDE.md`와 `SKILL.md` 규칙에 따라 AI가 직접 텍스트로 작성한다.
 
 ### 4.3 MemPalace — `mempalace/general_extractor.py`
 
-| 재사용 대상 | 위치 | 용도 |
-|---|---|---|
-| `extract_memories(text, min_confidence)` | L363 | 청크에서 결정/선호/마일스톤/문제 패턴 추출 (LLM 불필요) |
-| `DECISION_MARKERS` | 상단 | 결정 패턴 정규식 리스트 |
-| `PREFERENCE_MARKERS` | 상단 | 선호 패턴 정규식 리스트 |
-| `MILESTONE_MARKERS` | 상단 | 마일스톤 패턴 정규식 리스트 |
-| `PROBLEM_MARKERS` | 상단 | 문제/버그 패턴 정규식 리스트 |
+현재 스크립트는 `extract_memories()`를 직접 재사용하지 않는다.
 
-`extract_memories()`가 반환하는 `memory_type` → Hall 분류에 사용:  
-`decision` → `HALL: decisions`, `technical` → `HALL: technical`, 등
+대신, 정규식 기반 분류 아이디어를 단순화해서 자체 `classify_chunk()`에 반영했다.
+
+| 항목 | 현재 상태 | 용도 |
+|---|---|---|
+| 결정/문제/마일스톤 패턴 아이디어 | 개념 참고 | chunk hall 분류 휴리스틱 |
+| `extract_memories()` 함수 자체 | 미사용 | 현재 스크립트는 호출하지 않음 |
+
+주의:
+
+- `general_extractor.py`의 `memory_type`은 `decision`, `preference`, `milestone`, `problem`, `emotional`이다.
+- `technical` 타입은 원본 `general_extractor.py`가 직접 반환하지 않는다.
+- 현재 스킬의 `technical` hall은 `docs-index-build` 쪽에서 별도 휴리스틱으로 추가한 것이다.
 
 ### 4.4 MemPalace — `mempalace/palace_graph.py`
 
-| 재사용 대상 | 위치 | 용도 |
-|---|---|---|
-| `build_graph(col)` 의 **로직** | L전체 | 같은 룸명이 여러 Wing에 등장하면 Tunnel 생성 |
+현재 구현은 `palace_graph.py`를 직접 재사용하지 않고, 터널 개념만 참고한다.
 
-ChromaDB col 의존성 제거 후 메모리 내 dict로 동일 로직 재구현.  
-`room_data[room]["wings"]`에 여러 wing이 있으면 → Tunnel 엣지 추가.
+| 항목 | 현재 상태 | 용도 |
+|---|---|---|
+| 같은 room이 여러 wing에 걸치면 연결한다는 아이디어 | 개념 참고 | tunnel 계산 규칙 |
+| `build_graph()` 함수 자체 | 미사용 | ChromaDB 의존성 때문에 직접 재사용하지 않음 |
 
 ### 4.5 MemPalace — `mempalace/palace.py`
 
-| 재사용 대상 | 위치 | 용도 |
+| 항목 | 현재 상태 | 용도 |
 |---|---|---|
-| `file_already_mined()` 의 **mtime 체크 패턴** | L전체 | 증분 업데이트: 파일이 변경됐는지 확인 |
-| `SKIP_DIRS` (set) | 상단 | 건너뛸 디렉토리 목록 |
+| `SKIP_DIRS` | 직접 참고 | 건너뛸 디렉터리 목록 |
+| `file_already_mined()`의 mtime 비교 패턴 | 개념 참고 | 증분 업데이트 설계 |
 
-상태는 `.doc-palace-state.json`에 `{filepath: mtime}` 형태로 저장.
+현재 스킬은 ChromaDB collection 기반 체크 대신 `.doc-palace-state.json`에 mtime을 저장한다.
 
 ### 4.6 MemPalace — `mempalace/config.py`
 
-| 재사용 대상 | 위치 | 용도 |
+현재 구현은 `sanitize_name()`이나 `sanitize_content()`를 직접 가져다 쓰지 않는다.
+
+| 항목 | 현재 상태 | 용도 |
 |---|---|---|
-| `sanitize_name(value, field_name)` | L전체 | wing/room 이름 검증 (경로 탐색 방지) |
-| `sanitize_content(value, max_length)` | L전체 | 컨텐츠 길이/null byte 검증 |
+| `sanitize_name()` | 미사용 | 필요 시 future hardening 후보 |
+| `sanitize_content()` | 미사용 | 필요 시 future hardening 후보 |
 
 ---
 
@@ -298,65 +307,49 @@ ChromaDB col 의존성 제거 후 메모리 내 dict로 동일 로직 재구현.
 ingest.py <folder_path>
     │
     ├─ [1] SCAN
-    │   └─ miner.scan_project() + GitignoreMatcher + SKIP_DIRS
+    │   └─ docs-index-build/scripts/ingest.py 의 scan_folder()
+    │      + GitignoreMatcher + SKIP_DIRS 유사 로직
     │       → 파일 목록 + mtime 체크 (state.json 비교)
     │
     ├─ [2] CHUNK
-    │   └─ miner.chunk_text() per file
-    │       → 청크 리스트 [{content, chunk_index, source_file}]
+    │   └─ docs-index-build/scripts/ingest.py 의 chunk_text()
+    │       → 청크 리스트 생성
     │
     ├─ [3] EXTRACT  (LLM 불필요 1단계)
-    │   └─ general_extractor.extract_memories() per chunk
-    │       → memory_type (decision/preference/milestone/problem/technical)
-    │       → Hall 분류
+    │   └─ docs-index-build/scripts/ingest.py 의 classify_chunk()
+    │       → hall 분류 (decisions / problems / milestones / technical / reference)
     │
     ├─ [4] ROOM DETECT
-    │   └─ miner.detect_room() 또는 경로 기반 룸 추론
+    │   └─ docs-index-build/scripts/ingest.py 의 detect_room()
     │       → room_slug (e.g. "jwt-flow", "docker-setup")
     │
-    ├─ [5] LLM SUMMARIZE  (LLM 필요, 청크 배치 처리)
-    │   └─ 청크 그룹(room 단위) → LLM → structured summary text
-    │       입력: "다음 문서 청크들을 DECISIONS/PREFERENCES/TECHNICAL 항목으로 요약해라.
-    │              key_quote를 포함하고 중요도(1-5)를 매겨라."
-    │       출력: [{entity, keywords, key_quote, weight, flags}] 리스트
+    ├─ [5] AAAK WRITE  (AI 작성 단계)
+    │   └─ SKILL.md + AAAK_WRITING_GUIDE.md 규칙에 따라
+    │      문서 내용을 직접 AAAK 텍스트로 작성
     │
-    ├─ [6] AAAK ENCODE
-    │   └─ Dialect.compress() or Dialect.encode_zettel() per summary item
-    │       → AAAK Zettel 줄들
+    ├─ [6] TUNNEL DETECT
+    │   └─ 같은 room_slug 가 여러 wing 에 등장하면 tunnel 계산
     │
-    ├─ [7] TUNNEL DETECT
-    │   └─ palace_graph 로직 (메모리 내): 같은 room_slug가 여러 wing에 등장 시 Tunnel
-    │
-    ├─ [8] WRITE CLOSETS
+    ├─ [7] WRITE CLOSETS
     │   └─ _closets/<room>.aaak.md 생성/업데이트
     │
-    └─ [9] WRITE/UPDATE AGENTS.md
+    └─ [8] WRITE/UPDATE AGENTS.md
         └─ Wing/Hall/Room 인덱스 + Tunnel 섹션 + LOG 엔트리
 ```
 
-### 5.2 LLM 요약 프롬프트 (5단계)
+### 5.2 AI 작성 규칙 (5단계)
 
 ```
-You are indexing technical documents for a memory palace.
-Given the following text chunks from room "{room}" (wing "{wing}"):
-
-{chunks}
-
-Extract structured summaries as JSON array:
-[
-  {
-    "entities": ["name1", "name2"],   // 주요 엔티티 (최대 3개)
-    "keywords": ["kw1", "kw2", ...],  // 주제 키워드 (최대 5개)
-    "key_quote": "...",               // 핵심 문장 1개 (원문 그대로)
-    "weight": 3,                      // 중요도 1-5
-    "flags": ["TECHNICAL", "DECISION"] // TECHNICAL/DECISION/CORE/ORIGIN
-  }
-]
+Read the whole document first.
+Do not call an external AAAK tool.
+Write AAAK text directly into the closet markdown file.
+Follow SKILL.md and AAAK_WRITING_GUIDE.md exactly.
 
 Rules:
 - key_quote는 반드시 원문에서 그대로 발췌할 것
-- 요약하거나 paraphrase하지 말 것
-- flags는 해당하는 것만 포함
+- 문서의 의미 있는 내용을 가능한 많이 AAAK로 쓸 것
+- 긴 기술 문서를 몇 줄로 축약하지 말 것
+- AGENTS.md는 루트에만 두고 _closets 안에 만들지 말 것
 ```
 
 ---
