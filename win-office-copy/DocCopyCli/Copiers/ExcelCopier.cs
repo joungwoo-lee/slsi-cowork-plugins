@@ -29,14 +29,16 @@ public static class ExcelCopier
             Console.Error.WriteLine($"[ExcelCopier] Opening workbook via shell: {filePath}");
             Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true, Verb = "open" });
             watchdog.DetectNewProcess();
+            BackgroundExcelWindow(watchdog, 5_000);
 
             app = WaitForExcelApplication(watchdog, watchdog.TimeoutMs);
             Console.Error.WriteLine("[ExcelCopier] Attached to running Excel instance.");
             try { app.DisplayAlerts = false; } catch { }
             try { app.Visible = true; } catch { }
+            TryBackgroundExcelWindow(watchdog);
 
             wb = WaitForWorkbook(app, filePath, watchdog.TimeoutMs);
-            try { wb.Activate(); } catch { }
+            TryBackgroundExcelWindow(watchdog);
 
             Console.Error.WriteLine("[ExcelCopier] Workbook opened. Checking DRM...");
             WaitForDrmDecryption(wb, watchdog.TimeoutMs);
@@ -294,6 +296,58 @@ public static class ExcelCopier
         return null;
     }
 
+    private static void BackgroundExcelWindow(ProcessWatchdog watchdog, int timeoutMs)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            watchdog.DetectNewProcess();
+            if (TryBackgroundExcelWindow(watchdog)) return;
+            Thread.Sleep(100);
+        }
+    }
+
+    private static bool TryBackgroundExcelWindow(ProcessWatchdog watchdog)
+    {
+        if (watchdog.TrackedPid is int trackedPid && TryBackgroundProcessWindows(trackedPid))
+            return true;
+
+        foreach (var proc in Process.GetProcessesByName("EXCEL"))
+        {
+            try
+            {
+                if (TryBackgroundProcessWindows(proc.Id)) return true;
+            }
+            catch { }
+            finally
+            {
+                try { proc.Dispose(); } catch { }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryBackgroundProcessWindows(int pid)
+    {
+        bool changed = false;
+        foreach (IntPtr hwnd in GetProcessWindows(pid))
+        {
+            if (hwnd == IntPtr.Zero) continue;
+
+            ShowWindowAsync(hwnd, SwShowMinNoActive);
+            changed = true;
+        }
+
+        if (!changed) return false;
+
+        IntPtr shellWindow = GetShellWindow();
+        if (shellWindow != IntPtr.Zero)
+            SetForegroundWindow(shellWindow);
+
+        return true;
+    }
+
     private static object? TryGetAccessibleObject(IntPtr hwnd)
     {
         if (hwnd == IntPtr.Zero) return null;
@@ -390,6 +444,15 @@ public static class ExcelCopier
     private static extern bool IsWindowVisible(IntPtr hWnd);
 
     [DllImport("user32.dll")]
+    private static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetShellWindow();
+
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
@@ -400,4 +463,5 @@ public static class ExcelCopier
 
     private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
     private const uint NativeObjectId = 0xFFFFFFF0;
+    private const int SwShowMinNoActive = 7;
 }
