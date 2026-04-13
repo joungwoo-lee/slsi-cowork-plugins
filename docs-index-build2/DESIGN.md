@@ -123,6 +123,14 @@ L|1-2|token_pair_lifecycle
     }
   ],
   "all_documents": [...],
+  "wing_index": [
+    {
+      "wing": "auth",
+      "summary": "jwt, token, error_policy",
+      "room_order": ["auth-jwt-design", "auth-oauth-policy"],
+      "hall_counts": {"technical": 1, "decisions": 1}
+    }
+  ],
   "room_index": [...],
   "tunnels": [
     {"room_a": "auth-jwt-design", "room_b": "api-error-contract", "label": "shared_qtype:error_policy"}
@@ -134,6 +142,7 @@ L|1-2|token_pair_lifecycle
 
 - `new_and_changed`: 이번 실행에서 실제로 closet을 다시 써야 하는 문서
 - `all_documents`: state와 합쳐 재구성한 전체 문서 메타
+- `wing_index`: Wing 설명과 정렬에 바로 사용할 wing 단위 집계
 - `room_index`: AGENTS.md를 쓸 때 바로 사용할 room 단위 집계
 
 ## 메타데이터 추출 규칙
@@ -160,6 +169,14 @@ L|1-2|token_pair_lifecycle
 - 가능한 경우 실제 heading을 사용한다.
 - heading이 부족하면 주제 전환 지점을 기반으로 합성 section을 만든다.
 - 목적은 room 전체가 아니라 먼저 읽을 위치를 지정하는 것이다.
+- room 집계 시 중복 section label은 제거하고 재번호를 매긴다.
+
+### SUMMARY / RANK
+
+- `room_index.summary`는 room을 한 줄로 설명하는 압축형 요약이다.
+- `room_rank`는 `doc_count`, `about`, `qtypes`, `entities` 개수를 기반으로 계산한 정렬 점수다.
+- `wing_index.summary`는 wing 안의 상위 topic과 qtype을 합쳐 만든다.
+- AGENTS.md 작성 시 자유문장 생성을 줄이고 이 필드를 재사용한다.
 
 ## 압축 전략
 
@@ -188,6 +205,27 @@ L|1-2|token_pair_lifecycle
 3. 공유 ABOUT 토큰이 2개 이상이면 `shared_topic:{token}`
 
 이렇게 하면 room 이름이 달라도 실제로 함께 읽어야 할 문서를 더 잘 연결할 수 있다.
+
+## AGENTS.md 자동 생성 규칙
+
+성능을 위해 `AGENTS.md`는 요약문이 아니라 결정적 필터여야 한다. 그래서 자동 생성 규칙을 강하게 고정한다.
+
+1. Wing 순서는 `wing_index` 순서를 따른다.
+2. Hall 순서는 항상 `decisions -> technical -> problems -> milestones -> reference`다.
+3. Room 순서는 `room_rank` 내림차순, 동률이면 room 이름 오름차순이다.
+4. Wing 한 줄 설명은 `wing_index.summary`를 우선 사용한다.
+5. Room 설명은 `room_index.summary`를 우선 사용하고, 새 문장 창작을 최소화한다.
+6. 노출 개수는 고정한다.
+7. `ABOUT` 최대 5개, `NOT` 최대 4개, `QTYPE` 최대 4개, `E` 최대 4개, `SECTIONS` 최대 4개.
+8. `NOT`가 비어 있으면 억지로 채우지 않는다.
+9. `SECTIONS`는 중복 label 제거 후 출력한다.
+10. `TUNNELS`는 `label`, `room_a`, `room_b` 기준 정렬해 출력한다.
+
+이 규칙의 목적은 세 가지다.
+
+- 같은 문서셋에서 인덱스 구조가 흔들리지 않게 한다.
+- AI가 임의 문장을 길게 만들어 토큰을 낭비하지 않게 한다.
+- 질문 시 first-pass filtering이 항상 비슷한 품질로 동작하게 한다.
 
 ## 상태 저장
 

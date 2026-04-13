@@ -79,6 +79,14 @@ HALL_PATTERNS = {
     "technical": [r"\bapi\b", r"\bconfig\b", r"\bschema\b", r"\bdatabase\b", r"\bclass\b", r"\bfunction\b", r"\btoken\b"],
 }
 
+HALL_ORDER = {
+    "decisions": 0,
+    "technical": 1,
+    "problems": 2,
+    "milestones": 3,
+    "reference": 4,
+}
+
 
 class GitignoreMatcher:
     def __init__(self, base_dir: Path, rules: list):
@@ -302,6 +310,55 @@ def build_sections(content: str, keywords: List[str]) -> List[dict]:
     return sections[:8]
 
 
+def dedupe_sections(sections: List[dict]) -> List[dict]:
+    seen = set()
+    deduped = []
+    for section in sections:
+        label = section.get("label", "").strip()
+        norm = re.sub(r"\s+", " ", label.lower())
+        if not norm or norm in seen:
+            continue
+        seen.add(norm)
+        deduped.append({
+            "id": f"S{len(deduped) + 1}",
+            "label": label[:80],
+            "keywords": section.get("keywords", [])[:4],
+        })
+        if len(deduped) >= 8:
+            break
+    return deduped
+
+
+def build_room_summary(about: List[str], qtypes: List[str], entities: List[str]) -> str:
+    lead = about[:2]
+    if qtypes:
+        lead.append(qtypes[0])
+    if not lead and entities:
+        lead.extend(token.lower() for token in entities[:2])
+    return ", ".join(lead[:3])
+
+
+def build_wing_summary(rooms: List[dict]) -> str:
+    topic_counter = Counter()
+    qtype_counter = Counter()
+    for room in rooms:
+        topic_counter.update(room.get("about", [])[:3])
+        qtype_counter.update(room.get("qtypes", [])[:2])
+    topics = [token for token, _ in topic_counter.most_common(2)]
+    qtypes = [token for token, _ in qtype_counter.most_common(1)]
+    parts = topics + qtypes
+    return ", ".join(parts[:3]) if parts else "general documentation"
+
+
+def compute_room_rank(room: dict) -> int:
+    return (
+        room.get("doc_count", 0) * 10
+        + len(room.get("about", [])) * 3
+        + len(room.get("qtypes", [])) * 2
+        + len(room.get("entities", []))
+    )
+
+
 def summarize_about(content: str) -> List[str]:
     heading_tokens = []
     for heading in extract_headings(content):
@@ -440,7 +497,7 @@ def build_room_index(documents: List[dict]) -> List[dict]:
             "about": [token for token, _ in about_counter.most_common(6)],
             "entities": [token for token, _ in entity_counter.most_common(6)],
             "qtypes": [token for token, _ in qtype_counter.most_common(5)],
-            "sections": sections[:8],
+            "sections": dedupe_sections(sections),
             "paths": [doc["path"] for doc in docs],
         })
 
@@ -469,8 +526,36 @@ def build_room_index(documents: List[dict]) -> List[dict]:
                 if len(exclusion) >= 6:
                     break
             room["not_about"] = exclusion
+            room["summary"] = build_room_summary(room.get("about", []), room.get("qtypes", []), room.get("entities", []))
+            room["room_rank"] = compute_room_rank(room)
 
-    return sorted(room_index, key=lambda item: (item["wing"], item["room"]))
+    wing_index = []
+    for wing, wing_rooms in sorted(by_wing.items()):
+        ordered_rooms = sorted(
+            wing_rooms,
+            key=lambda item: (
+                HALL_ORDER.get(item.get("dominant_hall", "reference"), 99),
+                -item.get("room_rank", 0),
+                item.get("room", ""),
+            ),
+        )
+        wing_index.append({
+            "wing": wing,
+            "summary": build_wing_summary(ordered_rooms),
+            "room_order": [room["room"] for room in ordered_rooms],
+            "hall_counts": dict(Counter(room.get("dominant_hall", "reference") for room in ordered_rooms)),
+        })
+
+    sorted_rooms = sorted(
+        room_index,
+        key=lambda item: (
+            item["wing"],
+            HALL_ORDER.get(item.get("dominant_hall", "reference"), 99),
+            -item.get("room_rank", 0),
+            item["room"],
+        ),
+    )
+    return sorted_rooms, wing_index
 
 
 def build_tunnels(room_index: List[dict]) -> List[dict]:
@@ -493,6 +578,7 @@ def build_tunnels(room_index: List[dict]) -> List[dict]:
                     "room_b": other["room"],
                     "label": label,
                 })
+    tunnels.sort(key=lambda item: (item["label"], item["room_a"], item["room_b"]))
     return tunnels[:40]
 
 
@@ -544,7 +630,7 @@ def run_scan(folder_path: str):
 
     analyzed = [analyze_file(folder / meta["path"], meta) for meta in to_process]
     all_documents = rebuild_documents(folder, analyzed, state, removed)
-    room_index = build_room_index(all_documents)
+    room_index, wing_index = build_room_index(all_documents)
 
     room_not_about = {(room["wing"], room["room"]): room.get("not_about", []) for room in room_index}
     for doc in analyzed:
@@ -564,6 +650,7 @@ def run_scan(folder_path: str):
         "new_and_changed": analyzed,
         "removed": removed,
         "all_documents": all_documents,
+        "wing_index": wing_index,
         "room_index": room_index,
         "tunnels": build_tunnels(room_index),
     }

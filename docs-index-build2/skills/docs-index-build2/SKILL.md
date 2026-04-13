@@ -62,6 +62,7 @@ JSON의 핵심 필드:
     }
   ],
   "all_documents": [...],
+  "wing_index": [...],
   "room_index": [...],
   "tunnels": [...]
 }
@@ -132,6 +133,8 @@ GEN:{date}|DOCS:{count}|WINGS:{n}|ROOMS:{m}|TUNNELS:{k}
 4. SOURCE LINKS를 따라 원문을 읽는다.
 
 ## WING: auth
+> auth, jwt, error_policy
+
 ### HALL: technical
 - ROOM:auth-jwt-design | [_closets/auth-jwt-design.aaak.md] | 2docs | ABOUT:jwt,access_token,refresh_token,rotation,revocation | NOT:oauth_login,saml,billing | QTYPE:auth_flow,token_lifetime,error_policy | E:JWT,ACC,REF,ERR
   SECTIONS: token model; refresh rotation; logout invalidation; error responses
@@ -145,6 +148,26 @@ T:auth-jwt-design<->api-error-contract|shared:error_policy
 - `top_keywords`만 쓰지 말고 `ABOUT`, `NOT`, `QTYPE`, `E`, `SECTIONS`를 함께 적는다.
 - `NOT`는 room과 가까운 오탐 주제만 넣는다.
 - `TUNNELS`는 같은 room명 기준이 아니라 공유 엔티티/공유 주제/명시적 참조 기반으로 작성한다.
+- `wing_index`의 `summary`를 Wing 한 줄 설명 초안으로 우선 사용한다.
+- `room_index`의 `summary`를 room 1차 설명 근거로 사용하고, `ABOUT`를 그대로 반복하지 말고 짧게 압축한다.
+- room 순서는 `wing -> hall -> room_rank 내림차순 -> room 이름` 순으로 고정한다.
+- 한 room 항목은 한 줄에 가능한 한 유지하고, `SECTIONS`만 다음 줄로 내린다.
+- `ABOUT`는 최대 5개, `NOT`는 최대 4개, `QTYPE`은 최대 4개, `E`는 최대 4개만 노출한다.
+- `SECTIONS`는 최대 4개만 노출하고, 각 section label은 1차 탐색에 필요한 것만 남긴다.
+- Wing 설명, Room 설명, TUNNELS 라벨은 새 해석을 추가하지 말고 `wing_index`, `room_index`, `tunnels` 값만 재조합한다.
+
+### Step 4B. 결정적 생성 규칙
+
+`AGENTS.md`는 가능한 한 매 실행마다 같은 구조가 나오도록 아래 순서를 고정한다.
+
+1. `wing_index` 순서대로 Wing을 쓴다.
+2. 각 Wing 안에서 Hall 순서는 `decisions`, `technical`, `problems`, `milestones`, `reference` 고정이다.
+3. 각 Hall 안의 Room 순서는 `room_rank` 내림차순, 동률이면 room 이름 오름차순이다.
+4. Room 항목에는 스캐너가 준 값만 사용하고, 비어 있는 필드는 생략하지 말고 가능한 범위 내에서 축약한다.
+5. `NOT`가 비어 있으면 임의 추론으로 채우지 말고 빈 값으로 둔다.
+6. `SECTIONS` 중 중복 label은 하나만 남긴다.
+7. `TUNNELS`는 label, room_a, room_b 순으로 정렬해서 쓴다.
+8. 기존 `LOG`가 있으면 보존하고 새 항목만 뒤에 추가한다.
 
 ### Step 4A. 검증
 
@@ -156,6 +179,8 @@ T:auth-jwt-design<->api-error-contract|shared:error_policy
 4. `SECTIONS`가 실제 읽을 위치를 가리키는가
 5. 긴 문서인데 zettel이 지나치게 적지 않은가
 6. 반복되는 키워드가 `K:`로 적절히 축약되었는가
+7. Wing/Room 정렬이 결정적 생성 규칙과 일치하는가
+8. `ABOUT`, `NOT`, `QTYPE`, `E`, `SECTIONS` 개수 제한을 지켰는가
 
 ### Step 5. 완료 처리
 
