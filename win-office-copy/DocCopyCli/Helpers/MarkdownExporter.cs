@@ -8,7 +8,7 @@ internal static class MarkdownExporter
     public static string GetMarkdownPath(string outputPath, string sourceFilePath)
     {
         string outputDir = Path.GetDirectoryName(Path.GetFullPath(outputPath)) ?? ".";
-        string sourceName = Path.GetFileNameWithoutExtension(sourceFilePath);
+        string sourceName = Path.GetFileName(sourceFilePath);
         return Path.Combine(outputDir, $"{sourceName}.md");
     }
 

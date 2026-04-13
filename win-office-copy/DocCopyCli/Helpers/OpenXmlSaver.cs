@@ -1,3 +1,4 @@
+using System.Text;
 using ClosedXML.Excel;
 using DocCopyCli.Models;
 using DocumentFormat.OpenXml;
@@ -23,7 +24,7 @@ internal static class OpenXmlSaver
         mainPart.Document = new Document(new Body());
         var body = mainPart.Document.Body!;
 
-        var normalized = textContent.Replace("\r\n", "\n").Replace('\r', '\n');
+        var normalized = SanitizeXmlText(textContent).Replace("\r\n", "\n").Replace('\r', '\n');
         foreach (string paragraphText in normalized.Split('\n'))
         {
             body.AppendChild(new Paragraph(new Run(new Text(paragraphText) { Space = SpaceProcessingModeValues.Preserve })));
@@ -98,4 +99,34 @@ internal static class OpenXmlSaver
         string? dir = Path.GetDirectoryName(filePath);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
     }
+
+    private static string SanitizeXmlText(string value)
+    {
+        var sb = new StringBuilder(value.Length);
+
+        for (int i = 0; i < value.Length; i++)
+        {
+            char ch = value[i];
+            if (char.IsHighSurrogate(ch))
+            {
+                if (i + 1 < value.Length && char.IsLowSurrogate(value[i + 1]))
+                {
+                    sb.Append(ch);
+                    sb.Append(value[++i]);
+                }
+
+                continue;
+            }
+
+            if (char.IsLowSurrogate(ch)) continue;
+            if (IsValidXmlChar(ch)) sb.Append(ch);
+        }
+
+        return sb.ToString();
+    }
+
+    private static bool IsValidXmlChar(char ch)
+        => ch == '\t' || ch == '\n' || ch == '\r' ||
+           (ch >= ' ' && ch <= '\uD7FF') ||
+           (ch >= '\uE000' && ch <= '\uFFFD');
 }
