@@ -8,25 +8,12 @@ public static class PowerPointCopier
 {
     private const int PollIntervalMs = 500;
 
-    // ppSaveAs* FileFormat integer constants (no NetOffice dependency needed)
-    private static int GetPptFileFormat(string ext) => ext switch
-    {
-        ".ppt"  => 1,   // ppSaveAsPresentation
-        ".pps"  => 9,   // ppSaveAsShow
-        ".potx" => 35,  // ppSaveAsOpenXMLTemplate
-        ".potm" => 36,  // ppSaveAsOpenXMLTemplateMacroEnabled
-        ".pptm" => 25,  // ppSaveAsOpenXMLPresentationMacroEnabled
-        ".ppsx" => 33,  // ppSaveAsOpenXMLShow
-        _       => 24,  // ppSaveAsOpenXMLPresentation (.pptx, default)
-    };
-
     public static void Copy(string filePath, string outputPath)
     {
+        outputPath = OpenXmlSaver.NormalizePowerPointOutputPath(outputPath);
         using var watchdog = new ProcessWatchdog("POWERPNT");
         dynamic? app = null;
         dynamic? pres = null;
-        dynamic? freshApp = null;
-        dynamic? newPres = null;
 
         try
         {
@@ -42,61 +29,17 @@ public static class PowerPointCopier
 
             Console.Error.WriteLine("[PPTCopier] Presentation opened. Checking DRM...");
             WaitForDrmDecryption(pres, watchdog.TimeoutMs);
+            var slides = CaptureSlidesText(pres);
             string markdownPath = MarkdownExporter.GetMarkdownPath(outputPath, filePath);
-            MarkdownExporter.WritePresentationMarkdown(markdownPath, CaptureSlidesText(pres));
-            Console.Error.WriteLine("[PPTCopier] DRM check passed. Copying slides to fresh instance...");
+            MarkdownExporter.WritePresentationMarkdown(markdownPath, slides);
+            Console.Error.WriteLine("[PPTCopier] DRM check passed. Rebuilding PPTX package...");
 
-            // 2. Spin up a fresh PowerPoint instance (no DRM context)
-            var pptType = Type.GetTypeFromProgID("PowerPoint.Application")
-                ?? throw new InvalidOperationException("PowerPoint.Application COM class not registered.");
-            freshApp = Activator.CreateInstance(pptType)
-                ?? throw new InvalidOperationException("Failed to create PowerPoint.Application COM instance.");
-
-            // 3. Create a new blank presentation in the fresh instance
-            // WithWindow: 0 = msoFalse (hidden)
-            newPres = freshApp.Presentations.Add(WithWindow: 0);
-
-            // 4. Copy each slide via clipboard into the fresh presentation
-            int slideCount = SafeToInt(pres.Slides?.Count);
-            for (int i = 1; i <= slideCount; i++)
-            {
-                try
-                {
-                    pres.Slides[i].Copy();
-                    newPres.Slides.Paste(i);
-                    Console.Error.WriteLine($"[PPTCopier] Slide {i}/{slideCount} copied.");
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"[PPTCopier] Warning on slide {i}: {ex.Message}");
-                }
-            }
-
-            // Remove the blank slide that was added by Presentations.Add() if slides were pasted
-            if (slideCount > 0)
-            {
-                try
-                {
-                    int newSlideCount = SafeToInt(newPres.Slides?.Count);
-                    // Presentations.Add() creates one blank slide at index 1;
-                    // pasted slides go in at the specified index pushing it to the end.
-                    if (newSlideCount > slideCount)
-                        newPres.Slides[newSlideCount].Delete();
-                }
-                catch { }
-            }
-
-            // 5. Save from the fresh instance — DRM driver will not intercept this
-            EnsureDirectory(outputPath);
-            int fileFormat = GetPptFileFormat(Path.GetExtension(filePath).ToLowerInvariant());
-            newPres.SaveAs(FileName: outputPath, FileFormat: fileFormat);
+            OpenXmlSaver.SavePresentation(outputPath, slides);
 
             Console.Error.WriteLine($"[PPTCopier] Saved: {outputPath}");
         }
         finally
         {
-            try { newPres?.Close(); } catch { }
-            try { freshApp?.Quit(); } catch { }
             try { pres?.Close(); } catch { }
             try { app?.Dispose(); } catch { }
             watchdog.KillIfRunning();

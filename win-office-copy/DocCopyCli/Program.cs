@@ -213,6 +213,7 @@ class Program
         {
             ".doc" or ".docx" => ".docx",
             ".xls" or ".xlsx" => ".xlsx",
+            ".ppt" or ".pptx" or ".pptm" or ".ppsx" or ".pps" or ".potx" or ".potm" => ".pptx",
             _ => inputExtension,
         };
     }
