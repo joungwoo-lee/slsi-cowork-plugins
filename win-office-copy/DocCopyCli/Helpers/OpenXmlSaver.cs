@@ -185,6 +185,11 @@ internal static class OpenXmlSaver
         if (paragraphs.Count == 0)
             paragraphs.Add(new A.Paragraph(new A.EndParagraphRunProperties { Language = "en-US", FontSize = 1800 }));
 
+        var textBody = new P.TextBody(
+            new A.BodyProperties { LeftInset = 0, RightInset = 0, TopInset = 0, BottomInset = 0, Wrap = A.TextWrappingValues.Square },
+            new A.ListStyle());
+        textBody.Append(paragraphs);
+
         return new P.Shape(
             new P.NonVisualShapeProperties(
                 new P.NonVisualDrawingProperties { Id = 2U, Name = "Content Placeholder 1" },
@@ -194,10 +199,7 @@ internal static class OpenXmlSaver
                 new A.Transform2D(
                     new A.Offset { X = 457200L, Y = 457200L },
                     new A.Extents { Cx = 8229600L, Cy = 4114800L })),
-            new P.TextBody(
-                new A.BodyProperties { LeftInset = 0, RightInset = 0, TopInset = 0, BottomInset = 0, Wrap = A.TextWrappingValues.Square },
-                new A.ListStyle(),
-                paragraphs.ToArray()));
+            textBody);
     }
 
     private static List<A.Paragraph> BuildSlideParagraphs(string slideText)
