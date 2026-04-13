@@ -13,6 +13,15 @@ user-invocable: true
 - 인덱스(`AGENTS.md`)와 AAAK 압축 요약(`_closets/`)을 폴더 안에 생성
 - 원본 파일은 절대 수정하지 않음
 
+## 필수 전제
+
+Closet 파일이나 AAAK zettel을 작성하기 전에 반드시 같은 디렉토리의 `AAAK_WRITING_GUIDE.md`를 읽고 그 규칙을 그대로 따른다.
+
+- AAAK를 이미 안다고 가정하지 말 것
+- `key_quote`는 반드시 원문 그대로 복사할 것
+- 가이드에 없는 형식을 임의로 만들지 말 것
+- 애매하면 더 짧고 보수적인 AAAK를 쓸 것
+
 ---
 
 ## 인제스트 실행 절차
@@ -52,6 +61,8 @@ JSON의 `new_and_changed` 배열을 읽는다. 각 항목 구조:
 `new_and_changed`의 각 파일에 대해 `_closets/<room>.aaak.md`를 생성한다.
 같은 `room`에 여러 파일이 있으면 하나의 Closet 파일에 합산한다.
 
+Closet 파일을 쓰기 전에 반드시 `AAAK_WRITING_GUIDE.md`를 읽고 아래 형식과 필드 규칙을 검증한다.
+
 **Closet 파일 형식:**
 
 ```markdown
@@ -78,6 +89,8 @@ T:{ZID_a}<->{ZID_b}|{relation_label}
 - `weight`: 중요도 1-5 (핵심 결정/아키텍처=5, 일반 참고=2)
 - `flags`: `TECHNICAL`, `DECISION`, `CORE`, `ORIGIN` 중 해당하는 것만
 - `T:` 줄: 같은 주제로 연결되는 ZID 쌍 (선택)
+
+위 요약 규칙보다 더 구체적인 판단 기준은 모두 `AAAK_WRITING_GUIDE.md`를 우선한다.
 
 **Closet 파일 끝에 SOURCE LINKS 추가:**
 
@@ -164,6 +177,16 @@ Tunnels는 JSON의 `tunnels` 배열 사용.
 **이미 AGENTS.md가 있을 때**: LOG 섹션의 기존 항목은 유지하고 새 항목을 추가.
 Wing/Room 구조는 전체 재생성 (기존 state + 신규 파일 합산).
 
+### Step 4A. AAAK 검증
+
+Closet 파일 저장 전 아래를 반드시 확인한다.
+
+1. 모든 zettel이 `{ZID}:{ENTITIES}|{topic_keywords}|"{key_quote}"|{weight}|{flags}` 형식을 지키는가
+2. 모든 `key_quote`가 원문 청크 안에 문자열 그대로 존재하는가
+3. `topic_keywords`가 소문자이며 5개 이하인가
+4. `flags`가 허용 목록 안에만 있는가
+5. 장황한 요약이 아니라 검색용 인덱스 역할을 하는가
+
 ### Step 5. 완료 처리
 
 ```bash
@@ -208,3 +231,4 @@ python3 <skill_dir>/scripts/ingest.py <folder_path> --status
 
 - [MemPalace](https://github.com/MemPalace/mempalace) — Wing/Room/Drawer 구조, AAAK 다이얼렉트
 - [Karpathy LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — LLM 유지 마크다운 위키 패턴
+- `AAAK_WRITING_GUIDE.md` — 이 스킬 전용 AAAK 작성 스펙 및 변환 절차
