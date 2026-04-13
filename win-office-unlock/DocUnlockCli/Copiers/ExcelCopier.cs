@@ -26,12 +26,19 @@ public static class ExcelCopier
 
         try
         {
+            if (!HasRunningExcelProcess())
+            {
+                Console.Error.WriteLine("[ExcelCopier] No running Excel detected. Starting blank Excel host first.");
+                app = StartBlankExcelHost();
+                watchdog.DetectNewProcess();
+            }
+
             // 1. Shell-open the DRM workbook
             Console.Error.WriteLine($"[ExcelCopier] Opening workbook via shell: {filePath}");
             Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true, Verb = "open" });
             watchdog.DetectNewProcess();
 
-            app = WaitForExcelApplication(watchdog, watchdog.TimeoutMs);
+            app ??= WaitForExcelApplication(watchdog, watchdog.TimeoutMs);
             Console.Error.WriteLine("[ExcelCopier] Attached to running Excel instance.");
             try { app.DisplayAlerts = false; } catch { }
             try { app.Visible = true; } catch { }
@@ -69,7 +76,6 @@ public static class ExcelCopier
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
             watchdog.DetectNewProcess();
-            try { return GetActiveComObject("Excel.Application"); } catch { }
             try
             {
                 if (watchdog.TrackedPid is int pid)
@@ -85,9 +91,46 @@ public static class ExcelCopier
                 if (a != null) { Console.Error.WriteLine("[ExcelCopier] Attached via global window scan fallback."); return a; }
             }
             catch { }
+            try { return GetActiveComObject("Excel.Application"); } catch { }
             Thread.Sleep(PollIntervalMs);
         }
         throw new TimeoutException($"Excel instance was not available after {timeoutMs / 1000}s.");
+    }
+
+    private static bool HasRunningExcelProcess()
+    {
+        foreach (var proc in Process.GetProcessesByName("EXCEL"))
+        {
+            try
+            {
+                if (!proc.HasExited)
+                    return true;
+            }
+            catch { }
+            finally
+            {
+                try { proc.Dispose(); } catch { }
+            }
+        }
+
+        return false;
+    }
+
+    private static object StartBlankExcelHost()
+    {
+        var excelType = Type.GetTypeFromProgID("Excel.Application")
+            ?? throw new InvalidOperationException("Excel is not installed or COM class not registered.");
+        dynamic host = Activator.CreateInstance(excelType)
+            ?? throw new InvalidOperationException("Failed to create Excel.Application COM instance.");
+
+        try { host.Visible = true; } catch { }
+        try { host.DisplayAlerts = false; } catch { }
+        try { host.ScreenUpdating = true; } catch { }
+        try { host.UserControl = true; } catch { }
+        try { host.Interactive = true; } catch { }
+        try { host.Workbooks.Add(); } catch { }
+
+        return host;
     }
 
     private static object WaitForWorkbook(object app, string filePath, int timeoutMs)
