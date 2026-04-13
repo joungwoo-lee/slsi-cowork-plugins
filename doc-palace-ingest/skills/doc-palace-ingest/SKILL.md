@@ -63,6 +63,8 @@ JSON의 `new_and_changed` 배열을 읽는다. 각 항목 구조:
 
 Closet 파일을 쓰기 전에 반드시 `AAAK_WRITING_GUIDE.md`를 읽고 아래 형식과 필드 규칙을 검증한다.
 
+중요: Closet 안의 AAAK는 얇은 문서 요약이 아니라 문서 내용을 AAAK로 가능한 충실하게 다시 적은 것이어야 한다. `chunks` 배열은 읽기 보조 데이터일 뿐이며, 최종 AAAK는 각 문서를 처음부터 끝까지 읽은 뒤 문서의 의미 있는 내용을 빠짐없이 zettel들로 풀어 써야 한다.
+
 **Closet 파일 형식:**
 
 ```markdown
@@ -82,15 +84,17 @@ T:{ZID_a}<->{ZID_b}|{relation_label}
 
 **AAAK Zettel 작성 규칙:**
 - `file_num`: 이 Closet 안에서 파일 순번 (1부터)
-- `ZID`: Z1, Z2, Z3... (파일 내 청크 순번)
-- `ENTITIES`: 청크의 주요 엔티티 코드 (ENT SPEC에 정의한 것), 없으면 생략
+- `ZID`: Z1, Z2, Z3... (문서의 의미 있는 포인트 순번)
+- `ENTITIES`: 해당 포인트에 중요한 엔티티 코드 (ENT SPEC에 정의한 것), 없으면 생략
 - `topic_keywords`: 쉼표 구분, 최대 5개, 소문자
-- `"key_quote"`: 원문에서 그대로 발췌한 핵심 문장 1개 (반드시 원문 그대로)
-- `weight`: 중요도 1-5 (핵심 결정/아키텍처=5, 일반 참고=2)
+- `"key_quote"`: 문서 어디에서든 원문 그대로 발췌한 핵심 문장 1개 (반드시 원문 그대로)
+- `weight`: 중요도 1-5 (해당 포인트의 중요도 기준)
 - `flags`: `TECHNICAL`, `DECISION`, `CORE`, `ORIGIN` 중 해당하는 것만
-- `T:` 줄: 같은 주제로 연결되는 ZID 쌍 (선택)
+- `T:` 줄: 문서 내 포인트끼리 명확히 연결될 때 사용 (선택)
 
 위 요약 규칙보다 더 구체적인 판단 기준은 모두 `AAAK_WRITING_GUIDE.md`를 우선한다.
+
+문서당 zettel 수를 인위적으로 적게 제한하지 말 것. 긴 기술 문서라면 필요한 만큼 많이 작성한다. 내용이 많은데 AAAK가 짧다면 잘못 작성한 것이다.
 
 **Closet 파일 끝에 SOURCE LINKS 추가:**
 
@@ -115,7 +119,9 @@ ENT: JWT=jwt_token, ACC=access_token, REF=refresh_token, EXP=expiry
 Z1:JWT+ACC|access_token,15min,header,bearer|"access token은 15분 유효, Authorization 헤더로 전달"|5|TECHNICAL+DECISION
 Z2:JWT+REF|refresh_token,7day,httponly,cookie|"refresh token은 7일, HttpOnly 쿠키 전용"|5|TECHNICAL+DECISION
 Z3:JWT|blacklist,redis,jti,logout|"로그아웃 시 Redis에 jti 블랙리스트 등록"|4|TECHNICAL
+Z4:JWT|rotation,replay,refresh_flow,revocation|"refresh token은 매 재발급 시 rotation한다"|4|TECHNICAL+DECISION
 T:Z1<->Z2|token_pair_lifecycle
+T:Z2<->Z4|refresh_rotation_flow
 
 2|ERR|2026-04-13|JWT 에러 응답 정의
 Z4:ERR|401,expired,token_invalid|"토큰 만료 시 401 EXPIRED_TOKEN 반환"|4|TECHNICAL
@@ -181,11 +187,14 @@ Wing/Room 구조는 전체 재생성 (기존 state + 신규 파일 합산).
 
 Closet 파일 저장 전 아래를 반드시 확인한다.
 
-1. 모든 zettel이 `{ZID}:{ENTITIES}|{topic_keywords}|"{key_quote}"|{weight}|{flags}` 형식을 지키는가
-2. 모든 `key_quote`가 원문 청크 안에 문자열 그대로 존재하는가
-3. `topic_keywords`가 소문자이며 5개 이하인가
-4. `flags`가 허용 목록 안에만 있는가
-5. 장황한 요약이 아니라 검색용 인덱스 역할을 하는가
+1. 각 문서를 끝까지 읽은 뒤 AAAK를 작성했는가
+2. 모든 zettel이 `{ZID}:{ENTITIES}|{topic_keywords}|"{key_quote}"|{weight}|{flags}` 형식을 지키는가
+3. 모든 `key_quote`가 원문 문서 안에 문자열 그대로 존재하는가
+4. zettel 집합이 문서의 의미 있는 내용을 거의 다 담고 있는가, 일부 대표 포인트만 남긴 것은 아닌가
+5. 결정, 제약, 절차, 예외, 실패 케이스가 있으면 빠지지 않았는가
+6. `topic_keywords`가 소문자이며 5개 이하인가
+7. `flags`가 허용 목록 안에만 있는가
+8. 긴 문서인데도 AAAK가 지나치게 짧지 않은가
 
 ### Step 5. 완료 처리
 
