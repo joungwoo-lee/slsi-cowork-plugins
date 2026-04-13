@@ -386,9 +386,12 @@ public static class ExcelCopier
 
         if (!changed) return false;
 
-        IntPtr shellWindow = GetShellWindow();
-        if (shellWindow != IntPtr.Zero)
-            SetForegroundWindow(shellWindow);
+        IntPtr backgroundTarget = GetBackgroundTargetWindow();
+        if (backgroundTarget != IntPtr.Zero)
+        {
+            ShowWindowAsync(backgroundTarget, SwRestore);
+            SetForegroundWindow(backgroundTarget);
+        }
 
         return true;
     }
@@ -422,6 +425,47 @@ public static class ExcelCopier
             }
         }
         catch { }
+    }
+
+    private static IntPtr GetBackgroundTargetWindow()
+    {
+        IntPtr consoleWindow = GetConsoleWindow();
+        if (consoleWindow != IntPtr.Zero && !IsExcelWindow(consoleWindow))
+            return consoleWindow;
+
+        IntPtr foregroundWindow = GetForegroundWindow();
+        if (foregroundWindow != IntPtr.Zero && !IsExcelWindow(foregroundWindow))
+            return foregroundWindow;
+
+        IntPtr shellWindow = GetShellWindow();
+        if (shellWindow != IntPtr.Zero && !IsExcelWindow(shellWindow))
+            return shellWindow;
+
+        return IntPtr.Zero;
+    }
+
+    private static bool IsExcelWindow(IntPtr hwnd)
+    {
+        if (hwnd == IntPtr.Zero) return false;
+
+        try
+        {
+            GetWindowThreadProcessId(hwnd, out uint pid);
+            if (pid != 0)
+            {
+                using var process = Process.GetProcessById((int)pid);
+                if (string.Equals(process.ProcessName, "EXCEL", StringComparison.OrdinalIgnoreCase))
+                    return true;
+            }
+        }
+        catch { }
+
+        var sb = new StringBuilder(256);
+        int len = GetClassName(hwnd, sb, sb.Capacity);
+        string cls = len > 0 ? sb.ToString(0, len) : string.Empty;
+        return string.Equals(cls, "XLMAIN", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(cls, "EXCEL7", StringComparison.OrdinalIgnoreCase) ||
+               string.Equals(cls, "XLDESK", StringComparison.OrdinalIgnoreCase);
     }
 
     private static object? TryGetAccessibleObject(IntPtr hwnd)
@@ -526,7 +570,13 @@ public static class ExcelCopier
     private static extern IntPtr GetShellWindow();
 
     [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+    [DllImport("kernel32.dll")]
+    private static extern IntPtr GetConsoleWindow();
 
     [DllImport("user32.dll")]
     private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
