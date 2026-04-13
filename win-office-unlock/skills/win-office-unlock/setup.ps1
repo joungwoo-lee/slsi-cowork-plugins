@@ -49,13 +49,26 @@ if (-not (Test-Path $InstallDir)) {
     New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
 }
 
-Write-Host "[2/3] Downloading release zip..." -ForegroundColor Yellow
+$userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+if ($userPath -notlike "*$InstallDir*") {
+    [Environment]::SetEnvironmentVariable("PATH", "$userPath;$InstallDir", "User")
+    Write-Host "[2/3] PATH updated (restart terminal to apply)" -ForegroundColor Yellow
+} else {
+    Write-Host "[2/3] PATH already contains InstallDir" -ForegroundColor Yellow
+}
+
+if (Test-Path $BinaryPath) {
+    Write-Host "[3/3] Existing binary found, skipping download and extract." -ForegroundColor Yellow
+}
+else {
+Write-Host "[3/3] Downloading release zip..." -ForegroundColor Yellow
 
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $webClient = New-Object System.Net.WebClient
     $webClient.Headers.Add("User-Agent", "DocUnlockCli-Setup")
     $webClient.DownloadFile($downloadUrl, $ZipPath)
+
     $fileSize = (Get-Item $ZipPath).Length / 1MB
     Write-Host "  Done: $ZipPath ($([math]::Round($fileSize, 1)) MB)" -ForegroundColor Gray
 }
@@ -64,13 +77,9 @@ catch {
     exit 1
 }
 
-Write-Host "[3/3] Extracting and registering to PATH..." -ForegroundColor Yellow
+Write-Host "  Extracting release zip..." -ForegroundColor Yellow
 
 try {
-    if (Test-Path $BinaryPath) {
-        Remove-Item $BinaryPath -Force
-    }
-
     Expand-Archive -Path $ZipPath -DestinationPath $InstallDir -Force
 
     if (-not (Test-Path $BinaryPath)) {
@@ -83,13 +92,6 @@ catch {
     Write-Host "Error: Extract failed. $_" -ForegroundColor Red
     exit 1
 }
-
-$userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-if ($userPath -notlike "*$InstallDir*") {
-    [Environment]::SetEnvironmentVariable("PATH", "$userPath;$InstallDir", "User")
-    Write-Host "  PATH updated (restart terminal to apply)" -ForegroundColor Gray
-} else {
-    Write-Host "  PATH already contains InstallDir" -ForegroundColor Gray
 }
 
 Write-Host ""
