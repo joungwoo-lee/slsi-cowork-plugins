@@ -1,0 +1,6 @@
+{
+  "name": "docs-index-build2",
+  "display_name": "Docs Index Build 2",
+  "description": "문서 폴더를 인제스트해 더 강한 배제 메타데이터를 가진 AGENTS.md와 압축 AAAK closet 파일을 생성/업데이트한다.",
+  "version": "2.0.0"
+}
