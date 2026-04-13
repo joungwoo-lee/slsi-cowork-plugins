@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using DocCopyCli.Helpers;
 
 namespace DocCopyCli.Copiers;
 
@@ -9,11 +10,10 @@ public static class WordCopier
 
     public static void Copy(string filePath, string outputPath)
     {
+        outputPath = OpenXmlSaver.NormalizeWordOutputPath(outputPath);
         using var watchdog = new ProcessWatchdog("WINWORD");
         dynamic? app = null;
         dynamic? doc = null;
-        dynamic? freshApp = null;
-        dynamic? newDoc = null;
 
         try
         {
@@ -31,40 +31,18 @@ public static class WordCopier
 
             Console.Error.WriteLine("[WordCopier] Document opened. Checking DRM...");
             WaitForDrmDecryption(doc, watchdog.TimeoutMs);
-            Console.Error.WriteLine("[WordCopier] DRM check passed. Copying content to clipboard...");
+            string textContent = SafeToString(doc.Content?.Text);
+            string markdownPath = MarkdownExporter.GetMarkdownPath(outputPath, filePath);
+            MarkdownExporter.WriteTextMarkdown(markdownPath, textContent);
+            Console.Error.WriteLine("[WordCopier] DRM check passed. Rebuilding OOXML document...");
 
-            // 2. Copy all content to clipboard while it is decrypted in memory
-            doc.Content.Copy();
-
-            // 3. Spin up a completely fresh Word instance (no DRM context)
-            Console.Error.WriteLine("[WordCopier] Opening fresh Word instance for DRM-free save...");
-            var wordType = Type.GetTypeFromProgID("Word.Application")
-                ?? throw new InvalidOperationException("Word.Application COM class not registered.");
-            freshApp = Activator.CreateInstance(wordType)
-                ?? throw new InvalidOperationException("Failed to create Word.Application COM instance.");
-
-            freshApp.Visible = false;
-            freshApp.DisplayAlerts = false;
-
-            // 4. Create a new blank document and paste — the fresh instance has no DRM association
-            newDoc = freshApp.Documents.Add();
-            newDoc.Content.Paste();
-            Console.Error.WriteLine("[WordCopier] Content pasted into fresh document.");
-
-            // 5. Save from the fresh instance — DRM driver will not intercept this
-            EnsureDirectory(outputPath);
-            int fileFormat = Path.GetExtension(filePath).ToLowerInvariant() == ".doc" ? 0 : 16;
-            newDoc.SaveAs2(
-                FileName: outputPath,
-                FileFormat: fileFormat,
-                AddToRecentFiles: false);
+            // Save as a newly generated OOXML document instead of Office SaveAs.
+            OpenXmlSaver.SaveWordDocument(outputPath, textContent);
 
             Console.Error.WriteLine($"[WordCopier] Saved: {outputPath}");
         }
         finally
         {
-            try { newDoc?.Close(false); } catch { }
-            try { freshApp?.Quit(false); } catch { }
             try { doc?.Close(false); } catch { }
             try { app?.Dispose(); } catch { }
             watchdog.KillIfRunning();
@@ -137,10 +115,9 @@ public static class WordCopier
             "Open the document manually to authenticate DRM first, then retry.");
     }
 
-    private static void EnsureDirectory(string filePath)
+    private static string SafeToString(object? value)
     {
-        string? dir = Path.GetDirectoryName(filePath);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+        try { return value?.ToString() ?? string.Empty; } catch { return string.Empty; }
     }
 
     private static int SafeToInt(object? value)

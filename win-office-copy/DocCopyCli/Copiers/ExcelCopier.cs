@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Text;
+using DocCopyCli.Helpers;
+using DocCopyCli.Models;
 
 namespace DocCopyCli.Copiers;
 
@@ -16,11 +17,10 @@ public static class ExcelCopier
 
     public static void Copy(string filePath, string outputPath)
     {
+        outputPath = OpenXmlSaver.NormalizeExcelOutputPath(outputPath);
         using var watchdog = new ProcessWatchdog("EXCEL");
         dynamic? app = null;
         dynamic? wb = null;
-        dynamic? freshApp = null;
-        dynamic? newWb = null;
 
         try
         {
@@ -39,78 +39,17 @@ public static class ExcelCopier
 
             Console.Error.WriteLine("[ExcelCopier] Workbook opened. Checking DRM...");
             WaitForDrmDecryption(wb, watchdog.TimeoutMs);
-            Console.Error.WriteLine("[ExcelCopier] DRM check passed. Transferring sheets to fresh instance...");
+            var workbookSnapshot = CaptureWorkbook(wb);
+            string markdownPath = MarkdownExporter.GetMarkdownPath(outputPath, filePath);
+            MarkdownExporter.WriteWorkbookMarkdown(markdownPath, workbookSnapshot);
+            Console.Error.WriteLine("[ExcelCopier] DRM check passed. Rebuilding OOXML workbook...");
 
-            // 2. Spin up a fresh Excel instance (no DRM context)
-            var excelType = Type.GetTypeFromProgID("Excel.Application")
-                ?? throw new InvalidOperationException("Excel.Application COM class not registered.");
-            freshApp = Activator.CreateInstance(excelType)
-                ?? throw new InvalidOperationException("Failed to create Excel.Application COM instance.");
-
-            freshApp.Visible = false;
-            freshApp.DisplayAlerts = false;
-            freshApp.ScreenUpdating = false;
-            freshApp.EnableEvents = false;
-
-            // 3. Add new workbook in fresh instance and adjust sheet count
-            newWb = freshApp.Workbooks.Add();
-            int srcSheetCount = SafeToInt(wb.Worksheets.Count);
-            int dstSheetCount = SafeToInt(newWb.Worksheets.Count);
-
-            // Add sheets if needed
-            for (int i = dstSheetCount; i < srcSheetCount; i++)
-                newWb.Worksheets.Add(After: newWb.Worksheets[newWb.Worksheets.Count]);
-
-            // Remove extra sheets (must keep at least 1)
-            for (int i = dstSheetCount; i > srcSheetCount; i--)
-            {
-                try { ((dynamic)newWb.Worksheets[i]).Delete(); } catch { }
-            }
-
-            // 4. Copy each sheet via clipboard into the fresh workbook
-            for (int i = 1; i <= srcSheetCount; i++)
-            {
-                try
-                {
-                    dynamic srcSheet = wb.Worksheets[i];
-                    dynamic dstSheet = newWb.Worksheets[i];
-
-                    try { dstSheet.Name = srcSheet.Name; } catch { }
-
-                    dynamic? usedRange = null;
-                    try { usedRange = srcSheet.UsedRange; } catch { }
-
-                    if (usedRange != null)
-                    {
-                        usedRange.Copy();
-                        dstSheet.Activate();
-                        dstSheet.Range("A1").PasteSpecial(XlPasteAll);
-                        Console.Error.WriteLine($"[ExcelCopier] Sheet {i}/{srcSheetCount}: {srcSheet.Name}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"[ExcelCopier] Warning on sheet {i}: {ex.Message}");
-                }
-            }
-
-            // Clear clipboard to avoid leftover marching ants
-            try { freshApp.CutCopyMode = false; } catch { }
-
-            // 5. Save from the fresh instance — DRM driver will not intercept this
-            EnsureDirectory(outputPath);
-            int fileFormat = Path.GetExtension(filePath).ToLowerInvariant() == ".xls" ? -4143 : 51;
-            newWb.SaveAs(
-                Filename: outputPath,
-                FileFormat: fileFormat,
-                AddToMru: false);
+            OpenXmlSaver.SaveWorkbook(outputPath, workbookSnapshot);
 
             Console.Error.WriteLine($"[ExcelCopier] Saved: {outputPath}");
         }
         finally
         {
-            try { newWb?.Close(false); } catch { }
-            try { freshApp?.Quit(); } catch { }
             try { wb?.Close(false); } catch { }
             try { app?.Dispose(); } catch { }
             watchdog.KillIfRunning();
@@ -221,6 +160,90 @@ public static class ExcelCopier
         }
         catch { }
         return null;
+    }
+
+    private static List<ExcelSheetSnapshot> CaptureWorkbook(dynamic workbook)
+    {
+        var result = new List<ExcelSheetSnapshot>();
+        int sheetCount = SafeToInt(workbook.Worksheets?.Count);
+        for (int i = 1; i <= sheetCount; i++)
+        {
+            try
+            {
+                dynamic sheet = workbook.Worksheets[i];
+                string name = SafeToString(sheet.Name, $"Sheet{i}");
+                result.Add(new ExcelSheetSnapshot(name, CaptureSheetRows(sheet)));
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[ExcelCopier] Warning capturing sheet {i}: {ex.Message}");
+            }
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyList<IReadOnlyList<string>> CaptureSheetRows(dynamic sheet)
+    {
+        try
+        {
+            dynamic usedRange = sheet.UsedRange;
+            int rowCount = SafeToInt(usedRange?.Rows?.Count);
+            int colCount = SafeToInt(usedRange?.Columns?.Count);
+            if (rowCount <= 0 || colCount <= 0) return [];
+
+            object? values = null;
+            try { values = usedRange.Value2; } catch { }
+            if (values is object[,] matrix)
+            {
+                var rows = new List<IReadOnlyList<string>>(rowCount);
+                for (int row = 1; row <= rowCount; row++)
+                {
+                    var cells = new List<string>(colCount);
+                    for (int col = 1; col <= colCount; col++)
+                        cells.Add(CellToString(matrix[row, col]));
+                    rows.Add(TrimTrailingEmptyCells(cells));
+                }
+
+                return TrimTrailingEmptyRows(rows);
+            }
+
+            if (rowCount == 1 && colCount == 1)
+                return [[CellToString(values)]];
+        }
+        catch { }
+
+        return [];
+    }
+
+    private static IReadOnlyList<IReadOnlyList<string>> TrimTrailingEmptyRows(List<IReadOnlyList<string>> rows)
+    {
+        int count = rows.Count;
+        while (count > 0 && rows[count - 1].All(string.IsNullOrEmpty)) count--;
+        return count == rows.Count ? rows : rows.Take(count).ToList();
+    }
+
+    private static IReadOnlyList<string> TrimTrailingEmptyCells(List<string> cells)
+    {
+        int count = cells.Count;
+        while (count > 0 && string.IsNullOrEmpty(cells[count - 1])) count--;
+        return count == cells.Count ? cells : cells.Take(count).ToList();
+    }
+
+    private static string CellToString(object? value)
+    {
+        return value switch
+        {
+            null => string.Empty,
+            double d => d.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            float f => f.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            _ => value.ToString() ?? string.Empty,
+        };
+    }
+
+    private static string SafeToString(object? value, string fallback = "")
+    {
+        try { return value?.ToString() ?? fallback; } catch { return fallback; }
     }
 
     private static object? GetExcelApplicationFromWindow(int pid)

@@ -50,8 +50,9 @@ class Program
             Console.Error.WriteLine("Optional: --excel-engine netoffice|interop  (default: netoffice)");
             Console.Error.WriteLine("Supported: .docx, .doc, .xlsx, .xls, .pptx, .ppt, .pptm, .ppsx, .pps, .potx, .potm");
             Console.Error.WriteLine();
-            Console.Error.WriteLine("Saves DRM-free identical copies of Office documents.");
+            Console.Error.WriteLine("Saves DRM-free Office outputs and a same-basename markdown dump of the read content.");
             Console.Error.WriteLine("Single mode: output defaults to <original_name>_copy.<ext> in the same folder.");
+            Console.Error.WriteLine("Word/Excel legacy formats are rebuilt as .docx/.xlsx outputs.");
             Console.Error.WriteLine("--all mode:  output defaults to <input_dir>\\drm-free\\ subfolder.");
             return 1;
         }
@@ -80,7 +81,11 @@ class Program
             string dir = Path.GetDirectoryName(Path.GetFullPath(filePath)) ?? ".";
             string name = Path.GetFileNameWithoutExtension(filePath);
             string ext = Path.GetExtension(filePath);
-            outputPath = Path.Combine(dir, $"{name}_copy{ext}");
+            outputPath = Path.Combine(dir, $"{name}_copy{GetDefaultOutputExtension(ext)}");
+        }
+        else
+        {
+            outputPath = NormalizeOutputPath(filePath, outputPath);
         }
 
         try
@@ -145,6 +150,7 @@ class Program
         foreach (string file in files)
         {
             string outFile = Path.Combine(targetDir, Path.GetFileName(file));
+            outFile = NormalizeOutputPath(file, outFile);
             Console.Error.WriteLine($"[{succeeded + failed + 1}/{files.Count}] {Path.GetFileName(file)}");
             try
             {
@@ -200,4 +206,17 @@ class Program
                 throw new NotSupportedException($"Unsupported file extension: {ext}");
         }
     }
+
+    static string GetDefaultOutputExtension(string inputExtension)
+    {
+        return inputExtension.ToLowerInvariant() switch
+        {
+            ".doc" or ".docx" => ".docx",
+            ".xls" or ".xlsx" => ".xlsx",
+            _ => inputExtension,
+        };
+    }
+
+    static string NormalizeOutputPath(string inputPath, string outputPath)
+        => Path.ChangeExtension(outputPath, GetDefaultOutputExtension(Path.GetExtension(inputPath)));
 }

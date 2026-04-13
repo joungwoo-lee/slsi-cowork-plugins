@@ -1,4 +1,6 @@
 using System.Runtime.InteropServices;
+using DocCopyCli.Helpers;
+using DocCopyCli.Models;
 
 namespace DocCopyCli.Copiers;
 
@@ -10,14 +12,11 @@ namespace DocCopyCli.Copiers;
 /// </summary>
 public static class ExcelInteropCopier
 {
-    private const int XlPasteAll = -4104;
-
     public static void Copy(string filePath, string outputPath)
     {
+        outputPath = OpenXmlSaver.NormalizeExcelOutputPath(outputPath);
         dynamic? app = null;
         dynamic? workbook = null;
-        dynamic? freshApp = null;
-        dynamic? newWb = null;
 
         using var messageFilter = OleMessageFilter.Register();
 
@@ -45,82 +44,23 @@ public static class ExcelInteropCopier
                 AddToMru: false,
                 CorruptLoad: 0);
 
-            Console.Error.WriteLine("[ExcelInteropCopier] Workbook opened. Transferring to fresh instance...");
+            Console.Error.WriteLine("[ExcelInteropCopier] Workbook opened. Capturing content...");
+            var workbookSnapshot = CaptureWorkbook(workbook);
+            string markdownPath = MarkdownExporter.GetMarkdownPath(outputPath, filePath);
+            MarkdownExporter.WriteWorkbookMarkdown(markdownPath, workbookSnapshot);
+            Console.Error.WriteLine("[ExcelInteropCopier] Workbook opened. Rebuilding OOXML workbook...");
 
-            // Spin up a separate fresh Excel instance (no DRM context)
-            freshApp = Activator.CreateInstance(excelType)
-                ?? throw new InvalidOperationException("Failed to create fresh Excel.Application COM instance.");
-
-            freshApp.Visible = false;
-            freshApp.DisplayAlerts = false;
-            freshApp.ScreenUpdating = false;
-            freshApp.EnableEvents = false;
-
-            newWb = freshApp.Workbooks.Add();
-
-            int srcSheetCount = SafeToInt(workbook.Worksheets.Count);
-            int dstSheetCount = SafeToInt(newWb.Worksheets.Count);
-
-            for (int i = dstSheetCount; i < srcSheetCount; i++)
-                newWb.Worksheets.Add(After: newWb.Worksheets[newWb.Worksheets.Count]);
-            for (int i = dstSheetCount; i > srcSheetCount; i--)
-            {
-                try { ((dynamic)newWb.Worksheets[i]).Delete(); } catch { }
-            }
-
-            for (int i = 1; i <= srcSheetCount; i++)
-            {
-                try
-                {
-                    dynamic srcSheet = workbook.Worksheets[i];
-                    dynamic dstSheet = newWb.Worksheets[i];
-                    try { dstSheet.Name = srcSheet.Name; } catch { }
-
-                    dynamic? usedRange = null;
-                    try { usedRange = srcSheet.UsedRange; } catch { }
-
-                    if (usedRange != null)
-                    {
-                        usedRange.Copy();
-                        dstSheet.Activate();
-                        dstSheet.Range("A1").PasteSpecial(XlPasteAll);
-                        Console.Error.WriteLine($"[ExcelInteropCopier] Sheet {i}/{srcSheetCount}: {srcSheet.Name}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"[ExcelInteropCopier] Warning on sheet {i}: {ex.Message}");
-                }
-            }
-
-            try { freshApp.CutCopyMode = false; } catch { }
-
-            EnsureDirectory(outputPath);
-            int fileFormat = Path.GetExtension(filePath).ToLowerInvariant() == ".xls" ? -4143 : 51;
-            newWb.SaveAs(
-                Filename: outputPath,
-                FileFormat: fileFormat,
-                AddToMru: false);
+            OpenXmlSaver.SaveWorkbook(outputPath, workbookSnapshot);
 
             Console.Error.WriteLine($"[ExcelInteropCopier] Saved: {outputPath}");
         }
         finally
         {
-            try { newWb?.Close(false); } catch { }
-            try { freshApp?.Quit(); } catch { }
-            ReleaseComObject(ref newWb);
-            ReleaseComObject(ref freshApp);
             try { workbook?.Close(false); } catch { }
             try { app?.Quit(); } catch { }
             ReleaseComObject(ref workbook);
             ReleaseComObject(ref app);
         }
-    }
-
-    private static void EnsureDirectory(string filePath)
-    {
-        string? dir = Path.GetDirectoryName(filePath);
-        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
     }
 
     private static int SafeToInt(object? value)
@@ -133,5 +73,89 @@ public static class ExcelInteropCopier
         if (obj == null) return;
         try { if (Marshal.IsComObject(obj)) Marshal.ReleaseComObject(obj); } catch { }
         obj = null;
+    }
+
+    private static List<ExcelSheetSnapshot> CaptureWorkbook(dynamic workbook)
+    {
+        var result = new List<ExcelSheetSnapshot>();
+        int sheetCount = SafeToInt(workbook.Worksheets?.Count);
+        for (int i = 1; i <= sheetCount; i++)
+        {
+            try
+            {
+                dynamic sheet = workbook.Worksheets[i];
+                string name = SafeToString(sheet.Name, $"Sheet{i}");
+                result.Add(new ExcelSheetSnapshot(name, CaptureSheetRows(sheet)));
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"[ExcelInteropCopier] Warning capturing sheet {i}: {ex.Message}");
+            }
+        }
+
+        return result;
+    }
+
+    private static IReadOnlyList<IReadOnlyList<string>> CaptureSheetRows(dynamic sheet)
+    {
+        try
+        {
+            dynamic usedRange = sheet.UsedRange;
+            int rowCount = SafeToInt(usedRange?.Rows?.Count);
+            int colCount = SafeToInt(usedRange?.Columns?.Count);
+            if (rowCount <= 0 || colCount <= 0) return [];
+
+            object? values = null;
+            try { values = usedRange.Value2; } catch { }
+            if (values is object[,] matrix)
+            {
+                var rows = new List<IReadOnlyList<string>>(rowCount);
+                for (int row = 1; row <= rowCount; row++)
+                {
+                    var cells = new List<string>(colCount);
+                    for (int col = 1; col <= colCount; col++)
+                        cells.Add(CellToString(matrix[row, col]));
+                    rows.Add(TrimTrailingEmptyCells(cells));
+                }
+
+                return TrimTrailingEmptyRows(rows);
+            }
+
+            if (rowCount == 1 && colCount == 1)
+                return [[CellToString(values)]];
+        }
+        catch { }
+
+        return [];
+    }
+
+    private static IReadOnlyList<IReadOnlyList<string>> TrimTrailingEmptyRows(List<IReadOnlyList<string>> rows)
+    {
+        int count = rows.Count;
+        while (count > 0 && rows[count - 1].All(string.IsNullOrEmpty)) count--;
+        return count == rows.Count ? rows : rows.Take(count).ToList();
+    }
+
+    private static IReadOnlyList<string> TrimTrailingEmptyCells(List<string> cells)
+    {
+        int count = cells.Count;
+        while (count > 0 && string.IsNullOrEmpty(cells[count - 1])) count--;
+        return count == cells.Count ? cells : cells.Take(count).ToList();
+    }
+
+    private static string CellToString(object? value)
+    {
+        return value switch
+        {
+            null => string.Empty,
+            double d => d.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            float f => f.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            _ => value.ToString() ?? string.Empty,
+        };
+    }
+
+    private static string SafeToString(object? value, string fallback = "")
+    {
+        try { return value?.ToString() ?? fallback; } catch { return fallback; }
     }
 }

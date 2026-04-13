@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using DocCopyCli.Helpers;
 
 namespace DocCopyCli.Copiers;
 
@@ -41,6 +42,8 @@ public static class PowerPointCopier
 
             Console.Error.WriteLine("[PPTCopier] Presentation opened. Checking DRM...");
             WaitForDrmDecryption(pres, watchdog.TimeoutMs);
+            string markdownPath = MarkdownExporter.GetMarkdownPath(outputPath, filePath);
+            MarkdownExporter.WritePresentationMarkdown(markdownPath, CaptureSlidesText(pres));
             Console.Error.WriteLine("[PPTCopier] DRM check passed. Copying slides to fresh instance...");
 
             // 2. Spin up a fresh PowerPoint instance (no DRM context)
@@ -169,6 +172,42 @@ public static class PowerPointCopier
     {
         string? dir = Path.GetDirectoryName(filePath);
         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+    }
+
+    private static List<string> CaptureSlidesText(dynamic presentation)
+    {
+        var slides = new List<string>();
+        int slideCount = SafeToInt(presentation.Slides?.Count);
+        for (int i = 1; i <= slideCount; i++)
+        {
+            try
+            {
+                dynamic slide = presentation.Slides[i];
+                int shapeCount = SafeToInt(slide.Shapes?.Count);
+                var chunks = new List<string>();
+                for (int j = 1; j <= shapeCount; j++)
+                {
+                    try
+                    {
+                        dynamic shape = slide.Shapes[j];
+                        if (shape.HasTextFrame == -1 && shape.TextFrame.HasText == -1)
+                        {
+                            string text = shape.TextFrame.TextRange.Text?.ToString() ?? string.Empty;
+                            if (!string.IsNullOrWhiteSpace(text)) chunks.Add(text.Trim());
+                        }
+                    }
+                    catch { }
+                }
+
+                slides.Add(string.Join(Environment.NewLine + Environment.NewLine, chunks));
+            }
+            catch
+            {
+                slides.Add(string.Empty);
+            }
+        }
+
+        return slides;
     }
 
     private static int SafeToInt(object? value)
