@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text;
 using DocCopyCli.Helpers;
 using DocCopyCli.Models;
 
