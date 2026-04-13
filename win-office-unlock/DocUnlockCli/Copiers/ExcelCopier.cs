@@ -29,19 +29,23 @@ public static class ExcelCopier
             Console.Error.WriteLine($"[ExcelCopier] Opening workbook via shell: {filePath}");
             Process.Start(new ProcessStartInfo(filePath) { UseShellExecute = true, Verb = "open" });
             watchdog.DetectNewProcess();
-            BackgroundExcelWindow(watchdog, 5_000);
 
             app = WaitForExcelApplication(watchdog, watchdog.TimeoutMs);
             Console.Error.WriteLine("[ExcelCopier] Attached to running Excel instance.");
             try { app.DisplayAlerts = false; } catch { }
             try { app.Visible = true; } catch { }
-            TryBackgroundExcelWindow(watchdog);
+            try { app.ScreenUpdating = true; } catch { }
+            try { app.UserControl = true; } catch { }
+            try { app.Interactive = true; } catch { }
+            ForegroundExcelWindow(watchdog, 5_000);
 
             wb = WaitForWorkbook(app, filePath, watchdog.TimeoutMs);
-            TryBackgroundExcelWindow(watchdog);
+            PrepareWorkbookForInteraction(wb);
+            ForegroundExcelWindow(watchdog, 2_000);
 
             Console.Error.WriteLine("[ExcelCopier] Workbook opened. Checking DRM...");
             WaitForDrmDecryption(wb, watchdog.TimeoutMs);
+            TryBackgroundExcelWindow(watchdog);
             var workbookSnapshot = CaptureWorkbook(wb);
             string markdownPath = MarkdownExporter.GetMarkdownPath(outputPath, filePath);
             MarkdownExporter.WriteWorkbookMarkdown(markdownPath, workbookSnapshot);
@@ -307,6 +311,17 @@ public static class ExcelCopier
         }
     }
 
+    private static void ForegroundExcelWindow(ProcessWatchdog watchdog, int timeoutMs)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            watchdog.DetectNewProcess();
+            if (TryForegroundExcelWindow(watchdog)) return;
+            Thread.Sleep(100);
+        }
+    }
+
     private static bool TryBackgroundExcelWindow(ProcessWatchdog watchdog)
     {
         if (watchdog.TrackedPid is int trackedPid && TryBackgroundProcessWindows(trackedPid))
@@ -317,6 +332,27 @@ public static class ExcelCopier
             try
             {
                 if (TryBackgroundProcessWindows(proc.Id)) return true;
+            }
+            catch { }
+            finally
+            {
+                try { proc.Dispose(); } catch { }
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryForegroundExcelWindow(ProcessWatchdog watchdog)
+    {
+        if (watchdog.TrackedPid is int trackedPid && TryForegroundProcessWindows(trackedPid))
+            return true;
+
+        foreach (var proc in Process.GetProcessesByName("EXCEL"))
+        {
+            try
+            {
+                if (TryForegroundProcessWindows(proc.Id)) return true;
             }
             catch { }
             finally
@@ -346,6 +382,37 @@ public static class ExcelCopier
             SetForegroundWindow(shellWindow);
 
         return true;
+    }
+
+    private static bool TryForegroundProcessWindows(int pid)
+    {
+        bool changed = false;
+        foreach (IntPtr hwnd in GetProcessWindows(pid))
+        {
+            if (hwnd == IntPtr.Zero) continue;
+
+            ShowWindowAsync(hwnd, SwRestore);
+            SetForegroundWindow(hwnd);
+            changed = true;
+        }
+
+        return changed;
+    }
+
+    private static void PrepareWorkbookForInteraction(dynamic workbook)
+    {
+        try { workbook.Activate(); } catch { }
+        try
+        {
+            dynamic windows = workbook.Windows;
+            int count = SafeToInt(windows?.Count);
+            if (count > 0)
+            {
+                try { windows[1].Visible = true; } catch { }
+                try { windows[1].Activate(); } catch { }
+            }
+        }
+        catch { }
     }
 
     private static object? TryGetAccessibleObject(IntPtr hwnd)
@@ -464,4 +531,5 @@ public static class ExcelCopier
     private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
     private const uint NativeObjectId = 0xFFFFFFF0;
     private const int SwShowMinNoActive = 7;
+    private const int SwRestore = 9;
 }
