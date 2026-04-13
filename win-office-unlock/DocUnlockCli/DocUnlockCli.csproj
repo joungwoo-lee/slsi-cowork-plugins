@@ -9,8 +9,8 @@
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <IncludeAllContentForSelfExtract>true</IncludeAllContentForSelfExtract>
-    <AssemblyName>DocCopyCli</AssemblyName>
-    <RootNamespace>DocCopyCli</RootNamespace>
+    <AssemblyName>DocUnlockCli</AssemblyName>
+    <RootNamespace>DocUnlockCli</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>

@@ -1,6 +1,6 @@
-using DocCopyCli.Copiers;
+using DocUnlockCli.Copiers;
 
-namespace DocCopyCli;
+namespace DocUnlockCli;
 
 class Program
 {
@@ -45,13 +45,13 @@ class Program
         if (string.IsNullOrWhiteSpace(filePath))
         {
             Console.Error.WriteLine("Usage:");
-            Console.Error.WriteLine("  Single file:   DocCopyCli.exe --file <path> [--output <path>]");
-            Console.Error.WriteLine("  All in folder: DocCopyCli.exe --file <dir> --all [--output <dir>]");
+            Console.Error.WriteLine("  Single file:   DocUnlockCli.exe --file <path> [--output <path>]");
+            Console.Error.WriteLine("  All in folder: DocUnlockCli.exe --file <dir> --all [--output <dir>]");
             Console.Error.WriteLine("Optional: --excel-engine netoffice|interop  (default: netoffice)");
             Console.Error.WriteLine("Supported: .docx, .doc, .xlsx, .xls, .pptx, .ppt, .pptm, .ppsx, .pps, .potx, .potm");
             Console.Error.WriteLine();
             Console.Error.WriteLine("Saves DRM-free Office outputs and a same-basename markdown dump of the read content.");
-            Console.Error.WriteLine("Single mode: output defaults to <original_name>_copy.<ext> in the same folder.");
+            Console.Error.WriteLine("Single mode: output defaults to <original_name>_unlock.<ext> in the same folder.");
             Console.Error.WriteLine("Word/Excel legacy formats are rebuilt as .docx/.xlsx outputs.");
             Console.Error.WriteLine("--all mode:  output defaults to <input_dir>\\drm-free\\ subfolder.");
             return 1;
@@ -81,7 +81,7 @@ class Program
             string dir = Path.GetDirectoryName(Path.GetFullPath(filePath)) ?? ".";
             string name = Path.GetFileNameWithoutExtension(filePath);
             string ext = Path.GetExtension(filePath);
-            outputPath = Path.Combine(dir, $"{name}_copy{GetDefaultOutputExtension(ext)}");
+            outputPath = Path.Combine(dir, $"{name}_unlock{GetDefaultOutputExtension(ext)}");
         }
         else
         {

@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace DocCopyCli;
+namespace DocUnlockCli;
 
 /// <summary>
 /// Tracks Office process PIDs spawned by this tool and force-kills them on timeout.

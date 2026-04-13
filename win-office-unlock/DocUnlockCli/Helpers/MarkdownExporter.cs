@@ -1,7 +1,7 @@
 using System.Text;
-using DocCopyCli.Models;
+using DocUnlockCli.Models;
 
-namespace DocCopyCli.Helpers;
+namespace DocUnlockCli.Helpers;
 
 internal static class MarkdownExporter
 {

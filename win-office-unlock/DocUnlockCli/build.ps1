@@ -30,10 +30,10 @@ if (-not $BypassRelaunched) {
 }
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$projectFile = Join-Path $scriptDir "DocCopyCli.csproj"
+$projectFile = Join-Path $scriptDir "DocUnlockCli.csproj"
 $publishDir = Join-Path $scriptDir $OutputDir
-$exePath = Join-Path $publishDir "DocCopyCli.exe"
-$zipPath = Join-Path $publishDir "DocCopyCli-$Runtime.zip"
+$exePath = Join-Path $publishDir "DocUnlockCli.exe"
+$zipPath = Join-Path $publishDir "DocUnlockCli-$Runtime.zip"
 
 Write-Host "==> Restoring dependencies"
 dotnet restore $projectFile

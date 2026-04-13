@@ -1,5 +1,5 @@
 ---
-name: win-office-copy
+name: win-office-unlock
 description: "Windows 네이티브 환경에서 DRM이 걸린 Office 문서(.docx, .doc, .xlsx, .xls, .pptx, .ppt 등)를 읽어 DRM 없는 출력 파일로 다시 저장한다. 읽은 내용은 같은 basename의 Markdown 파일로도 저장하며, Word/Excel은 새 OOXML 문서를 직접 생성해 저장한다. DRM/보안 문서의 내용을 재저장해야 할 때 이 스킬을 사용하라."
 ---
 
@@ -17,24 +17,24 @@ description: "Windows 네이티브 환경에서 DRM이 걸린 Office 문서(.doc
 
 ## 실행 명령
 
-최초 1회 `setup.ps1`을 실행하면 `DocCopyCli.exe`가 설치되고 사용자 PATH에 등록된다.
+최초 1회 `setup.ps1`을 실행하면 `DocUnlockCli.exe`가 설치되고 사용자 PATH에 등록된다.
 
-`DocCopyCli.exe`가 아직 없거나 명령을 찾지 못하면, 먼저 스킬 폴더 안의 `setup.ps1`을 실행한 뒤 다시 시도한다.
+`DocUnlockCli.exe`가 아직 없거나 명령을 찾지 못하면, 먼저 스킬 폴더 안의 `setup.ps1`을 실행한 뒤 다시 시도한다.
 
 이후 어느 디렉토리에서나 실행:
 
 ```bash
-# 단일 파일: 같은 폴더에 <원본명>_copy.<확장자>로 저장
-DocCopyCli.exe --file "<DRM_문서_절대경로>"
+# 단일 파일: 같은 폴더에 <원본명>_unlock.<확장자>로 저장
+DocUnlockCli.exe --file "<DRM_문서_절대경로>"
 
 # 단일 파일: 출력 경로 직접 지정
-DocCopyCli.exe --file "<DRM_문서_절대경로>" --output "<저장할_경로>"
+DocUnlockCli.exe --file "<DRM_문서_절대경로>" --output "<저장할_경로>"
 
-# 폴더 일괄: 폴더 안의 지원 형식 파일을 모두 DRM 해제 복사
-DocCopyCli.exe --file "<폴더_경로>" --all
+# 폴더 일괄: 폴더 안의 지원 형식 파일을 모두 DRM 해제 결과로 저장
+DocUnlockCli.exe --file "<폴더_경로>" --all
 
 # 폴더 일괄: 출력 폴더 직접 지정 (기본: <입력폴더>\drm-free\)
-DocCopyCli.exe --file "<폴더_경로>" --all --output "<출력_폴더_경로>"
+DocUnlockCli.exe --file "<폴더_경로>" --all --output "<출력_폴더_경로>"
 ```
 
 - 지원 형식: `.docx`, `.doc`, `.xlsx`, `.xls`, `.pptx`, `.ppt`, `.pptm`, `.ppsx`, `.pps`, `.potx`, `.potm`
@@ -50,11 +50,11 @@ DocCopyCli.exe --file "<폴더_경로>" --all --output "<출력_폴더_경로>"
 
 ```bash
 # stdout 한 줄 = 성공한 파일 경로 1개
-DocCopyCli.exe --file "<폴더>" --all
+DocUnlockCli.exe --file "<폴더>" --all
 ```
 
 에이전트는 실행 후:
-1. stdout의 각 줄 = 성공한 복사본 경로 → 사용자에게 목록으로 안내
+1. stdout의 각 줄 = 성공한 출력 파일 경로 → 사용자에게 목록으로 안내
 2. stderr 마지막 줄의 `Done: N succeeded, N failed.` → 요약으로 전달
 3. 실패한 파일이 있으면 stderr에서 `TIMEOUT` / `FAILED` 줄을 찾아 원인 분석 후 안내
 

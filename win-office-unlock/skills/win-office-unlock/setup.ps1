@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    DocCopyCli 셋업 - GitHub Release의 zip을 내려받아 SKILL.md 옆에 풉니다.
+    DocUnlockCli 셋업 - GitHub Release의 zip을 내려받아 SKILL.md 옆에 풉니다.
 
 .EXAMPLE
     .\setup.ps1
@@ -14,20 +14,20 @@ param(
 $ErrorActionPreference = "Stop"
 $RepoOwner = "joungwoo-lee"
 $RepoName = "slsi-cowork-plugins"
-$ZipName = "DocCopyCli-win-x64.zip"
-$BinaryName = "DocCopyCli.exe"
+$ZipName = "DocUnlockCli-win-x64.zip"
+$BinaryName = "DocUnlockCli.exe"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $InstallDir = $ScriptDir
 $ZipPath = Join-Path $InstallDir $ZipName
 $BinaryPath = Join-Path $InstallDir $BinaryName
 
-Write-Host "=== DocCopyCli Setup ===" -ForegroundColor Cyan
+Write-Host "=== DocUnlockCli Setup ===" -ForegroundColor Cyan
 
 if ($Version -eq "latest") {
     Write-Host "[1/3] Fetching latest release..." -ForegroundColor Yellow
     $releaseUrl = "https://api.github.com/repos/$RepoOwner/$RepoName/releases/tags/latest"
     try {
-        $release = Invoke-RestMethod -Uri $releaseUrl -Headers @{ "User-Agent" = "DocCopyCli-Setup" }
+        $release = Invoke-RestMethod -Uri $releaseUrl -Headers @{ "User-Agent" = "DocUnlockCli-Setup" }
         $asset = $release.assets | Where-Object { $_.name -eq $ZipName } | Select-Object -First 1
         if (-not $asset) { throw "Release asset '$ZipName' not found." }
         $downloadUrl = $asset.browser_download_url
@@ -54,7 +54,7 @@ Write-Host "[2/3] Downloading release zip..." -ForegroundColor Yellow
 try {
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
     $webClient = New-Object System.Net.WebClient
-    $webClient.Headers.Add("User-Agent", "DocCopyCli-Setup")
+    $webClient.Headers.Add("User-Agent", "DocUnlockCli-Setup")
     $webClient.DownloadFile($downloadUrl, $ZipPath)
     $fileSize = (Get-Item $ZipPath).Length / 1MB
     Write-Host "  Done: $ZipPath ($([math]::Round($fileSize, 1)) MB)" -ForegroundColor Gray

@@ -1,8 +1,8 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using DocCopyCli.Helpers;
+using DocUnlockCli.Helpers;
 
-namespace DocCopyCli.Copiers;
+namespace DocUnlockCli.Copiers;
 
 public static class WordCopier
 {

@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace DocCopyCli;
+namespace DocUnlockCli;
 
 /// <summary>
 /// Registers an OLE message filter on the STA thread to automatically retry

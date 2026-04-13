@@ -1,10 +1,10 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
-using DocCopyCli.Helpers;
-using DocCopyCli.Models;
+using DocUnlockCli.Helpers;
+using DocUnlockCli.Models;
 
-namespace DocCopyCli.Copiers;
+namespace DocUnlockCli.Copiers;
 
 /// <summary>
 /// Shell-based Excel copier. Opens via shell (DRM auth dialog supported),

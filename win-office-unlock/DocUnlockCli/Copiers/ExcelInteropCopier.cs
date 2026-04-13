@@ -1,8 +1,8 @@
 using System.Runtime.InteropServices;
-using DocCopyCli.Helpers;
-using DocCopyCli.Models;
+using DocUnlockCli.Helpers;
+using DocUnlockCli.Models;
 
-namespace DocCopyCli.Copiers;
+namespace DocUnlockCli.Copiers;
 
 /// <summary>
 /// Interop-based Excel copier. Opens the file in a programmatic Excel instance,

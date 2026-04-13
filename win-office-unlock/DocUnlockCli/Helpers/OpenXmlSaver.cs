@@ -1,13 +1,13 @@
 using System.Text;
 using ClosedXML.Excel;
-using DocCopyCli.Models;
+using DocUnlockCli.Models;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Wordprocessing;
 using A = DocumentFormat.OpenXml.Drawing;
 using P = DocumentFormat.OpenXml.Presentation;
 
-namespace DocCopyCli.Helpers;
+namespace DocUnlockCli.Helpers;
 
 internal static class OpenXmlSaver
 {
@@ -306,7 +306,7 @@ internal static class OpenXmlSaver
                     new A.Accent6Color(new A.RgbColorModelHex { Val = "70AD47" }),
                     new A.Hyperlink(new A.RgbColorModelHex { Val = "0563C1" }),
                     new A.FollowedHyperlinkColor(new A.RgbColorModelHex { Val = "954F72" }))
-                { Name = "DocCopyCli Colors" },
+                { Name = "DocUnlockCli Colors" },
                 new A.FontScheme(
                     new A.MajorFont(
                         new A.LatinFont { Typeface = "Arial" },
@@ -316,7 +316,7 @@ internal static class OpenXmlSaver
                         new A.LatinFont { Typeface = "Arial" },
                         new A.EastAsianFont { Typeface = string.Empty },
                         new A.ComplexScriptFont { Typeface = string.Empty }))
-                { Name = "DocCopyCli Fonts" },
+                { Name = "DocUnlockCli Fonts" },
                 new A.FormatScheme(
                     new A.FillStyleList(
                         new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
@@ -331,10 +331,10 @@ internal static class OpenXmlSaver
                         new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
                         new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.Accent1 }),
                         new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.Accent2 })))
-                { Name = "DocCopyCli Formats" }),
+                { Name = "DocUnlockCli Formats" }),
             new A.ObjectDefaults(),
             new A.ExtraColorSchemeList())
-        { Name = "DocCopyCli Theme" };
+        { Name = "DocUnlockCli Theme" };
         themePart.Theme.Save();
     }
 
