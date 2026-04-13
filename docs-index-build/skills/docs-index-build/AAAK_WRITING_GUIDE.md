@@ -2,7 +2,7 @@
 
 This guide is for an AI that has never seen AAAK before.
 
-Follow this guide exactly when converting source documents into AAAK closet content for `doc-palace-ingest`.
+Follow this guide exactly when converting source documents into AAAK closet content for `docs-index-build`.
 
 AAAK is not an external tool, command, API, model, or plugin.
 AAAK here means: a text notation that you write directly into the closet markdown file yourself.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ingest.py — doc-palace-ingest 스캐너
+ingest.py — docs-index-build 스캐너
 
 문서 폴더를 스캔하여 청킹 + 패턴 추출 결과를 JSON으로 출력한다.
 LLM 요약과 파일 쓰기는 AI(Claude)가 담당한다.

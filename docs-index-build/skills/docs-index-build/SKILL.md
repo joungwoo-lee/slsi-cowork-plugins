@@ -1,10 +1,10 @@
 ---
-name: doc-palace-ingest
+name: docs-index-build
 description: "문서 폴더를 인제스트해 AGENTS.md 인덱스와 _closets/*.aaak.md 파일을 생성/업데이트한다. AAAK는 외부 툴이 아니라 이 스킬이 직접 작성하는 텍스트 포맷이다."
 user-invocable: true
 ---
 
-# doc-palace-ingest
+# docs-index-build
 
 문서 폴더를 인제스트해 문서 인덱스와 AAAK closet 파일을 만드는 스킬.
 

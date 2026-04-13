@@ -1,4 +1,4 @@
-# doc-palace-ingest: 설계 문서
+# docs-index-build: 설계 문서
 
 ## 개요
 
@@ -392,7 +392,7 @@ v1은 **변경된 파일만 재처리 + AGENTS.md 전체 재생성** 방식.
 ## 7. 스킬 파일 구조
 
 ```
-doc-palace-ingest/
+docs-index-build/
 ├── SKILL.md          ← 스킬 메타데이터 + AI 실행 지침
 ├── ingest.py         ← 메인 인제스트 스크립트
 ├── closet_builder.py ← LLM 요약 → AAAK 인코딩 → Closet 파일 생성
@@ -407,9 +407,9 @@ doc-palace-ingest/
 
 ```markdown
 ---
-name: doc-palace-ingest
-description: "문서 폴더를 기억 궁전으로 인제스트. Wing/Room 인덱스(AGENTS.md)와
-             AAAK 압축 Closet 파일들을 생성한다."
+name: docs-index-build
+description: "문서 폴더를 인제스트해 AGENTS.md 인덱스와
+             _closets/*.aaak.md 파일들을 생성한다."
 user-invocable: true
 ---
 
@@ -418,7 +418,7 @@ user-invocable: true
 사용자가 폴더를 지정하면:
 
 1. 다음 명령 실행:
-   python3 doc-palace-ingest/ingest.py <folder_path>
+   python3 docs-index-build/ingest.py <folder_path>
 
 2. 완료 후 생성/업데이트된 파일 보고:
    - AGENTS.md: 인덱스
