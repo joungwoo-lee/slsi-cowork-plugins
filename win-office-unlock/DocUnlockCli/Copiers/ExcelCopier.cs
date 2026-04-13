@@ -14,6 +14,7 @@ namespace DocUnlockCli.Copiers;
 public static class ExcelCopier
 {
     private const int PollIntervalMs = 500;
+    private const int DrmForegroundHoldMs = 1500;
     private const int XlPasteAll = -4104;
 
     public static void Copy(string filePath, string outputPath)
@@ -41,11 +42,10 @@ public static class ExcelCopier
 
             wb = WaitForWorkbook(app, filePath, watchdog.TimeoutMs);
             PrepareWorkbookForInteraction(wb);
-            ForegroundExcelWindow(watchdog, 2_000);
+            ForegroundExcelWindow(watchdog, DrmForegroundHoldMs);
 
             Console.Error.WriteLine("[ExcelCopier] Workbook opened. Checking DRM...");
-            WaitForDrmDecryption(wb, watchdog.TimeoutMs);
-            TryBackgroundExcelWindow(watchdog);
+            WaitForDrmDecryption(wb, watchdog, watchdog.TimeoutMs);
             var workbookSnapshot = CaptureWorkbook(wb);
             string markdownPath = MarkdownExporter.GetMarkdownPath(outputPath, filePath);
             MarkdownExporter.WriteWorkbookMarkdown(markdownPath, workbookSnapshot);
@@ -123,11 +123,12 @@ public static class ExcelCopier
         throw new TimeoutException($"Workbook did not appear in Excel after {timeoutMs / 1000}s.");
     }
 
-    private static void WaitForDrmDecryption(object wb, int timeoutMs)
+    private static void WaitForDrmDecryption(object wb, ProcessWatchdog watchdog, int timeoutMs)
     {
         dynamic workbook = wb;
         var sw = Stopwatch.StartNew();
         int attempt = 0;
+        bool focusReleased = false;
         while (sw.ElapsedMilliseconds < timeoutMs)
         {
             attempt++;
@@ -145,6 +146,14 @@ public static class ExcelCopier
             {
                 Console.Error.WriteLine($"[ExcelCopier] DRM poll attempt {attempt}: {ex.GetType().Name}: {ex.Message}");
             }
+
+            if (!focusReleased && sw.ElapsedMilliseconds >= DrmForegroundHoldMs)
+            {
+                focusReleased = TryBackgroundExcelWindow(watchdog);
+                if (focusReleased)
+                    Console.Error.WriteLine($"[ExcelCopier] Released Excel focus after {sw.ElapsedMilliseconds}ms to let DRM finalize.");
+            }
+
             Thread.Sleep(PollIntervalMs);
         }
         throw new TimeoutException(
