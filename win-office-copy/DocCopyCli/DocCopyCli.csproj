@@ -17,7 +17,7 @@
 
   <ItemGroup>
     <PackageReference Include="ClosedXML" Version="0.104.2" />
-    <PackageReference Include="DocumentFormat.OpenXml" Version="3.1.0" />
+    <PackageReference Include="DocumentFormat.OpenXml" Version="3.1.1" />
     <PackageReference Include="NetOfficeFw.Word" Version="1.9.4" />
     <PackageReference Include="NetOfficeFw.Excel" Version="1.9.4" />
     <PackageReference Include="NetOfficeFw.PowerPoint" Version="1.9.4" />
