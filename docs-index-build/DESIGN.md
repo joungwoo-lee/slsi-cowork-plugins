@@ -4,13 +4,9 @@
 
 문서 폴더 인제스트 스킬.
 
-중요:
-
-- `wing`, `hall`, `room`은 인덱스 라벨일 뿐 실제 디렉터리가 아니다
-- 이 스킬은 원본 폴더 안에 `wing/`, `hall/`, `room/` 같은 서브폴더를 만들면 안 된다
-- 새로 만들 수 있는 것은 `AGENTS.md`, `_closets/`, `_closets/*.aaak.md`, `.doc-palace-state.json` 뿐이다
-- `AGENTS.md`는 항상 대상 폴더 루트에만 있어야 하며 `_closets/` 안에 두면 안 된다
-- AAAK는 외부 툴이 아니라 closet 파일 안에 직접 쓰는 텍스트 포맷이다
+- `AGENTS.md`, `_closets/`, `_closets/*.aaak.md`, `.doc-palace-state.json` 을 새로 만든다.
+- `AGENTS.md`는 대상 폴더 루트에 둔다. 문서들에 대한 인덱스를 갖으며 해당 폴더에서 질의시 자동 포함된다.
+- AAAK는 외부 툴이 아니라 closet 파일 안에 직접 쓰는 텍스트 포맷이다. 완전한 규격의 AAAK는 아직 존재하지 않으며 개발중인 압축 언어의 컨셉을 차용하여 임의적인 규칙이 섞여있는 상태다.
 
 - AI가 스킬을 실행하면 대상 폴더의 문서들을 분석하여
 - 폴더 안에 `AGENTS.md` 인덱스를 생성/업데이트하고
