@@ -1,23 +1,33 @@
 ---
 name: doc-palace-ingest
-description: "문서 폴더를 기억 궁전으로 인제스트. Wing/Hall/Room 구조의 AGENTS.md 인덱스와 AAAK 압축 Closet 파일들을 생성/업데이트한다."
+description: "문서 폴더를 인제스트해 AGENTS.md 인덱스와 _closets/*.aaak.md 파일을 생성/업데이트한다. AAAK는 외부 툴이 아니라 이 스킬이 직접 작성하는 텍스트 포맷이다."
 user-invocable: true
 ---
 
 # doc-palace-ingest
 
-문서 폴더를 **기억 궁전(Memory Palace)** 구조로 인제스트하는 스킬.
+문서 폴더를 인제스트해 문서 인덱스와 AAAK closet 파일을 만드는 스킬.
 
-- **MemPalace** Wing/Hall/Room/Closet/Drawer 구조 적용
 - **Karpathy LLM Wiki 패턴** 적용: AI가 마크다운 인덱스를 직접 유지
 - 인덱스(`AGENTS.md`)와 AAAK 압축 요약(`_closets/`)을 폴더 안에 생성
 - 원본 파일은 절대 수정하지 않음
+
+## 절대 금지
+
+- `wing`, `hall`, `room` 이름의 새 디렉터리를 만들지 말 것
+- 원본 폴더 구조를 재배치하거나 복사하지 말 것
+- 새로 만들 수 있는 것은 `AGENTS.md`와 `_closets/` 및 그 안의 `.aaak.md` 파일뿐이다
+- `AGENTS.md`를 `_closets/` 안이나 다른 하위 폴더 안에 만들지 말 것
+- `AGENTS.md`의 정확한 위치는 대상 폴더 루트의 `<folder>/AGENTS.md` 하나뿐이다
+- AAAK를 외부 명령, 외부 서비스, 외부 MCP 도구처럼 취급하지 말 것
+- AAAK는 이 스킬이 문서 내용을 직접 써 넣는 텍스트 포맷이다
 
 ## 필수 전제
 
 Closet 파일이나 AAAK zettel을 작성하기 전에 반드시 같은 디렉토리의 `AAAK_WRITING_GUIDE.md`를 읽고 그 규칙을 그대로 따른다.
 
 - AAAK를 이미 안다고 가정하지 말 것
+- AAAK를 외부 툴처럼 찾거나 호출하지 말 것
 - `key_quote`는 반드시 원문 그대로 복사할 것
 - 가이드에 없는 형식을 임의로 만들지 말 것
 - 애매하면 더 짧고 보수적인 AAAK를 쓸 것
@@ -135,6 +145,15 @@ Z5:ERR|403,scope,insufficient|"권한 부족 시 403 INSUFFICIENT_SCOPE"|3|TECHN
 
 폴더 루트에 `AGENTS.md`를 생성(이미 있으면 전체 재생성)한다.
 
+정확한 경로 규칙:
+
+- 올바름: `<target_folder>/AGENTS.md`
+- 올바름: `<target_folder>/_closets/<room>.aaak.md`
+- 금지: `<target_folder>/_closets/AGENTS.md`
+- 금지: `<target_folder>/wing/...`, `<target_folder>/hall/...`, `<target_folder>/room/...`
+
+여기서 `wing`, `hall`, `room`은 인덱스 라벨일 뿐이다. 실제 디렉터리나 서브폴더를 만들지 말고, 모두 `AGENTS.md` 텍스트 안에만 기록한다.
+
 **AGENTS.md 형식:**
 
 ```markdown
@@ -210,7 +229,8 @@ state.json 업데이트 및 _palace_work.json 정리.
 - 처리된 파일 수 (신규/변경/삭제)
 - 생성/업데이트된 Closet 파일 목록
 - AGENTS.md 생성/업데이트 여부
-- Wing/Room 구조 간략 요약
+- 인덱스 라벨 구조 간략 요약
+- 실제 생성 경로 확인: `AGENTS.md`는 루트, closet은 `_closets/` 아래만
 
 ---
 
@@ -238,6 +258,5 @@ python3 <skill_dir>/scripts/ingest.py <folder_path> --status
 
 ## 참조
 
-- [MemPalace](https://github.com/MemPalace/mempalace) — Wing/Room/Drawer 구조, AAAK 다이얼렉트
 - [Karpathy LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — LLM 유지 마크다운 위키 패턴
 - `AAAK_WRITING_GUIDE.md` — 이 스킬 전용 AAAK 작성 스펙 및 변환 절차

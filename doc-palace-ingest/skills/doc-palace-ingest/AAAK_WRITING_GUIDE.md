@@ -4,6 +4,14 @@ This guide is for an AI that has never seen AAAK before.
 
 Follow this guide exactly when converting source documents into AAAK closet content for `doc-palace-ingest`.
 
+AAAK is not an external tool, command, API, model, or plugin.
+AAAK here means: a text notation that you write directly into the closet markdown file yourself.
+
+Do not search for an AAAK executable.
+Do not attempt to call AAAK.
+Do not claim AAAK is unavailable.
+Just write the AAAK text.
+
 ## Goal
 
 Write the document content into AAAK as fully as practical.

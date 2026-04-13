@@ -2,13 +2,20 @@
 
 ## 개요
 
-**MemPalace의 기억 궁전 구조** + **Karpathy의 LLM Wiki 패턴**을 결합한  
 문서 폴더 인제스트 스킬.
 
+중요:
+
+- `wing`, `hall`, `room`은 인덱스 라벨일 뿐 실제 디렉터리가 아니다
+- 이 스킬은 원본 폴더 안에 `wing/`, `hall/`, `room/` 같은 서브폴더를 만들면 안 된다
+- 새로 만들 수 있는 것은 `AGENTS.md`, `_closets/`, `_closets/*.aaak.md`, `.doc-palace-state.json` 뿐이다
+- `AGENTS.md`는 항상 대상 폴더 루트에만 있어야 하며 `_closets/` 안에 두면 안 된다
+- AAAK는 외부 툴이 아니라 closet 파일 안에 직접 쓰는 텍스트 포맷이다
+
 - AI가 스킬을 실행하면 대상 폴더의 문서들을 분석하여
-- 폴더 안에 `AGENTS.md` (Wing/Hall/Room 인덱스, AAAK 형식)를 생성/업데이트하고
-- `_closets/` 서브폴더에 AAAK 압축 요약 파일들을 생성한다
-- 원본 파일은 절대 수정하지 않는다 (Drawer = 원본 그대로)
+- 폴더 안에 `AGENTS.md` 인덱스를 생성/업데이트하고
+- `_closets/` 서브폴더에 AAAK 파일들을 생성한다
+- 원본 파일은 절대 수정하지 않는다
 - 이후 질문 시 AI는 `AGENTS.md` → `_closets/*.md` → 원본 파일 순으로 탐색한다
 
 ---
@@ -17,11 +24,11 @@
 
 ```
 [대상 폴더]
-├── AGENTS.md                  ← 🗺️  궁전 인덱스 (Wing/Hall/Room 목록 + Closet 포인터)
-├── _closets/                  ← 👗  방별 AAAK 압축 요약본
-│   ├── <room_name>.aaak.md   ← Closet 파일 (AAAK + 원본 링크)
+├── AGENTS.md                  ← 문서 인덱스 (라벨 목록 + closet 포인터)
+├── _closets/                  ← AAAK 파일 저장 폴더
+│   ├── <room_name>.aaak.md   ← closet 파일 (AAAK + 원본 링크)
 │   └── ...
-├── (원본 문서들)               ← 🗄️  Drawer (원본 그대로, 절대 수정 안 함)
+├── (원본 문서들)               ← 원본 그대로, 절대 수정 안 함
 │   ├── api-spec.md
 │   ├── architecture.md
 │   └── ...
@@ -34,7 +41,7 @@
 사용자 질문
     │
     ▼
-[1] AGENTS.md 로드            ← Wing → Hall → Room 찾기 (인덱스 스캔)
+[1] AGENTS.md 로드            ← 인덱스 라벨 스캔
     │ Closet 포인터 확인
     ▼
 [2] _closets/<room>.aaak.md   ← AAAK 요약본으로 정확한 섹션 위치 파악
@@ -45,10 +52,12 @@
 
 ---
 
-## 2. AGENTS.md 구조 (AAAK 인덱스)
+## 2. AGENTS.md 구조 (인덱스)
 
 AGENTS.md는 **폴더-레벨 지침**으로, 전역 CLAUDE.md가 아닌  
 인제스트된 폴더 내부에만 존재한다.
+
+`wing`, `hall`, `room` 섹션은 모두 텍스트 인덱스다. 실제 디렉터리를 만들라는 뜻이 아니다.
 
 ### 형식
 
@@ -157,8 +166,8 @@ T:docker-setup<->ci-pipeline|deployment_flow
 
 ## 3. Closet 파일 구조 (_closets/<room>.aaak.md)
 
-Closet은 **AAAK 압축 요약본 + 원본 파일 포인터**.  
-AI가 Closet만 읽고도 "어느 원본 파일의 어느 부분"인지 파악한다.
+Closet은 **AAAK 텍스트 + 원본 파일 포인터**.  
+AAAK는 외부 툴이 아니라 AI가 closet markdown 안에 직접 쓰는 텍스트 형식이다.
 
 ```markdown
 <!-- CLOSET|{room}|{wing}|{hall}|{date} -->

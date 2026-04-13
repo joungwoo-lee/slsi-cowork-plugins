@@ -1,6 +1,6 @@
 {
   "name": "doc-palace-ingest",
   "display_name": "Doc Palace Ingest",
-  "description": "문서 폴더를 기억 궁전으로 인제스트. Wing/Hall/Room/Closet/Drawer 구조의 AGENTS.md 인덱스와 AAAK Closet 파일을 생성/업데이트한다.",
+  "description": "문서 폴더를 인제스트해 AGENTS.md 인덱스와 _closets/*.aaak.md 파일을 생성/업데이트한다. AAAK는 외부 도구가 아니라 이 스킬이 직접 쓰는 텍스트 포맷이다.",
   "version": "1.0.0"
 }
