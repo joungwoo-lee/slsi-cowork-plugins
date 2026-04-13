@@ -242,7 +242,7 @@ internal static class OpenXmlSaver
                             new A.Offset { X = 0L, Y = 0L },
                             new A.Extents { Cx = 0L, Cy = 0L },
                             new A.ChildOffset { X = 0L, Y = 0L },
-                            new A.ChildExtents { Cx = 0L, Cy = 0L }))),
+                            new A.ChildExtents { Cx = 0L, Cy = 0L })))),
             new P.ColorMapOverride(new A.MasterColorMapping()));
         slideLayoutPart.SlideLayout.Type = P.SlideLayoutValues.Blank;
         slideLayoutPart.SlideLayout.Preserve = true;
