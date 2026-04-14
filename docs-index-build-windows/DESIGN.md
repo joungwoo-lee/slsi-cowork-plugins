@@ -67,9 +67,13 @@ AGENTS.md는 **폴더-레벨 지침**으로, 전역 CLAUDE.md가 아닌
 GEN:{date}|DOCS:{count}|WINGS:{n}|ROOMS:{m}|TUNNELS:{k}
 
 ## QUERY PROTOCOL
-1. 질문 → 아래 Wing/Hall/Room 스캔 → 해당 Closet 파일 열기
-2. Closet에서 ZID 확인 → 원본 파일 링크 따라가기
-3. 원본 파일 읽어 팩트 기반 답변
+1. 사용자의 질문을 받으면 먼저 `entity`, `action`, `constraint`, `error`, `time/version` 단서를 추출한다.
+2. 질문과 가장 가까운 Wing/Hall/Room 후보를 고르고, 맞지 않는 Room은 초기에 배제한다.
+3. 선택한 Room의 closet을 연 뒤, 전체를 다 읽기보다 관련 zettel과 `SOURCE LINKS`를 먼저 찾는다.
+4. 원본 파일을 열어 사실을 검증한다.
+5. closet만으로 답을 확정하지 않고, 최종 답변은 원문에서 확인한 사실만 사용한다.
+6. `TUNNELS`가 있으면 연결 Room도 추가로 확인한다.
+7. 근거가 갈리거나 후보가 여럿이면 어떤 Room/원문을 기준으로 답했는지 밝힌다.
 
 ---
 
@@ -109,9 +113,12 @@ T:{room_c}<->{room_d}|{label}
 GEN:2026-04-13|DOCS:24|WINGS:3|ROOMS:11|TUNNELS:4
 
 ## QUERY PROTOCOL
-1. 질문 → Wing/Hall/Room 스캔 → Closet 열기
-2. Closet ZID → 원본 링크
-3. 원본 읽어 답변
+1. 질문 단서 추출
+2. Wing/Hall/Room 후보 선택
+3. closet의 관련 zettel 확인
+4. SOURCE LINKS 기반 원문 확인
+5. 필요 시 TUNNELS 확장 탐색
+6. 원문 근거 기반 답변
 
 ---
 
@@ -165,6 +172,12 @@ T:docker-setup<->ci-pipeline|deployment_flow
 
 Closet은 **AAAK 텍스트 + 원본 파일 포인터**.  
 AAAK는 외부 툴이 아니라 AI가 closet markdown 안에 직접 쓰는 텍스트 형식이다.
+
+중요:
+
+- `AGENTS.md`는 단순 목차가 아니라 OpenCode가 질문을 받았을 때 따를 질의 처리 지침이어야 한다.
+- closet은 원문 대체물이 아니라 중간 압축 기억이다.
+- 최종 답변의 근거는 항상 원문이어야 한다.
 
 ```markdown
 <!-- CLOSET|{room}|{wing}|{hall}|{date} -->

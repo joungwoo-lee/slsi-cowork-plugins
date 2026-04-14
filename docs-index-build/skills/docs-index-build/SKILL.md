@@ -165,10 +165,13 @@ Z5:ERR|403,scope,insufficient|"권한 부족 시 403 INSUFFICIENT_SCOPE"|3|TECHN
 GEN:{date}|DOCS:{count}|WINGS:{n}|ROOMS:{m}|TUNNELS:{k}
 
 ## QUERY PROTOCOL
-1. 질문 → 아래 Wing/Hall/Room 스캔 → 해당 Closet 열기
-2. Closet ZID → SOURCE LINKS → 원본 파일 열기
-3. 원본 파일 읽어 팩트 기반 답변 생성
-4. TUNNELS 섹션 확인 — 연결된 다른 Room도 참조할 것
+1. 사용자의 질문을 받으면 먼저 `entity`, `action`, `constraint`, `error`, `time/version` 단서를 추출한다.
+2. 질문과 가장 가까운 Wing/Hall/Room 후보를 고르고, 맞지 않는 Room은 초기에 배제한다.
+3. 선택한 Room의 closet을 연 뒤, 전체를 무작정 읽지 말고 관련 zettel과 `SOURCE LINKS`를 먼저 찾는다.
+4. `SOURCE LINKS`를 따라 원본 파일을 열어 사실을 검증한다.
+5. closet만으로 답을 확정하지 말고, 최종 답변은 원문에서 확인한 사실만 사용한다.
+6. `TUNNELS` 섹션에 연결 Room이 있으면 함께 확인한다.
+7. 후보가 여러 개이거나 근거가 엇갈리면 불확실성을 드러내고 어떤 Room/원문을 기준으로 답했는지 분명히 한다.
 
 ---
 
@@ -198,6 +201,13 @@ T:{room_a}<->{room_b}|{공통_주제}
 Hall은 `dominant_hall` 기준으로 배치. 같은 Hall이 없는 Wing은 해당 섹션 생략.
 `top_keywords`는 해당 Room의 Closet에서 자주 등장하는 키워드 5개.
 Tunnels는 JSON의 `tunnels` 배열 사용.
+
+작성 규칙 추가:
+
+- `QUERY PROTOCOL`은 인덱스 설명이 아니라 실제 행동 지침처럼 쓸 것
+- `QUERY PROTOCOL`에는 반드시 `질문 단서 추출 -> Room 후보 선택 -> closet 확인 -> 원문 검증 -> tunnel 확장 탐색 -> 근거 기반 응답` 순서가 드러나야 한다
+- `QUERY PROTOCOL`에는 반드시 `closet만으로 답을 확정하지 말 것` 문구가 들어가야 한다
+- Wing/Hall/Room 항목은 `무엇을 먼저 읽을지 결정하는 라우팅 포인터`로 쓸 것
 
 **이미 AGENTS.md가 있을 때**: LOG 섹션의 기존 항목은 유지하고 새 항목을 추가.
 Wing/Room 구조는 전체 재생성 (기존 state + 신규 파일 합산).
@@ -238,13 +248,14 @@ state.json 업데이트 및 _palace_work.json 정리.
 
 이 스킬이 인제스트한 폴더에 대해 질문을 받으면:
 
-1. **AGENTS.md 먼저 읽기** — Wing/Hall/Room 인덱스 스캔
-2. **관련 Room의 Closet 파일 열기** — `_closets/<room>.aaak.md`
-3. **SOURCE LINKS 따라가기** — 원본 파일 직접 읽기
-4. **팩트 기반 답변** — Closet 요약이 아닌 원본 내용 기반
-5. **TUNNELS 확인** — 연결 Room도 있으면 함께 참조
+1. **AGENTS.md 먼저 읽기** — 질문의 단서와 맞는 Wing/Hall/Room 후보를 좁힌다.
+2. **관련 Room의 Closet 파일 열기** — `_closets/<room>.aaak.md`에서 관련 zettel과 source 포인터를 찾는다.
+3. **SOURCE LINKS 따라가기** — 원본 파일을 직접 읽어 확인한다.
+4. **팩트 기반 답변** — closet 요약이 아닌 원본 내용 기반으로 답한다.
+5. **TUNNELS 확인** — 연결 Room도 있으면 함께 참조한다.
+6. **불확실성 처리** — 후보 Room이 여러 개면 어떤 원문을 근거로 썼는지 밝힌다.
 
-> Closet만 읽고 답변하지 말 것. 원본까지 반드시 추적.
+> Closet만 읽고 답변하지 말 것. `AGENTS.md`는 라우팅용이고, closet은 압축 기억이며, 원문이 최종 증거다.
 
 ---
 
