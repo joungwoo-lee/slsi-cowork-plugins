@@ -52,10 +52,14 @@
 GEN:{date}|DOCS:{count}|WINGS:{n}|ROOMS:{m}|TUNNELS:{k}
 
 ## QUERY PROTOCOL
-1. 질문에서 entity, action, constraint, error 단서를 찾는다.
-2. ABOUT 일치 Room을 고르고 NOT 항목으로 오탐을 배제한다.
-3. QTYPE과 SECTIONS로 가장 가까운 section을 고른다.
-4. closet을 열고 SOURCE LINKS를 따라 원문을 읽는다.
+1. 사용자의 질문을 받으면 먼저 `entity`, `action`, `constraint`, `error`, `time/version` 단서를 추출한다.
+2. `ABOUT`가 맞고 `NOT`와 충돌하지 않는 Room만 후보로 남긴다.
+3. 후보 Room 중 `QTYPE`이 가장 가까운 Room을 먼저 고르고, 다른 Room은 보조 후보로 둔다.
+4. 선택한 Room에서는 closet 전체를 다 읽기 전에 `SECTIONS`가 가장 가까운 항목부터 읽는다.
+5. closet을 읽은 뒤 반드시 `SOURCE LINKS`를 따라 원문을 읽는다.
+6. closet만으로 답을 확정하지 않고, 최종 답변은 원문에서 검증한 사실만 사용한다.
+7. `TUNNELS`가 있으면 연결 Room도 확인한다.
+8. 후보가 복수이거나 증거가 엇갈리면 불확실성을 드러내고 어떤 Room/Section을 읽었는지 밝힌다.
 
 ## WING: auth
 ### HALL: technical
@@ -220,12 +224,36 @@ L|1-2|token_pair_lifecycle
 8. `NOT`가 비어 있으면 억지로 채우지 않는다.
 9. `SECTIONS`는 중복 label 제거 후 출력한다.
 10. `TUNNELS`는 `label`, `room_a`, `room_b` 기준 정렬해 출력한다.
+11. `QUERY PROTOCOL`은 요약 설명이 아니라 실제 행동 지침으로 작성한다.
+12. `QUERY PROTOCOL`에는 `closet만으로 답을 확정하지 말 것`을 명시한다.
+13. `QUERY PROTOCOL`에는 `질문 단서 추출 -> 후보 배제 -> section 우선 열람 -> 원문 검증 -> 불확실성 처리` 순서를 명시한다.
 
 이 규칙의 목적은 세 가지다.
 
 - 같은 문서셋에서 인덱스 구조가 흔들리지 않게 한다.
 - AI가 임의 문장을 길게 만들어 토큰을 낭비하지 않게 한다.
 - 질문 시 first-pass filtering이 항상 비슷한 품질로 동작하게 한다.
+
+## 왜 충분한가
+
+이 버전의 `AGENTS.md`는 단순한 목차가 아니라 OpenCode에 실릴 행동 지침을 함께 담는 것을 목표로 한다.
+
+- 인덱스 레이어는 `무엇을 읽을지`보다 먼저 `무엇을 읽지 않을지`를 결정한다.
+- closet 레이어는 선택된 Room 안에서 `어느 section부터 읽을지`를 줄인다.
+- 원문 레이어는 최종 답변의 근거를 확정한다.
+
+즉 질문을 받았을 때 AI가 수행해야 하는 실제 행동은 아래 순서로 고정된다.
+
+1. 질문 단서 추출
+2. Room 후보 생성
+3. `NOT` 기반 배제
+4. `QTYPE` 기반 우선순위화
+5. `SECTIONS` 기반 부분 열람
+6. `SOURCE LINKS` 기반 원문 검증
+7. 필요 시 `TUNNELS` 확장 탐색
+8. 근거 기반 응답
+
+이 순서를 `AGENTS.md` 상단에 직접 써 두면, 인덱스가 단순 데이터가 아니라 질의 처리 프로토콜로도 작동한다.
 
 ## 상태 저장
 

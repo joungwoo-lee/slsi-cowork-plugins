@@ -127,10 +127,14 @@ L|1-2|token_pair_lifecycle
 GEN:{date}|DOCS:{count}|WINGS:{n}|ROOMS:{m}|TUNNELS:{k}
 
 ## QUERY PROTOCOL
-1. 질문의 entity, action, constraint, error 단서를 찾는다.
-2. ABOUT 일치 Room을 찾고 NOT으로 배제한다.
-3. QTYPE과 SECTIONS로 먼저 볼 closet 위치를 좁힌다.
-4. SOURCE LINKS를 따라 원문을 읽는다.
+1. 사용자의 질문을 받으면 먼저 `entity`, `action`, `constraint`, `error`, `time/version` 단서를 추출한다.
+2. `ABOUT`가 맞고 `NOT`와 충돌하지 않는 Room만 후보로 남긴다.
+3. 후보 Room 중 `QTYPE`이 가장 가까운 Room을 먼저 고르고, 나머지는 보조 후보로 둔다.
+4. 선택한 Room에서는 전체 closet을 무작정 읽지 말고 `SECTIONS`가 가장 가까운 항목부터 읽는다.
+5. closet을 읽은 뒤 반드시 `SOURCE LINKS`를 따라 원문을 열어 사실을 검증한다.
+6. closet만으로 답을 확정하지 말고, 최종 답변은 원문에서 확인한 사실만 사용한다.
+7. 관련 `TUNNELS`가 있으면 연결 Room도 추가로 확인한다.
+8. 후보가 여러 개이거나 충돌이 있으면 불확실성을 드러내고, 어떤 Room/Section을 기준으로 답했는지 분명히 한다.
 
 ## WING: auth
 > auth, jwt, error_policy
@@ -155,6 +159,10 @@ T:auth-jwt-design<->api-error-contract|shared:error_policy
 - `ABOUT`는 최대 5개, `NOT`는 최대 4개, `QTYPE`은 최대 4개, `E`는 최대 4개만 노출한다.
 - `SECTIONS`는 최대 4개만 노출하고, 각 section label은 1차 탐색에 필요한 것만 남긴다.
 - Wing 설명, Room 설명, TUNNELS 라벨은 새 해석을 추가하지 말고 `wing_index`, `room_index`, `tunnels` 값만 재조합한다.
+- `QUERY PROTOCOL`은 인덱스 설명이 아니라 실제 행동 지침처럼 쓴다.
+- `QUERY PROTOCOL`에는 반드시 `질문 단서 추출 -> 후보 배제 -> section 우선 열람 -> 원문 검증 -> 불확실성 처리` 순서가 들어가야 한다.
+- `QUERY PROTOCOL`에는 반드시 `closet만으로 답을 확정하지 말 것` 문구를 포함한다.
+- `QUERY PROTOCOL`에는 반드시 `어떤 Room/Section을 기준으로 읽을지 먼저 결정하라`는 문구를 포함한다.
 
 ### Step 4B. 결정적 생성 규칙
 
@@ -200,13 +208,14 @@ python3 <skill_dir>/scripts/ingest.py <folder_path> --finalize
 
 ## 질문만 받을 때의 프로토콜
 
-1. `AGENTS.md`에서 `ABOUT`, `NOT`, `QTYPE`, `SECTIONS`를 먼저 본다.
-2. 가장 가까운 room의 closet을 연다.
-3. 관련 section과 zettel을 확인한다.
-4. `SOURCE LINKS`를 따라 원본을 읽는다.
-5. tunnel이 있으면 연결 room도 함께 확인한다.
+1. `AGENTS.md`에서 먼저 질문 단서와 맞는 `ABOUT`, `NOT`, `QTYPE`, `SECTIONS`를 찾는다.
+2. `NOT`와 충돌하는 Room은 제외하고, `QTYPE`이 가장 가까운 Room부터 연다.
+3. closet에서는 관련 `SECTIONS`와 zettel만 먼저 읽고, 필요 없는 section은 건너뛴다.
+4. 반드시 `SOURCE LINKS`를 따라 원문을 읽어 확인한다.
+5. 관련 tunnel이 있으면 연결 Room도 함께 확인한다.
+6. 최종 답변은 원문에서 확인한 사실만 사용한다.
 
-Closet만 읽고 끝내지 말고, 최종 답변은 원문 기반으로 만든다.
+Closet만 읽고 끝내지 말 것. `AGENTS.md`는 라우팅용이고, closet은 압축 기억이며, 원문이 최종 증거다.
 
 ## 상태 확인
 
