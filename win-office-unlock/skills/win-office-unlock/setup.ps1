@@ -23,8 +23,31 @@ $BinaryPath = Join-Path $InstallDir $BinaryName
 
 Write-Host "=== DocUnlockCli Setup ===" -ForegroundColor Cyan
 
+Write-Host "  InstallDir: $InstallDir" -ForegroundColor Gray
+
+if (-not (Test-Path $InstallDir)) {
+    New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
+}
+
+$userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+if ($userPath -notlike "*$InstallDir*") {
+    [Environment]::SetEnvironmentVariable("PATH", "$userPath;$InstallDir", "User")
+    Write-Host "[1/3] PATH updated (restart terminal to apply)" -ForegroundColor Yellow
+}
+else {
+    Write-Host "[1/3] PATH already contains InstallDir" -ForegroundColor Yellow
+}
+
+if (Test-Path $BinaryPath) {
+    Write-Host "[2/3] Existing binary found, skipping release lookup, download, and extract." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "=== Setup Complete ===" -ForegroundColor Green
+    Write-Host "  $BinaryName registered to PATH — run from anywhere" -ForegroundColor Cyan
+    exit 0
+}
+
 if ($Version -eq "latest") {
-    Write-Host "[1/3] Fetching latest release..." -ForegroundColor Yellow
+    Write-Host "[2/3] Fetching latest release..." -ForegroundColor Yellow
     $releaseUrl = "https://api.github.com/repos/$RepoOwner/$RepoName/releases/tags/latest"
     try {
         $release = Invoke-RestMethod -Uri $releaseUrl -Headers @{ "User-Agent" = "DocUnlockCli-Setup" }
@@ -43,24 +66,7 @@ else {
 }
 
 Write-Host "  Version: $Version" -ForegroundColor Gray
-Write-Host "  InstallDir: $InstallDir" -ForegroundColor Gray
 
-if (-not (Test-Path $InstallDir)) {
-    New-Item -ItemType Directory -Path $InstallDir -Force | Out-Null
-}
-
-$userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
-if ($userPath -notlike "*$InstallDir*") {
-    [Environment]::SetEnvironmentVariable("PATH", "$userPath;$InstallDir", "User")
-    Write-Host "[2/3] PATH updated (restart terminal to apply)" -ForegroundColor Yellow
-} else {
-    Write-Host "[2/3] PATH already contains InstallDir" -ForegroundColor Yellow
-}
-
-if (Test-Path $BinaryPath) {
-    Write-Host "[3/3] Existing binary found, skipping download and extract." -ForegroundColor Yellow
-}
-else {
 Write-Host "[3/3] Downloading release zip..." -ForegroundColor Yellow
 
 try {
@@ -91,7 +97,6 @@ try {
 catch {
     Write-Host "Error: Extract failed. $_" -ForegroundColor Red
     exit 1
-}
 }
 
 Write-Host ""
