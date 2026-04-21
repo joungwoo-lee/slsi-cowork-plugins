@@ -1,6 +1,6 @@
 ---
 name: rag-search
-description: Use when the user asks a question about internal knowledge, projects, documents, or domain-specific topics (e.g. "프로젝트오로라가 뭐야?", "XX 문서 내용 알려줘"). Search from Hybrid Retriever and return grounded contexts/citations.
+description: Use when the user asks any question. Always search the Hybrid Retriever first to retrieve grounded contexts/citations before answering.
 ---
 
 # rag-search Skill
