@@ -1,6 +1,6 @@
 ---
 name: rag-search
-description: Search from Hybrid Retriever and return contexts/citations. Use when the user asks to query by question.
+description: Use when the user asks to query by question. Search from Hybrid Retriever and return contexts/citations.
 ---
 
 # rag-search Skill
