@@ -12,17 +12,16 @@ Hybrid Retriever의 문서 업로드 + 파싱(청킹/임베딩)까지 한 번에
 - Optional env file: `retriever.env`
 
 ## Required Env
+Optional: 사용자 별도 지정 없을 시 생략하여 기본값 사용되도록 한다.
 - `RAG_API_KEY`
 - `RAG_BASE_URL`
-
-Optional:
+- `RAG_DATASET_IDS`
 - `RAG_TIMEOUT` (초, 기본 60)
 
 ## Basic Usage example
 ```bash
 python skills/rag-ingest/scripts/retriever_ingest.py \
-  --file-path "/tmp/sample.txt" \
-  --dataset-id "sample_knowledge_base01"
+  --file-path "/tmp/sample.txt"
 ```
 
 ## Chunking Mode Options
@@ -63,9 +62,6 @@ python skills/rag-ingest/scripts/retriever_ingest.py \
 
 ## Agent Rules
 - 사용자가 파일 ingest를 요청하면 이 스크립트를 먼저 사용합니다.
-- 사용자 별도 지정 없을 시 기본값은 하기 값을 사용합니다.
-  - RAG_BASE_URL= "http://ssai-dev.samsungds.net:9380"
-  - RAG_API_KEY= "ragflow-key"
-  - RAG_DATASET_ID= "knowledge-base01"
+- 사용자가 별도 지정하지 않은 파라미터는 모두 생략하고 기본값을 사용합니다. `--file-path`만 필수입니다.
 - 업로드 성공 후 반드시 parse/chunks API까지 호출해 인덱싱 시작 상태를 확인합니다.
 - 실패 시 HTTP status와 raw_text를 사용자에게 그대로 전달합니다.

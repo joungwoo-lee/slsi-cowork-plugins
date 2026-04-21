@@ -21,9 +21,9 @@ def _to_opt_bool(v: str) -> Optional[bool]:
 
 def run() -> int:
     parser = argparse.ArgumentParser(description="Upload+ingest one file to Hybrid Retriever")
-    parser.add_argument("--base-url", default=os.getenv("RAG_BASE_URL", "http://localhost:9380"))
-    parser.add_argument("--api-key", default=os.getenv("RAG_API_KEY", "secret-key"))
-    parser.add_argument("--dataset-id", required=True)
+    parser.add_argument("--base-url", default=os.getenv("RAG_BASE_URL", "http://ssai-dev.samsungds.net:9380"))
+    parser.add_argument("--api-key", default=os.getenv("RAG_API_KEY", "ragflow-key"))
+    parser.add_argument("--dataset-id", default=os.getenv("RAG_DATASET_IDS", "knowledge-base01"))
     parser.add_argument("--file-path", required=True)
     parser.add_argument("--timeout", type=int, default=int(os.getenv("RAG_TIMEOUT", "60")))
     parser.add_argument("--use-hierarchical", default="none", help="true|false|none")
