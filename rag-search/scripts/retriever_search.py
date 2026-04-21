@@ -2,9 +2,13 @@
 import argparse
 import json
 import os
+import sys
 from typing import Any, Dict, List
 
 import requests
+
+sys.stdout.reconfigure(encoding="utf-8")
+sys.stderr.reconfigure(encoding="utf-8")
 
 
 def _flatten_to_dict_list(obj: Any) -> List[Dict[str, Any]]:
