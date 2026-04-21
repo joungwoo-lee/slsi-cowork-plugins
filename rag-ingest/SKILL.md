@@ -9,7 +9,6 @@ Hybrid Retriever의 문서 업로드 + 파싱(청킹/임베딩)까지 한 번에
 
 ## Files
 - Script: `scripts/retriever_ingest.py`
-- Optional env file: `retriever.env`
 
 ## Required Env
 Optional: 사용자 별도 지정 없을 시 생략하여 기본값 사용되도록 한다.

@@ -1,6 +1,6 @@
 ---
 name: rag-search
-description: Search from Hybrid Retriever and return contexts/citations. Use when the user asks to query retriever data by question, tune top_n/top_k/vector_similarity_weight/similarity_threshold, or fetch grounded snippets from retriever_engine.
+description: Search from Hybrid Retriever and return contexts/citations. Use when the user asks to query by question.
 ---
 
 # rag-search Skill
@@ -9,7 +9,6 @@ Hybrid Retriever의 retrieval API를 호출해 검색 결과를 정형 JSON으�
 
 ## Files
 - Script: `scripts/retriever_search.py`
-- Optional env file: `retriever.env`
 
 ## Required Env
 Optional: 사용자 별도 지정 없을 시 생략하여 기본값 사용되도록 한다.
