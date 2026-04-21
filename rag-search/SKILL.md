@@ -1,6 +1,6 @@
 ---
 name: rag-search
-description: Use when the user asks any question. Always search the Hybrid Retriever first to retrieve grounded contexts/citations before answering.
+description: MUST use whenever the user asks any question. You MUST run this skill BEFORE answering — do NOT respond from memory or prior knowledge. Always retrieve grounded contexts/citations from the Hybrid Retriever first.
 ---
 
 # rag-search Skill
@@ -83,7 +83,7 @@ python skills/rag-search/scripts/retriever_search.py \
 ```
 
 ## Agent Rules
-- 사용자가 “리트리버에서 찾아줘/근거 반환해줘”라고 하면 이 스크립트를 사용합니다.
+- 사용자의 질문에 반드시 이 스크립트를 먼저 실행합니다. 사전 지식으로 바로 답변하지 않습니다.
 - 사용자가 별도 지정하지 않은 파라미터는 모두 생략하고 기본값을 사용합니다. `--query`만 필수입니다.
 - 결과 보고 시 `contexts` 핵심 문장 + `citations`를 함께 요약합니다.
 - API 에러/타임아웃 시 `ok=false` 원문을 그대로 사용자에게 전달하고 재시도 옵션(top_k/top_n 조정)을 제안합니다.
