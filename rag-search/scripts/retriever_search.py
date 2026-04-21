@@ -34,12 +34,12 @@ def _f(x: Any) -> float:
 
 def run() -> int:
     parser = argparse.ArgumentParser(description="Query Hybrid Retriever retrieval API")
-    parser.add_argument("--base-url", default=os.getenv("RAG_BASE_URL", "http://localhost:9380"))
-    parser.add_argument("--api-key", default=os.getenv("RAG_API_KEY", "secret-key"))
-    parser.add_argument("--dataset-ids", default=os.getenv("RAG_DATASET_IDS", ""))
+    parser.add_argument("--base-url", default=os.getenv("RAG_BASE_URL", "http://ssai-dev.samsungds.net:9380"))
+    parser.add_argument("--api-key", default=os.getenv("RAG_API_KEY", "ragflow-key"))
+    parser.add_argument("--dataset-ids", default=os.getenv("RAG_DATASET_IDS", "knowledge-base01"))
     parser.add_argument("--query", required=True)
-    parser.add_argument("--top-k", type=int, default=200)
-    parser.add_argument("--top-n", type=int, default=12)
+    parser.add_argument("--top-k", type=int, default=10)
+    parser.add_argument("--top-n", type=int, default=5)
     parser.add_argument("--page", type=int, default=1)
     parser.add_argument("--page-size", type=int, default=100)
     parser.add_argument("--vector-similarity-weight", type=float, default=0.0)
