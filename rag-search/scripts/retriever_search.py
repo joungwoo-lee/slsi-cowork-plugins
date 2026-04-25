@@ -42,6 +42,7 @@ def run() -> int:
     parser.add_argument("--api-key", default=os.getenv("RAG_API_KEY", "ragflow-key"))
     parser.add_argument("--dataset-ids", default=os.getenv("RAG_DATASET_IDS", "knowledge-base01"))
     parser.add_argument("--query", required=True)
+    parser.add_argument("--pipeline-name", default=os.getenv("RAG_PIPELINE_NAME", ""))
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--top-n", type=int, default=5)
     parser.add_argument("--page", type=int, default=1)
@@ -63,6 +64,7 @@ def run() -> int:
         "query": args.query.strip(),
         "dataset_ids": dataset_ids,
         "keyword": True,
+        "pipeline_name": args.pipeline_name.strip() or None,
         "vector_similarity_weight": args.vector_similarity_weight,
         "similarity_threshold": args.similarity_threshold,
         "top_k": max(1, args.top_k),
@@ -156,6 +158,7 @@ def run() -> int:
                 "query": args.query,
                 "base_url": base_url,
                 "dataset_ids": dataset_ids,
+                "pipeline_name": args.pipeline_name.strip() or None,
                 "count": len(contexts),
                 "contexts": contexts,
                 "citations": citations,

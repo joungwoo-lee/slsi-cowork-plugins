@@ -29,6 +29,7 @@ def run() -> int:
     parser.add_argument("--api-key", default=os.getenv("RAG_API_KEY", "ragflow-key"))
     parser.add_argument("--dataset-id", default=os.getenv("RAG_DATASET_IDS", "knowledge-base01"))
     parser.add_argument("--file-path", required=True)
+    parser.add_argument("--pipeline-name", default=os.getenv("RAG_PIPELINE_NAME", ""))
     parser.add_argument("--timeout", type=int, default=int(os.getenv("RAG_TIMEOUT", "60")))
     parser.add_argument("--use-hierarchical", default="none", help="true|false|none")
     parser.add_argument("--use-contextual", default="none", help="true|false|none")
@@ -49,6 +50,8 @@ def run() -> int:
         data["use_hierarchical"] = str(uh).lower()
     if uc is not None:
         data["use_contextual"] = str(uc).lower()
+    if args.pipeline_name and args.pipeline_name.strip():
+        data["pipeline_name"] = args.pipeline_name.strip()
 
     try:
         with path.open("rb") as f:
@@ -124,6 +127,7 @@ def run() -> int:
                 "base_url": base_url,
                 "dataset_id": args.dataset_id,
                 "file_path": str(path),
+                "pipeline_name": args.pipeline_name.strip() or None,
                 "uploaded_doc_id": doc_id,
                 "parse_response": prj,
             },
