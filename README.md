@@ -34,6 +34,7 @@ personal-rag/
 | `sample-cowork-plugin` | Minimal example plugin for SLSI Cowork environments |
 | `personal-rag` | Agent-usable personal local RAG workflow with setup, ingestion, and retrieval skill structure |
 | `win-cert-setup` | Windows SSL certificate installation skill for enterprise CA trust issues in AI and CLI tools |
+| `hybrid-retriever-modular-tools` | Skill that scaffolds and registers new pipeline modules in the `chain_react_ADK/hybrid_retriever_modular` project — author a node, drop it under `modules/`, and the UI palette + contract panel auto-update. |
 
 ## Notes
 

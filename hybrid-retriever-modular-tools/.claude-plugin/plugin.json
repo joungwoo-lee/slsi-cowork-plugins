@@ -1,0 +1,6 @@
+{
+  "name": "hybrid-retriever-modular-tools",
+  "display_name": "Hybrid Retriever Modular Tools",
+  "description": "Author and register pipeline modules for the chain_react_ADK/hybrid_retriever_modular project. The skill scaffolds a new module file with a typed SPEC, drops it into the engine's modules/ folder, and verifies it auto-registers in the runtime registry and UI palette.",
+  "version": "0.1.0"
+}
