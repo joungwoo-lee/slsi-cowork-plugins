@@ -1,6 +1,6 @@
 {
   "name": "hybrid-retriever-modular-tools",
   "display_name": "Hybrid Retriever Modular Tools",
-  "description": "Author and register pipeline modules for the chain_react_ADK/hybrid_retriever_modular project. The skill scaffolds a new module file with a typed SPEC, drops it into the engine's modules/ folder, and verifies it auto-registers in the runtime registry and UI palette.",
-  "version": "0.1.0"
+  "description": "Tools for the chain_react_ADK/hybrid_retriever_modular project. Three skills: (1) create-pipeline-module scaffolds and registers a new module, (2) run-e2e-test runs the integration test that walks the full author→register→ingest→search→UI loop, (3) run-pipeline-eval measures 정답률 + 평균 실행속도 of every saved pipeline (or one) against a frozen Korean golden set.",
+  "version": "0.2.0"
 }
