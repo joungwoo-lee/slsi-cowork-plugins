@@ -8,13 +8,60 @@
 - **[CHECK]** — 검증 단계. `ok=false`면 표시된 STEP으로 되돌아가 원인을 사용자에게 알리고 재시도.
 
 ## 일반 원칙
-1. STEP을 건너뛰지 않는다. 순서대로 진행.
+1. **STEP A(진단)를 항상 먼저 실행한다**. STEP 0~10은 STEP A가 가리킨 항목만 선택적으로 실행한다. 절대 STEP 0부터 처음부터 일괄 재설치하지 말 것 — 이미 깔린 패키지를 다시 깔라고 하는 건 시간 낭비이고 사용자를 화나게 한다.
 2. **[AGENT]** 명령은 한 번에 하나씩 실행하고 출력을 확인한 뒤 다음으로 넘어간다 (병렬 금지). 실패 진단을 단순화하기 위함.
 3. 명령이 실패하면 **추측해서 다음 단계로 진행하지 말 것**. 실패 원인을 사용자에게 보고하고 지시받는다.
 4. 플랫폼은 Windows 10/11 네이티브 가정. WSL/macOS/Linux 감지 시 **즉시 중단**하고 그 사실을 사용자에게 알린다.
 5. **`.env` 우선 원칙** — STEP 4(프록시) / STEP 6(.env 작성)에서 사용자에게 값을 묻기 전에, **`<skill_root>/.env`에 이미 들어있는 값이 있으면 그 값을 그대로 사용한다**. 사용자에게 "이미 .env에 있어서 재사용합니다"라고 보고하고 다시 묻지 않는다. 누락된 값(또는 placeholder인 `your_*`/`REPLACE_ME` 같은 값)만 새로 묻고, 받은 값을 .env에 기록한다.
+6. 모든 Python 호출은 `py -3.9` 명시 (SKILL.md의 Runtime invocation rule 참조).
 
 ---
+
+## STEP A. 현재 설치 상태 진단 [AGENT][CHECK] — 항상 먼저 실행
+
+사용자가 "셋업 / 설치 / 살펴봐 / 점검 / 동작 확인" 어떤 표현으로 요청해도 **이 STEP을 가장 먼저 실행한다**.
+
+### A-1. 부트스트랩 빠른 확인
+doctor.py를 돌리려면 Python 3.9 + 스킬 폴더 + 의존성이 최소한 깔려 있어야 한다. 먼저 그것만 본다:
+```cmd
+py -3.9 --version
+dir "%USERPROFILE%\.claude\skills\email-connector\SKILL.md"
+```
+- `py -3.9 --version` 실패 → STEP 2(Python 설치)부터 진행 후 A-1 재시도.
+- `SKILL.md` 없음 → STEP 1(스킬 폴더 배치)부터 진행 후 A-1 재시도.
+- 둘 다 OK → A-2로.
+
+### A-2. 종합 진단
+```cmd
+cd /d %USERPROFILE%\.claude\skills\email-connector
+py -3.9 scripts\doctor.py
+```
+출력은 JSON. **`all_ok: true`이면 즉시 보고 후 종료**:
+> ✅ email-connector 셋업이 이미 완료되어 있습니다. 모든 검사 통과.
+> 다음 명령으로 바로 사용하세요:
+> ```cmd
+> py -3.9 scripts\ingest.py
+> py -3.9 scripts\search.py --query "..."
+> ```
+
+`all_ok: false`이면 `checks` 배열에서 `ok=false`인 항목만 추려 아래 표대로 **그 STEP만** 실행. 통과한 항목은 절대 다시 건드리지 않는다.
+
+| 실패한 check | 실행할 STEP | 비고 |
+|---|---|---|
+| `platform_windows` | 중단 | WSL/Linux/macOS — 사용자에게 알리고 끝 |
+| `python_3.9` / `python_64bit` | STEP 2 → A-1 | Python 재설치 |
+| `dep:libpff-python` | STEP 5 | pip가 이미 설치된 것은 알아서 skip |
+| `dep:*` (그 외) | STEP 5 |  |
+| `env_file` | STEP 6-0 | `.env` 파일만 생성 (.env.example 복사) |
+| `config` (missing values) | STEP 6-1, 6-2, 6-3 | **이미 있는 값은 재사용**, 비어 있는 키만 사용자에게 질의 |
+| `pst_path` | STEP 6-2 (PST_PATH만) → STEP 7 | PST 경로 다시 묻기 (다른 .env 값은 건드리지 않기) |
+| `data_root` | STEP 6-4 | mkdir만 |
+| `embedding_api` (connection error / proxy) | STEP 4 | 프록시 설정 점검 |
+| `embedding_api` (HTTP 401/403) | STEP 6-2 (api_key, x-dep-ticket만) |  |
+| `embedding_api` (dim mismatch) | STEP 6-2 (model, dim만) |  |
+
+### A-3. 재진단
+필요한 STEP만 실행한 뒤 **반드시 doctor를 한 번 더 돌려** `all_ok: true`를 확인. 통과하면 A-2의 성공 보고로 종료. 또 실패하면 같은 매핑으로 한 번 더 시도하되 같은 항목이 계속 실패하면 **사용자에게 에러 메시지 그대로 보고**하고 더 이상 추측해서 진행하지 말 것.
 
 ## STEP 0. 플랫폼 검증 [AGENT][CHECK]
 

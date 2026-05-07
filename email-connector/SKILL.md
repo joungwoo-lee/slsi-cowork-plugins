@@ -1,6 +1,6 @@
 ---
 name: email-connector
-description: Decode local PST files (no Outlook required) and build a hybrid keyword (SQLite FTS5) + semantic (Qdrant) search index over mail bodies AND attachment text (PDF, DOCX) converted to unified markdown. Use when the user wants to ingest a PST archive on Windows and run keyword + semantic search across mail and attachment contents. ALSO use when the user asks to set up / install / configure email-connector — read SETUP.md and follow it. Configuration is loaded from a .env file with retriever_engine-compatible variable names (EMBEDDING_API_URL, EMBEDDING_API_KEY, EMBEDDING_MODEL, EMBEDDING_DIM, EMBEDDING_API_X_DEP_TICKET, etc.) and the embedding API is called with the same headers (Authorization Bearer + x-dep-ticket + x-system-name) as that project. Triggers on phrases like "PST 인덱싱", "PST 검색", "메일 첨부파일까지 검색", "email-connector ingest", "하이브리드 검색", "email-connector 셋업", "email-connector 설치". Requires Windows 10/11 native + Python 3.9 + an external embedding API endpoint.
+description: Decode local PST files (no Outlook required) and build a hybrid keyword (SQLite FTS5) + semantic (Qdrant) search index over mail bodies AND attachment text (PDF, DOCX, XLSX, PPTX, RTF, HTML, text) converted to unified markdown. Use when the user wants to ingest a PST archive on Windows and run keyword + semantic search across mail and attachment contents. ALSO use when the user asks to set up / install / configure / verify / diagnose / "살펴봐" / "점검" email-connector — read SETUP.md and start with STEP A (diagnose first). When the doctor reports all_ok the agent must NOT re-run setup; just report that it's already installed. Configuration is loaded from a .env file with retriever_engine-compatible variable names (EMBEDDING_API_URL, EMBEDDING_API_KEY, EMBEDDING_MODEL, EMBEDDING_DIM, EMBEDDING_API_X_DEP_TICKET, etc.) and the embedding API is called with the same headers (Authorization Bearer + x-dep-ticket + x-system-name) as that project. All scripts must be invoked with `py -3.9` — never bare `python` or `py`. Triggers on phrases like "PST 인덱싱", "PST 검색", "메일 첨부파일까지 검색", "email-connector ingest", "하이브리드 검색", "email-connector 셋업", "email-connector 설치", "email-connector 점검", "email-connector 살펴봐", "email-connector 동작 확인". Requires Windows 10/11 native + Python 3.9 + an external embedding API endpoint.
 ---
 
 # Email Connector Skill (PST → Hybrid Search)
@@ -74,14 +74,16 @@ DB나 외부 API를 전혀 호출하지 않음.
 PST를 다시 읽지 않음. 임베딩 모델/dim 변경, 인덱스 재구축, 일부 메일만 재인덱싱 등이 가볍게 가능.
 
 ## Setup workflow
-사용자가 셋업/설치/구성을 요청하면:
+사용자가 셋업 / 설치 / 점검 / "살펴봐" / "동작 확인" 어떤 표현으로 요청하든:
 1. 먼저 `SETUP.md`를 Read 도구로 읽는다.
-2. STEP 0부터 순서대로 따라간다. STEP을 건너뛰지 않는다.
-3. 각 단계의 마커를 준수한다:
+2. **반드시 `STEP A. 현재 설치 상태 진단`부터 실행**한다. 이 STEP은 `doctor.py`를 돌려 `all_ok: true`이면 즉시 종료(이미 셋업 완료 보고), 실패한 check 항목만 매핑 표대로 해당 STEP에 들어가 고친다.
+3. **절대 STEP 0부터 모든 STEP을 일괄 재실행하지 말 것.** 이미 깔린 패키지/이미 채워진 .env 값을 다시 묻거나 다시 깔라고 하는 것은 명백한 버그 — 사용자가 가장 싫어하는 동작.
+4. 각 단계의 마커를 준수한다:
    - **[USER]** — 사용자에게 안내만 하고 응답을 받기 전엔 다음으로 가지 않는다.
    - **[AGENT]** — 직접 명령을 실행하고 결과를 보고한다. 한 번에 하나씩 실행 (병렬 금지).
    - **[CHECK]** — 검증; 실패 시 표시된 회귀 STEP으로 돌아가 사용자에게 원인을 보고한다.
-4. WSL/macOS/Linux가 감지되면 즉시 중단하고 사용자에게 알린다.
+5. STEP 수정이 끝나면 STEP A-3에 따라 doctor를 다시 돌려 통과 확인.
+6. WSL/macOS/Linux가 감지되면 즉시 중단하고 사용자에게 알린다.
 
 ## Storage layout (default `C:\Outlook_Data\`)
 ```
