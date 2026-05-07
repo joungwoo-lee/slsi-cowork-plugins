@@ -1,25 +1,30 @@
-"""Config loader and path helpers for email-connector."""
+"""Config loaded from a .env file (python-dotenv) — drop-in compatible with the
+retriever_engine project's environment variable names."""
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+
+from dotenv import load_dotenv
+
+SKILL_ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_ENV_PATH = SKILL_ROOT / ".env"
 
 
 @dataclass
 class EmbeddingConfig:
-    endpoint: str
+    api_url: str
     api_key: str
     model: str
     dim: int
+    x_dep_ticket: str = ""
+    x_system_name: str = "email-connector"
     batch_size: int = 16
     timeout_sec: int = 60
     # SSL cert verification is OFF by default to accommodate corporate
-    # MITM proxies / private CAs. Set to true in config.json for environments
-    # where the embedding endpoint presents a publicly-trusted certificate
-    # and you want strict verification.
+    # MITM proxies / private CAs. Set EMBEDDING_VERIFY_SSL=true in .env to
+    # enforce strict verification (e.g. against api.openai.com).
     verify_ssl: bool = False
 
 
@@ -43,6 +48,7 @@ class SearchConfig:
 @dataclass
 class Config:
     data_root: Path
+    pst_path: str
     embedding: EmbeddingConfig
     qdrant: QdrantConfig = field(default_factory=QdrantConfig)
     ingest: IngestConfig = field(default_factory=IngestConfig)
@@ -75,21 +81,45 @@ class Config:
         self.vector_db_path.mkdir(parents=True, exist_ok=True)
 
 
-def load_config(path: str | os.PathLike[str]) -> Config:
-    raw: dict[str, Any] = json.loads(Path(path).read_text(encoding="utf-8"))
-    emb = raw["embedding"]
+def _bool(value: str | None, default: bool) -> bool:
+    if value is None:
+        return default
+    return value.strip().lower() in ("1", "true", "yes", "on")
+
+
+def load_config(env_path: str | os.PathLike[str] | None = None) -> Config:
+    """Load .env (default <skill_root>/.env) into the Config dataclass.
+
+    Pre-existing process env vars take precedence over .env values, so a user
+    can override anything via shell env without editing the file.
+    """
+    target = Path(env_path) if env_path else DEFAULT_ENV_PATH
+    if target.exists():
+        load_dotenv(target, override=False)
+
     return Config(
-        data_root=Path(raw.get("data_root", r"C:\Outlook_Data")),
+        data_root=Path(os.getenv("DATA_ROOT", r"C:\Outlook_Data")),
+        pst_path=os.getenv("PST_PATH", "").strip(),
         embedding=EmbeddingConfig(
-            endpoint=emb["endpoint"],
-            api_key=emb["api_key"],
-            model=emb["model"],
-            dim=int(emb["dim"]),
-            batch_size=int(emb.get("batch_size", 16)),
-            timeout_sec=int(emb.get("timeout_sec", 60)),
-            verify_ssl=bool(emb.get("verify_ssl", False)),
+            api_url=os.getenv("EMBEDDING_API_URL", "").strip(),
+            api_key=os.getenv("EMBEDDING_API_KEY", "").strip(),
+            model=os.getenv("EMBEDDING_MODEL", "").strip(),
+            dim=int(os.getenv("EMBEDDING_DIM", "0") or "0"),
+            x_dep_ticket=os.getenv("EMBEDDING_API_X_DEP_TICKET", "").strip(),
+            x_system_name=os.getenv("EMBEDDING_API_X_SYSTEM_NAME", "email-connector").strip(),
+            batch_size=int(os.getenv("EMBEDDING_BATCH_SIZE", "16")),
+            timeout_sec=int(os.getenv("EMBEDDING_TIMEOUT_SEC", "60")),
+            verify_ssl=_bool(os.getenv("EMBEDDING_VERIFY_SSL"), False),
         ),
-        qdrant=QdrantConfig(**raw.get("qdrant", {})),
-        ingest=IngestConfig(**raw.get("ingest", {})),
-        search=SearchConfig(**raw.get("search", {})),
+        qdrant=QdrantConfig(
+            collection=os.getenv("QDRANT_COLLECTION", "emails"),
+            distance=os.getenv("QDRANT_DISTANCE", "Cosine"),
+        ),
+        ingest=IngestConfig(
+            max_attachment_chars=int(os.getenv("MAX_ATTACHMENT_CHARS", "200000")),
+            max_body_chars=int(os.getenv("MAX_BODY_CHARS", "200000")),
+        ),
+        search=SearchConfig(
+            hybrid_alpha=float(os.getenv("HYBRID_ALPHA", "0.5")),
+        ),
     )

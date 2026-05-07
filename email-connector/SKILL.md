@@ -1,6 +1,6 @@
 ---
 name: email-connector
-description: Decode local PST files (no Outlook required) and build a hybrid keyword (SQLite FTS5) + semantic (Qdrant) search index over mail bodies AND attachment text (PDF, DOCX) converted to unified markdown. Use when the user wants to ingest a PST archive on Windows and run keyword + semantic search across mail and attachment contents. ALSO use when the user asks to set up / install / configure email-connector — read SETUP.md and follow it. Triggers on phrases like "PST 인덱싱", "PST 검색", "메일 첨부파일까지 검색", "email-connector ingest", "하이브리드 검색", "email-connector 셋업", "email-connector 설치". Requires Windows 10/11 native + Python 3.9 + an external embedding API endpoint.
+description: Decode local PST files (no Outlook required) and build a hybrid keyword (SQLite FTS5) + semantic (Qdrant) search index over mail bodies AND attachment text (PDF, DOCX) converted to unified markdown. Use when the user wants to ingest a PST archive on Windows and run keyword + semantic search across mail and attachment contents. ALSO use when the user asks to set up / install / configure email-connector — read SETUP.md and follow it. Configuration is loaded from a .env file with retriever_engine-compatible variable names (EMBEDDING_API_URL, EMBEDDING_API_KEY, EMBEDDING_MODEL, EMBEDDING_DIM, EMBEDDING_API_X_DEP_TICKET, etc.) and the embedding API is called with the same headers (Authorization Bearer + x-dep-ticket + x-system-name) as that project. Triggers on phrases like "PST 인덱싱", "PST 검색", "메일 첨부파일까지 검색", "email-connector ingest", "하이브리드 검색", "email-connector 셋업", "email-connector 설치". Requires Windows 10/11 native + Python 3.9 + an external embedding API endpoint.
 ---
 
 # Email Connector Skill (PST → Hybrid Search)
@@ -78,41 +78,51 @@ C:\Outlook_Data\
 
 ## Commands
 
-### 1. 설정 파일 작성
-`config.example.json`을 `config.json`으로 복사 후 임베딩 API 정보 입력.
+### 1. 설정 파일 작성 (.env)
+```cmd
+copy .env.example .env
+```
+주요 변수 (retriever_engine 프로젝트와 호환):
+- `PST_PATH` (인덱싱할 PST 절대경로)
+- `EMBEDDING_API_URL` / `EMBEDDING_API_KEY` / `EMBEDDING_MODEL` / `EMBEDDING_DIM`
+- `EMBEDDING_API_X_DEP_TICKET` (사내 `x-dep-ticket` 헤더; 필요 없으면 빈 값)
+- `EMBEDDING_VERIFY_SSL` (기본 `false`, MITM 환경 대응)
+- `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`
 
 ### 2. 변환 + 인덱싱
+PST 경로는 `.env`의 `PST_PATH`에서 읽으므로 인자 생략 가능.
 
-**연속 실행 (한 번에)**
+**연속 실행**
 ```cmd
-python scripts\ingest.py --pst "C:\path\to\archive.pst" --config config.json
+python scripts\ingest.py
 ```
 옵션:
-- `--limit N` — 처음 N개 메일만 처리 (테스트용)
-- `--skip-embedding` — Qdrant 인덱싱 생략, SQLite FTS5만
-- `--skip-convert` — Phase 1 건너뛰고 기존 변환 결과로 인덱싱만
-- `--skip-index` — Phase 1만, 인덱싱 생략
+- `--pst <path>` — `.env` 대신 직접 지정
+- `--env <path>` — 별도 .env 파일
+- `--limit N` — 처음 N개 메일만 처리
+- `--skip-embedding` — Qdrant 생략, SQLite FTS5만
+- `--skip-convert` / `--skip-index` — 어느 한 phase만
 
-**Phase 1 단독 (변환만 — DB 미접근, 외부 API 미호출)**
+**Phase 1 단독 (변환만)**
 ```cmd
-python scripts\convert.py --pst "C:\path\to\archive.pst" --config config.json [--limit N]
+python scripts\convert.py [--pst <path>] [--limit N]
 ```
-산출: `cfg.files_root\[Mail_ID]\{body.md, meta.json, attachments\...}`
+산출: `<DATA_ROOT>\Files\[Mail_ID]\{body.md, meta.json, attachments\...}`
 
-**Phase 2 단독 (이미 변환된 파일을 인덱싱)**
+**Phase 2 단독 (인덱싱만)**
 ```cmd
-python scripts\index.py --config config.json [--skip-embedding] [--mail-id ID ...]
+python scripts\index.py [--skip-embedding] [--mail-id ID ...]
 ```
-- PST를 다시 읽지 않고 `Files/` 디렉토리만 스캔.
-- `--mail-id`를 반복 지정하면 해당 메일만 재인덱싱. 임베딩 모델/dim 변경 후 전체 재인덱싱이나 부분 재인덱싱에 사용.
+PST를 다시 읽지 않고 `Files/` 디렉토리만 스캔. 임베딩 모델/dim 변경 후 재인덱싱에 유용.
 
 ### 3. 검색
 ```cmd
-python scripts\search.py --query "협력사 보안 점검 결과 보고서" --config config.json --top 10
+python scripts\search.py --query "협력사 보안 점검 결과 보고서" --top 10
 ```
 옵션:
 - `--mode hybrid|keyword|semantic` — 검색 모드 (기본 hybrid)
 - `--top N` — 반환 개수
+- `--env <path>` — 다른 .env 파일 사용
 
 결과는 JSON으로 출력되며 각 항목은 `mail_id`, `subject`, `sender`, `received`, `body_path`, `score`, `score_keyword`, `score_semantic`, `snippet`을 포함.
 

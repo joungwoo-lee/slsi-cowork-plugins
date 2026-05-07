@@ -119,7 +119,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Phase 2: index already-converted mail folders into SQLite + Qdrant.",
     )
-    parser.add_argument("--config", required=True)
+    parser.add_argument("--env", default=None, help="Path to .env (default: <skill_root>/.env)")
     parser.add_argument(
         "--skip-embedding",
         action="store_true",
@@ -138,7 +138,7 @@ def main() -> None:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    cfg = load_config(args.config)
+    cfg = load_config(args.env)
     n = run_index(cfg, skip_embedding=args.skip_embedding, mail_ids=args.mail_id)
     print(json.dumps({"indexed": n, "db": str(cfg.db_path)}, ensure_ascii=False))
 

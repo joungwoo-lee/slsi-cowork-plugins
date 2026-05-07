@@ -98,7 +98,7 @@ def hybrid_search(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hybrid search over an ingested PST index.")
     parser.add_argument("--query", required=True)
-    parser.add_argument("--config", required=True)
+    parser.add_argument("--env", default=None, help="Path to .env (default: <skill_root>/.env)")
     parser.add_argument("--top", type=int, default=10)
     parser.add_argument("--mode", choices=("hybrid", "keyword", "semantic"), default="hybrid")
     parser.add_argument("-v", "--verbose", action="store_true")
@@ -108,7 +108,7 @@ def main() -> None:
         level=logging.DEBUG if args.verbose else logging.WARNING,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    cfg = load_config(args.config)
+    cfg = load_config(args.env)
     results = hybrid_search(cfg, args.query, top=args.top, mode=args.mode)
     print(json.dumps(results, ensure_ascii=False, indent=2))
 

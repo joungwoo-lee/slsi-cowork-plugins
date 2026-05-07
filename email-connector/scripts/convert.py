@@ -66,8 +66,6 @@ def _write_message(cfg: Config, msg: MailMessage) -> Path | None:
     """Write body.md / meta.json / attachments/ for one message. Returns mail dir."""
     mail_dir = cfg.mail_dir(msg.mail_id)
     mail_dir.mkdir(parents=True, exist_ok=True)
-    # Make this phase idempotent: clear previous attachments so re-runs don't
-    # accumulate filename_1, filename_2 duplicates.
     att_dir = cfg.attachments_dir(msg.mail_id)
     if att_dir.exists():
         shutil.rmtree(att_dir)
@@ -133,8 +131,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Phase 1: convert a PST into per-mail markdown + attachments. No indexing.",
     )
-    parser.add_argument("--pst", required=True, help="Path to .pst file")
-    parser.add_argument("--config", required=True, help="Path to config.json")
+    parser.add_argument("--pst", default=None, help="Path to .pst file (default: PST_PATH from .env)")
+    parser.add_argument("--env", default=None, help="Path to .env (default: <skill_root>/.env)")
     parser.add_argument("--limit", type=int, default=None, help="Convert at most N messages")
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
@@ -143,8 +141,11 @@ def main() -> None:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    cfg = load_config(args.config)
-    n = run_convert(args.pst, cfg, limit=args.limit)
+    cfg = load_config(args.env)
+    pst = args.pst or cfg.pst_path
+    if not pst:
+        parser.error("--pst not provided and PST_PATH is empty in .env")
+    n = run_convert(pst, cfg, limit=args.limit)
     print(json.dumps({"converted": n, "files_root": str(cfg.files_root)}, ensure_ascii=False))
 
 

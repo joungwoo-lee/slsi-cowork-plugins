@@ -27,6 +27,7 @@ DEPS = [
     ("docx", "python-docx"),
     ("qdrant_client", "qdrant-client"),
     ("requests", "requests"),
+    ("dotenv", "python-dotenv"),
 ]
 
 
@@ -59,31 +60,46 @@ def check_dependency(import_name: str, pip_name: str) -> dict:
         return _check(f"dep:{pip_name}", False, f"import failed: {exc}")
 
 
-def check_config(config_path: Path) -> tuple[dict, dict | None]:
+def check_env_file(env_path: Path) -> dict:
+    if not env_path.exists():
+        return _check("env_file", False, f"file not found: {env_path}")
+    return _check("env_file", True, f"found: {env_path}")
+
+
+def check_config(cfg) -> tuple[dict, bool]:
+    """Validate that required .env values are populated. Returns (check, ok)."""
+    missing: list[str] = []
+    if not cfg.embedding.api_url:
+        missing.append("EMBEDDING_API_URL")
+    if not cfg.embedding.api_key:
+        missing.append("EMBEDDING_API_KEY")
+    if not cfg.embedding.model:
+        missing.append("EMBEDDING_MODEL")
+    if cfg.embedding.dim <= 0:
+        missing.append("EMBEDDING_DIM")
+    if missing:
+        return _check("config", False, f"missing required .env values: {missing}"), False
+    return _check(
+        "config",
+        True,
+        f"valid (model={cfg.embedding.model}, dim={cfg.embedding.dim}, "
+        f"x-dep-ticket={'set' if cfg.embedding.x_dep_ticket else 'empty'})",
+    ), True
+
+
+def check_pst_path(cfg) -> dict:
+    if not cfg.pst_path:
+        return _check("pst_path", False, "PST_PATH is empty in .env")
+    p = Path(cfg.pst_path)
+    if not p.exists():
+        return _check("pst_path", False, f"file not found: {cfg.pst_path}")
+    if not p.is_file():
+        return _check("pst_path", False, f"not a regular file: {cfg.pst_path}")
+    return _check("pst_path", True, f"{cfg.pst_path} ({p.stat().st_size} bytes)")
+
+
+def check_data_root(cfg) -> dict:
     try:
-        raw = json.loads(config_path.read_text(encoding="utf-8"))
-        emb = raw.get("embedding", {})
-        missing = [f for f in ("endpoint", "api_key", "model", "dim") if not emb.get(f)]
-        if missing:
-            return _check("config", False, f"missing embedding fields: {missing}"), None
-        if emb.get("api_key") == "REPLACE_ME":
-            return _check("config", False, "api_key is still the placeholder REPLACE_ME"), None
-        try:
-            int(emb["dim"])
-        except (TypeError, ValueError):
-            return _check("config", False, f"embedding.dim is not an integer: {emb.get('dim')!r}"), None
-        return _check("config", True, f"valid (model={emb['model']}, dim={emb['dim']})"), raw
-    except FileNotFoundError:
-        return _check("config", False, f"file not found: {config_path}"), None
-    except json.JSONDecodeError as exc:
-        return _check("config", False, f"invalid JSON: {exc}"), None
-
-
-def check_data_root(config_path: Path) -> dict:
-    try:
-        from scripts.config import load_config  # type: ignore
-
-        cfg = load_config(config_path)
         cfg.ensure_dirs()
         probe = cfg.data_root / ".doctor_write_test"
         probe.write_text("ok", encoding="utf-8")
@@ -93,30 +109,27 @@ def check_data_root(config_path: Path) -> dict:
         return _check("data_root", False, f"cannot prepare data_root: {exc}")
 
 
-def check_embedding_api(raw_config: dict) -> dict:
-    emb = raw_config["embedding"]
-    payload = json.dumps({"model": emb["model"], "input": ["ping"]}).encode("utf-8")
-    req = urllib.request.Request(
-        emb["endpoint"],
-        data=payload,
-        headers={
-            "Authorization": f"Bearer {emb['api_key']}",
-            "Content-Type": "application/json",
-        },
-        method="POST",
-    )
-    # Honor verify_ssl from config (default false to handle corporate MITM).
-    verify_ssl = bool(emb.get("verify_ssl", False))
-    if verify_ssl:
+def check_embedding_api(cfg) -> dict:
+    """Send a tiny POST mirroring the retriever_engine header set."""
+    emb = cfg.embedding
+    headers = {"Content-Type": "application/json"}
+    if emb.api_key:
+        headers["Authorization"] = f"Bearer {emb.api_key}"
+    if emb.x_dep_ticket:
+        headers["x-dep-ticket"] = emb.x_dep_ticket
+    if emb.x_system_name:
+        headers["x-system-name"] = emb.x_system_name
+
+    payload = json.dumps({"model": emb.model, "input": ["ping"]}).encode("utf-8")
+    req = urllib.request.Request(emb.api_url, data=payload, headers=headers, method="POST")
+
+    if emb.verify_ssl:
         ssl_ctx: ssl.SSLContext | None = ssl.create_default_context()
     else:
         ssl_ctx = ssl._create_unverified_context()
+
     try:
-        with urllib.request.urlopen(
-            req,
-            timeout=int(emb.get("timeout_sec", 30)),
-            context=ssl_ctx,
-        ) as resp:
+        with urllib.request.urlopen(req, timeout=emb.timeout_sec, context=ssl_ctx) as resp:
             body = json.loads(resp.read())
     except urllib.error.HTTPError as exc:
         return _check("embedding_api", False, f"HTTP {exc.code}: {exc.reason}")
@@ -125,29 +138,33 @@ def check_embedding_api(raw_config: dict) -> dict:
     except Exception as exc:  # noqa: BLE001
         return _check("embedding_api", False, f"request error: {exc}")
 
-    try:
-        vec = body["data"][0]["embedding"]
-    except (KeyError, IndexError, TypeError):
+    items = body.get("data") or body.get("embeddings", [])
+    if not items:
         return _check("embedding_api", False, f"unexpected response shape: keys={list(body)[:5]}")
-
-    expected = int(emb["dim"])
-    if len(vec) != expected:
+    first = items[0]
+    vec = first.get("embedding") if isinstance(first, dict) else first
+    if vec is None:
+        return _check("embedding_api", False, f"no embedding in first item: {first}")
+    if len(vec) != emb.dim:
         return _check(
             "embedding_api",
             False,
-            f"dim mismatch: api returned {len(vec)}, config says {expected}",
+            f"dim mismatch: api returned {len(vec)}, .env says {emb.dim}",
         )
-    suffix = " (ssl verify ON)" if verify_ssl else " (ssl verify OFF)"
-    return _check("embedding_api", True, f"reachable, dim={len(vec)} matches config{suffix}")
+    suffix = " (ssl verify ON)" if emb.verify_ssl else " (ssl verify OFF)"
+    return _check("embedding_api", True, f"reachable, dim={len(vec)} matches .env{suffix}")
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Diagnose email-connector install.")
-    parser.add_argument("--config", required=True)
+    parser.add_argument("--env", default=None, help="Path to .env (default: <skill_root>/.env)")
     parser.add_argument("--skip-api", action="store_true", help="Skip embedding API ping")
+    parser.add_argument("--skip-pst", action="store_true", help="Skip PST_PATH existence check")
     args = parser.parse_args()
 
-    config_path = Path(args.config)
+    from scripts.config import DEFAULT_ENV_PATH, load_config  # type: ignore
+
+    env_path = Path(args.env) if args.env else DEFAULT_ENV_PATH
     results: list[dict] = []
 
     results.append(check_platform())
@@ -156,12 +173,18 @@ def main() -> int:
     for import_name, pip_name in DEPS:
         results.append(check_dependency(import_name, pip_name))
 
-    cfg_check, raw_cfg = check_config(config_path)
-    results.append(cfg_check)
-    if cfg_check["ok"]:
-        results.append(check_data_root(config_path))
-        if not args.skip_api and raw_cfg is not None:
-            results.append(check_embedding_api(raw_cfg))
+    results.append(check_env_file(env_path))
+    cfg = load_config(env_path) if env_path.exists() else None
+
+    if cfg is not None:
+        cfg_check, cfg_ok = check_config(cfg)
+        results.append(cfg_check)
+        if not args.skip_pst:
+            results.append(check_pst_path(cfg))
+        if cfg_ok:
+            results.append(check_data_root(cfg))
+            if not args.skip_api:
+                results.append(check_embedding_api(cfg))
 
     all_ok = all(r["ok"] for r in results)
     print(json.dumps({"all_ok": all_ok, "checks": results}, ensure_ascii=False, indent=2))

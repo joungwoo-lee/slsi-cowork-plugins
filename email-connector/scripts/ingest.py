@@ -28,8 +28,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run convert + index in one go (Phase 1 then Phase 2).",
     )
-    parser.add_argument("--pst", required=True, help="Path to .pst file")
-    parser.add_argument("--config", required=True, help="Path to config.json")
+    parser.add_argument("--pst", default=None, help="Path to .pst file (default: PST_PATH from .env)")
+    parser.add_argument("--env", default=None, help="Path to .env (default: <skill_root>/.env)")
     parser.add_argument("--limit", type=int, default=None, help="Convert at most N messages")
     parser.add_argument(
         "--skip-embedding",
@@ -53,12 +53,15 @@ def main() -> None:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
-    cfg = load_config(args.config)
+    cfg = load_config(args.env)
 
     converted = 0
     indexed = 0
     if not args.skip_convert:
-        converted = run_convert(args.pst, cfg, limit=args.limit)
+        pst = args.pst or cfg.pst_path
+        if not pst:
+            parser.error("--pst not provided and PST_PATH is empty in .env")
+        converted = run_convert(pst, cfg, limit=args.limit)
     if not args.skip_index:
         indexed = run_index(cfg, skip_embedding=args.skip_embedding)
 
