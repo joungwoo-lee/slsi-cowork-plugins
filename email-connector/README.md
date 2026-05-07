@@ -48,14 +48,15 @@ VectorDB\                        # Qdrant 로컬
 
 ## 의존성
 ```
-pypff-python    # PST 디코딩
-libratom        # PST 보조 유틸
-markdownify     # HTML → 마크다운
-pymupdf         # PDF 텍스트 추출
-python-docx     # DOCX 텍스트 추출
-qdrant-client   # Qdrant 로컬 모드
-requests        # 외부 임베딩 API 호출
+libpff-python==20211114   # PST 디코딩 (모듈 import는 pypff). 이 버전만 Windows wheel 제공.
+markdownify               # HTML → 마크다운
+pymupdf                   # PDF 텍스트 추출
+python-docx               # DOCX 텍스트 추출
+qdrant-client             # Qdrant 로컬 모드
+requests                  # 외부 임베딩 API 호출
 ```
+
+> ⚠️ **`pypff-python`이라는 이름은 PyPI에 없습니다.** 정확한 패키지명은 `libpff-python`. 그리고 최신 버전(20231205)은 macOS wheel만 제공하므로 Windows에서는 반드시 `==20211114`로 버전을 못박아야 prebuilt wheel(`cp39-win_amd64`)로 깔립니다. 다른 Python 버전을 쓰면 wheel이 없어 sdist로 떨어지고 C 빌드를 시도하므로 실패합니다 — Python 3.9 64-bit 필수.
 
 ## 제한 사항
 - Windows 전용. macOS/Linux/WSL에서는 pypff wheel이 없어 동작하지 않음.

@@ -73,8 +73,9 @@ py -3.9 -m pip install -r requirements.txt
 ```
 - pip 종료코드가 0이 아니면 stderr 마지막 30줄을 사용자에게 그대로 보고.
 - 자주 발생하는 실패와 대응:
-  - `Could not find a version that satisfies the requirement pypff-python` → Python 3.9 64-bit 아님. STEP 3로.
-  - `Microsoft Visual C++ 14.0 or greater is required` → wheel을 못 찾고 빌드를 시도한 것. Python 3.9가 맞는지 다시 확인.
+  - `Could not find a version that satisfies the requirement pypff-python` → 옛 잘못된 이름. PyPI에는 `libpff-python`만 존재. requirements.txt가 `libpff-python==20211114`로 되어 있는지 확인.
+  - `ERROR: Could not build wheels for libpff-python` 또는 `Microsoft Visual C++ 14.0 or greater is required` → Python이 3.9 64-bit가 아닌 것. `libpff-python`은 `20211114` 버전에서만 `cp39-win_amd64` wheel을 제공하므로 Python 3.9 64-bit 외 환경에서는 sdist로 떨어져 C 빌드를 시도한다. STEP 3로 회귀.
+  - `No matching distribution found for libpff-python==20211114` → pip가 매우 오래되어 wheel 태그 호환성 판정 실패 가능. `py -3.9 -m pip install --upgrade pip` 재실행 후 STEP 4 재시도.
   - 사내망 인증서/프록시 문제(`SSL: CERTIFICATE_VERIFY_FAILED`) → 사용자에게 사내 pip 인덱스 / 프록시 설정 필요 여부 질문.
 
 ## STEP 5. 임베딩 API 정보 수집 [USER]

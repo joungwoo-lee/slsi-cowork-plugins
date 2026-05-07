@@ -19,8 +19,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 DEPS = [
-    ("pypff", "pypff-python"),
-    ("libratom", "libratom"),
+    ("pypff", "libpff-python"),
     ("markdownify", "markdownify"),
     ("fitz", "pymupdf"),
     ("docx", "python-docx"),

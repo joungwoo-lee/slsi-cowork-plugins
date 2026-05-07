@@ -1,7 +1,15 @@
-pypff-python>=20231205
-libratom>=0.5.0
+# PST decoding — libpff-python is the correct PyPI name (NOT pypff-python).
+# Pin to 20211114 because it is the only version that ships a prebuilt
+# Windows wheel (cp39-win_amd64). Newer releases have macOS wheels only,
+# so on Windows pip would fall back to sdist → C build → fail.
+# Requires: Python 3.9, 64-bit, Windows.
+libpff-python==20211114
+
+# Mail body / attachment conversion
 markdownify>=0.11.6
-qdrant-client>=1.7.0
-requests>=2.31.0
 pymupdf>=1.23.0
 python-docx>=1.1.0
+
+# Storage + API
+qdrant-client>=1.7.0
+requests>=2.31.0
