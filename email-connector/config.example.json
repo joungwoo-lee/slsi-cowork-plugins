@@ -6,7 +6,8 @@
     "model": "text-embedding-3-small",
     "dim": 1536,
     "batch_size": 16,
-    "timeout_sec": 60
+    "timeout_sec": 60,
+    "verify_ssl": false
   },
   "qdrant": {
     "collection": "emails",

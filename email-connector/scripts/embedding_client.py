@@ -22,6 +22,18 @@ class EmbeddingClient:
                 "Content-Type": "application/json",
             }
         )
+        self.session.verify = bool(cfg.verify_ssl)
+        if not self.session.verify:
+            # Suppress the per-request InsecureRequestWarning that urllib3 emits
+            # when verify=False; it would otherwise spam logs once per batch.
+            try:
+                from urllib3.exceptions import InsecureRequestWarning
+                import urllib3
+
+                urllib3.disable_warnings(InsecureRequestWarning)
+            except Exception:  # noqa: BLE001
+                pass
+            log.warning("SSL verification disabled for embedding endpoint (cfg.verify_ssl=false)")
 
     def embed(self, texts: Sequence[str]) -> list[list[float]]:
         """Embed a batch of texts. Returns list aligned with input order."""

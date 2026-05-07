@@ -9,6 +9,7 @@ import argparse
 import importlib
 import json
 import os
+import ssl
 import struct
 import sys
 import urllib.error
@@ -104,8 +105,18 @@ def check_embedding_api(raw_config: dict) -> dict:
         },
         method="POST",
     )
+    # Honor verify_ssl from config (default false to handle corporate MITM).
+    verify_ssl = bool(emb.get("verify_ssl", False))
+    if verify_ssl:
+        ssl_ctx: ssl.SSLContext | None = ssl.create_default_context()
+    else:
+        ssl_ctx = ssl._create_unverified_context()
     try:
-        with urllib.request.urlopen(req, timeout=int(emb.get("timeout_sec", 30))) as resp:
+        with urllib.request.urlopen(
+            req,
+            timeout=int(emb.get("timeout_sec", 30)),
+            context=ssl_ctx,
+        ) as resp:
             body = json.loads(resp.read())
     except urllib.error.HTTPError as exc:
         return _check("embedding_api", False, f"HTTP {exc.code}: {exc.reason}")
@@ -126,7 +137,8 @@ def check_embedding_api(raw_config: dict) -> dict:
             False,
             f"dim mismatch: api returned {len(vec)}, config says {expected}",
         )
-    return _check("embedding_api", True, f"reachable, dim={len(vec)} matches config")
+    suffix = " (ssl verify ON)" if verify_ssl else " (ssl verify OFF)"
+    return _check("embedding_api", True, f"reachable, dim={len(vec)} matches config{suffix}")
 
 
 def main() -> int:

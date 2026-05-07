@@ -16,6 +16,11 @@ class EmbeddingConfig:
     dim: int
     batch_size: int = 16
     timeout_sec: int = 60
+    # SSL cert verification is OFF by default to accommodate corporate
+    # MITM proxies / private CAs. Set to true in config.json for environments
+    # where the embedding endpoint presents a publicly-trusted certificate
+    # and you want strict verification.
+    verify_ssl: bool = False
 
 
 @dataclass
@@ -82,6 +87,7 @@ def load_config(path: str | os.PathLike[str]) -> Config:
             dim=int(emb["dim"]),
             batch_size=int(emb.get("batch_size", 16)),
             timeout_sec=int(emb.get("timeout_sec", 60)),
+            verify_ssl=bool(emb.get("verify_ssl", False)),
         ),
         qdrant=QdrantConfig(**raw.get("qdrant", {})),
         ingest=IngestConfig(**raw.get("ingest", {})),

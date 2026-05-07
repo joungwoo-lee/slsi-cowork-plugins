@@ -145,6 +145,8 @@ py -3.9 -m pip install -r requirements.txt
 
 dim은 모델 실제 차원과 정확히 일치해야 한다고 사용자에게 강조.
 
+> **SSL 인증서 검증은 기본적으로 비활성화**되어 있다 (`embedding.verify_ssl: false`). 사내 MITM 프록시 / 사설 CA 환경을 가정한 디폴트. 외부의 공인 CA 발급 인증서를 쓰는 endpoint(예: `api.openai.com`)이고 엄격 검증을 원하면 사용자에게 알려 `config.json`에서 `verify_ssl: true`로 바꾸도록 안내한다.
+
 ## STEP 7. config.json 작성 [AGENT]
 
 ```cmd
