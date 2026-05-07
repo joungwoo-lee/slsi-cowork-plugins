@@ -1,6 +1,6 @@
 ---
 name: email-connector
-description: Decode local PST files (no Outlook required) and build a hybrid keyword (SQLite FTS5) + semantic (Qdrant) search index over mail bodies AND attachment text (PDF, DOCX) converted to unified markdown. Use when the user wants to ingest a PST archive on Windows and run keyword + semantic search across mail and attachment contents. Triggers on phrases like "PST 인덱싱", "PST 검색", "메일 첨부파일까지 검색", "email-connector ingest", "하이브리드 검색". Requires Windows 10/11 native + Python 3.9 + an external embedding API endpoint.
+description: Decode local PST files (no Outlook required) and build a hybrid keyword (SQLite FTS5) + semantic (Qdrant) search index over mail bodies AND attachment text (PDF, DOCX) converted to unified markdown. Use when the user wants to ingest a PST archive on Windows and run keyword + semantic search across mail and attachment contents. ALSO use when the user asks to set up / install / configure email-connector — read SETUP.md and follow it. Triggers on phrases like "PST 인덱싱", "PST 검색", "메일 첨부파일까지 검색", "email-connector ingest", "하이브리드 검색", "email-connector 셋업", "email-connector 설치". Requires Windows 10/11 native + Python 3.9 + an external embedding API endpoint.
 ---
 
 # Email Connector Skill (PST → Hybrid Search)
@@ -27,6 +27,7 @@ PST 파일을 직접 디코딩하여 메일 본문 + 첨부파일(PDF, DOCX) 텍
   ```
 
 ## Files
+- `SETUP.md` — **셋업/설치 절차서**. 사용자가 "셋업/설치/install/configure" 요청을 할 때 반드시 이 파일을 먼저 읽고, 단계 마커(`[USER]`/`[AGENT]`/`[CHECK]`)에 따라 순서대로 진행한다.
 - `scripts/config.py` — 경로/엔드포인트 설정 로더
 - `scripts/pst_extractor.py` — pypff 기반 PST 디코딩
 - `scripts/markdown_converter.py` — HTML/PDF/DOCX → 통합 마크다운
@@ -34,6 +35,17 @@ PST 파일을 직접 디코딩하여 메일 본문 + 첨부파일(PDF, DOCX) 텍
 - `scripts/storage.py` — SQLite (Metadata + FTS5) + Qdrant 로컬 저장
 - `scripts/ingest.py` — PST → 통합 MD → DB 인덱싱 파이프라인
 - `scripts/search.py` — 하이브리드 검색 (FTS5 + Qdrant 결합)
+- `scripts/doctor.py` — 설치 진단 (Python/의존성/config/임베딩 API 도달성 검사)
+
+## Setup workflow
+사용자가 셋업/설치/구성을 요청하면:
+1. 먼저 `SETUP.md`를 Read 도구로 읽는다.
+2. STEP 0부터 순서대로 따라간다. STEP을 건너뛰지 않는다.
+3. 각 단계의 마커를 준수한다:
+   - **[USER]** — 사용자에게 안내만 하고 응답을 받기 전엔 다음으로 가지 않는다.
+   - **[AGENT]** — 직접 명령을 실행하고 결과를 보고한다. 한 번에 하나씩 실행 (병렬 금지).
+   - **[CHECK]** — 검증; 실패 시 표시된 회귀 STEP으로 돌아가 사용자에게 원인을 보고한다.
+4. WSL/macOS/Linux가 감지되면 즉시 중단하고 사용자에게 알린다.
 
 ## Storage layout (default `C:\Outlook_Data\`)
 ```
