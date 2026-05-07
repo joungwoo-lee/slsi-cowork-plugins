@@ -189,13 +189,32 @@ py -3.9 scripts\doctor.py --config config.json
 [USER]
 > 테스트용 .pst 파일이 있으면 절대경로를 알려주세요. 없으면 "건너뛰기"라고 답해주세요.
 
-경로를 받으면 [AGENT]:
+경로를 받으면 [AGENT] — Phase별 분리 검증:
+
+### 10-1. Phase 1 (변환만)
 ```cmd
-py -3.9 scripts\ingest.py --pst "<사용자_경로>" --config config.json --limit 5 --skip-embedding
+py -3.9 scripts\convert.py --pst "<사용자_경로>" --config config.json --limit 5
+```
+출력에 `{"converted": N, ...}` (N>=1)이면 성공. `C:\Outlook_Data\Files\` 아래 메일별 폴더가 만들어지고 각 폴더에 `body.md` + `meta.json` + `attachments\` 가 보여야 함.
+
+### 10-2. Phase 2 (인덱싱만, FTS5만)
+```cmd
+py -3.9 scripts\index.py --config config.json --skip-embedding
+```
+출력 `{"indexed": N, ...}`. SQLite FTS5에만 적재 (임베딩 API 미호출).
+
+### 10-3. 검색
+```cmd
 py -3.9 scripts\search.py --query "테스트" --config config.json --mode keyword --top 3
 ```
-- ingest 출력에 `done. ingested=N` (N>=1) 보이고
-- search가 JSON 배열을 반환하면 성공.
+JSON 배열이 반환되면 성공.
+
+### 10-4. (선택) 임베딩 포함 인덱싱 검증
+```cmd
+py -3.9 scripts\index.py --config config.json
+py -3.9 scripts\search.py --query "테스트" --config config.json --mode hybrid --top 3
+```
+임베딩 API + Qdrant까지 동작하면 hybrid 검색 결과가 나옴.
 
 ## 셋업 종료 보고
 

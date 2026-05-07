@@ -29,13 +29,33 @@ PST 파일을 직접 디코딩하여 메일 본문 + 첨부파일(PDF, DOCX) 텍
 ## Files
 - `SETUP.md` — **셋업/설치 절차서**. 사용자가 "셋업/설치/install/configure" 요청을 할 때 반드시 이 파일을 먼저 읽고, 단계 마커(`[USER]`/`[AGENT]`/`[CHECK]`)에 따라 순서대로 진행한다.
 - `scripts/config.py` — 경로/엔드포인트 설정 로더
-- `scripts/pst_extractor.py` — pypff 기반 PST 디코딩
+- `scripts/pst_extractor.py` — pypff 기반 PST 디코딩 (RTF 폴백 포함)
 - `scripts/markdown_converter.py` — HTML/PDF/DOCX → 통합 마크다운
 - `scripts/embedding_client.py` — 외부 API 임베딩 클라이언트
 - `scripts/storage.py` — SQLite (Metadata + FTS5) + Qdrant 로컬 저장
-- `scripts/ingest.py` — PST → 통합 MD → DB 인덱싱 파이프라인
+- **`scripts/convert.py` — Phase 1**: PST → `body.md` + 원본 확장자 첨부파일 + `meta.json`
+- **`scripts/index.py` — Phase 2**: 변환된 파일들을 SQLite FTS5 + Qdrant로 인덱싱
+- `scripts/ingest.py` — Phase 1 + Phase 2 연속 실행 래퍼
 - `scripts/search.py` — 하이브리드 검색 (FTS5 + Qdrant 결합)
 - `scripts/doctor.py` — 설치 진단 (Python/의존성/config/임베딩 API 도달성 검사)
+
+## Two-phase architecture
+파이프라인은 두 단계로 분리되어 단독 / 연속 실행이 모두 가능합니다.
+
+**Phase 1 — 변환 (PST → 파일)**
+PST에서 메일을 추출해 메일 ID별 폴더에:
+- `body.md` (메일 본문 + 첨부파일 텍스트 통합 마크다운)
+- 원본 첨부파일 (확장자 그대로, 변환 없이)
+- `meta.json` (제목, 발신자, 수신일 등 — Phase 2가 PST 재읽기 없이 인덱싱하기 위해 보존)
+
+DB나 외부 API를 전혀 호출하지 않음.
+
+**Phase 2 — 인덱싱 (파일 → DB)**
+`Files/[Mail_ID]/`를 워킹하면서:
+- SQLite metadata + FTS5 키워드 인덱스 갱신
+- 옵션: 외부 임베딩 API 호출 → Qdrant 벡터 저장
+
+PST를 다시 읽지 않음. 임베딩 모델/dim 변경, 인덱스 재구축, 일부 메일만 재인덱싱 등이 가볍게 가능.
 
 ## Setup workflow
 사용자가 셋업/설치/구성을 요청하면:
@@ -61,13 +81,30 @@ C:\Outlook_Data\
 ### 1. 설정 파일 작성
 `config.example.json`을 `config.json`으로 복사 후 임베딩 API 정보 입력.
 
-### 2. PST 인제스트
+### 2. 변환 + 인덱싱
+
+**연속 실행 (한 번에)**
 ```cmd
 python scripts\ingest.py --pst "C:\path\to\archive.pst" --config config.json
 ```
 옵션:
-- `--limit N` — 처음 N개 메일만 인제스트 (테스트용)
-- `--skip-embedding` — Qdrant 인덱싱 생략, FTS5만
+- `--limit N` — 처음 N개 메일만 처리 (테스트용)
+- `--skip-embedding` — Qdrant 인덱싱 생략, SQLite FTS5만
+- `--skip-convert` — Phase 1 건너뛰고 기존 변환 결과로 인덱싱만
+- `--skip-index` — Phase 1만, 인덱싱 생략
+
+**Phase 1 단독 (변환만 — DB 미접근, 외부 API 미호출)**
+```cmd
+python scripts\convert.py --pst "C:\path\to\archive.pst" --config config.json [--limit N]
+```
+산출: `cfg.files_root\[Mail_ID]\{body.md, meta.json, attachments\...}`
+
+**Phase 2 단독 (이미 변환된 파일을 인덱싱)**
+```cmd
+python scripts\index.py --config config.json [--skip-embedding] [--mail-id ID ...]
+```
+- PST를 다시 읽지 않고 `Files/` 디렉토리만 스캔.
+- `--mail-id`를 반복 지정하면 해당 메일만 재인덱싱. 임베딩 모델/dim 변경 후 전체 재인덱싱이나 부분 재인덱싱에 사용.
 
 ### 3. 검색
 ```cmd
