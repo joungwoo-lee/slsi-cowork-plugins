@@ -7,13 +7,22 @@ Reads cfg.files_root/[Mail_ID]/{meta.json, body.md} and:
 
 Does NOT touch the PST. Run this after convert.py, or stand-alone whenever
 you need to rebuild the index (e.g. switching embedding model / dim).
+
+INVOCATION: py -3.9 scripts\\index.py   (never bare python — see SKILL.md)
 """
 from __future__ import annotations
+
+import sys
+if sys.version_info[:2] != (3, 9):
+    raise SystemExit(
+        "email-connector requires Python 3.9 (got "
+        f"{sys.version_info.major}.{sys.version_info.minor} at {sys.executable}).\n"
+        "Run with the launcher: py -3.9 scripts\\index.py"
+    )
 
 import argparse
 import json
 import logging
-import sys
 from pathlib import Path
 from typing import Iterable, Iterator
 
@@ -117,7 +126,8 @@ def run_index(
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Phase 2: index already-converted mail folders into SQLite + Qdrant.",
+        prog="py -3.9 scripts\\index.py",
+        description="Phase 2: index already-converted mail folders into SQLite + Qdrant. Must be run with Python 3.9.",
     )
     parser.add_argument("--env", default=None, help="Path to .env (default: <skill_root>/.env)")
     parser.add_argument(

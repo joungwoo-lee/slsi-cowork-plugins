@@ -1,9 +1,19 @@
 """Verify the email-connector install. Prints a JSON report; exits 0 only if all checks pass.
 
-Used by SETUP.md STEP 8. Each check produces:
+Used by SETUP.md STEP A (and STEP 8 for backward refs). Each check produces:
     {"name": str, "ok": bool, "detail": str}
+
+INVOCATION: py -3.9 scripts\\doctor.py   (never bare python — see SKILL.md)
 """
 from __future__ import annotations
+
+import sys
+if sys.version_info[:2] != (3, 9):
+    raise SystemExit(
+        "email-connector requires Python 3.9 (got "
+        f"{sys.version_info.major}.{sys.version_info.minor} at {sys.executable}).\n"
+        "Run with the launcher: py -3.9 scripts\\doctor.py"
+    )
 
 import argparse
 import importlib
@@ -11,7 +21,6 @@ import json
 import os
 import ssl
 import struct
-import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -158,7 +167,10 @@ def check_embedding_api(cfg) -> dict:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Diagnose email-connector install.")
+    parser = argparse.ArgumentParser(
+        prog="py -3.9 scripts\\doctor.py",
+        description="Diagnose email-connector install. Must be run with Python 3.9.",
+    )
     parser.add_argument("--env", default=None, help="Path to .env (default: <skill_root>/.env)")
     parser.add_argument("--skip-api", action="store_true", help="Skip embedding API ping")
     parser.add_argument("--skip-pst", action="store_true", help="Skip PST_PATH existence check")

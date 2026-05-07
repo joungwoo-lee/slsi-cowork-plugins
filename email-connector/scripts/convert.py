@@ -10,15 +10,24 @@ Per-mail layout written under cfg.files_root:
         meta.json       # subject, sender, recipients, received, folder_path, mail_id
         attachments/
             <original filename with original extension>
+
+INVOCATION: py -3.9 scripts\\convert.py   (never bare python — see SKILL.md)
 """
 from __future__ import annotations
+
+import sys
+if sys.version_info[:2] != (3, 9):
+    raise SystemExit(
+        "email-connector requires Python 3.9 (got "
+        f"{sys.version_info.major}.{sys.version_info.minor} at {sys.executable}).\n"
+        "Run with the launcher: py -3.9 scripts\\convert.py"
+    )
 
 import argparse
 import json
 import logging
 import re
 import shutil
-import sys
 from pathlib import Path
 
 if __package__ in (None, ""):
@@ -131,7 +140,8 @@ def run_convert(pst_path: str, cfg: Config, *, limit: int | None = None) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Phase 1: convert a PST into per-mail markdown + attachments. No indexing.",
+        prog="py -3.9 scripts\\convert.py",
+        description="Phase 1: convert a PST into per-mail markdown + attachments. No indexing. Must be run with Python 3.9.",
     )
     parser.add_argument("--pst", default=None, help="Path to .pst file (default: PST_PATH from .env)")
     parser.add_argument("--env", default=None, help="Path to .env (default: <skill_root>/.env)")

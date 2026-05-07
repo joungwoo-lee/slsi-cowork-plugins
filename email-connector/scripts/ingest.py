@@ -2,13 +2,22 @@
 
 Thin wrapper kept for backwards-compatible single-command usage. For phase-by-
 phase control use scripts/convert.py and scripts/index.py directly.
+
+INVOCATION: py -3.9 scripts\\ingest.py   (never bare python — see SKILL.md)
 """
 from __future__ import annotations
+
+import sys
+if sys.version_info[:2] != (3, 9):
+    raise SystemExit(
+        "email-connector requires Python 3.9 (got "
+        f"{sys.version_info.major}.{sys.version_info.minor} at {sys.executable}).\n"
+        "Run with the launcher: py -3.9 scripts\\ingest.py"
+    )
 
 import argparse
 import json
 import logging
-import sys
 from pathlib import Path
 
 if __package__ in (None, ""):
@@ -26,7 +35,8 @@ log = logging.getLogger("email_connector.ingest")
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Run convert + index in one go (Phase 1 then Phase 2).",
+        prog="py -3.9 scripts\\ingest.py",
+        description="Run convert + index in one go (Phase 1 then Phase 2). Must be run with Python 3.9.",
     )
     parser.add_argument("--pst", default=None, help="Path to .pst file (default: PST_PATH from .env)")
     parser.add_argument("--env", default=None, help="Path to .env (default: <skill_root>/.env)")

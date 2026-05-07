@@ -1,10 +1,20 @@
-"""Hybrid search: SQLite FTS5 (keyword) + Qdrant (semantic) with score fusion."""
+"""Hybrid search: SQLite FTS5 (keyword) + Qdrant (semantic) with score fusion.
+
+INVOCATION: py -3.9 scripts\\search.py --query "..."   (never bare python — see SKILL.md)
+"""
 from __future__ import annotations
+
+import sys
+if sys.version_info[:2] != (3, 9):
+    raise SystemExit(
+        "email-connector requires Python 3.9 (got "
+        f"{sys.version_info.major}.{sys.version_info.minor} at {sys.executable}).\n"
+        "Run with the launcher: py -3.9 scripts\\search.py --query \"...\""
+    )
 
 import argparse
 import json
 import logging
-import sys
 from pathlib import Path
 
 if __package__ in (None, ""):
@@ -96,7 +106,10 @@ def hybrid_search(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Hybrid search over an ingested PST index.")
+    parser = argparse.ArgumentParser(
+        prog="py -3.9 scripts\\search.py",
+        description="Hybrid search over an ingested PST index. Must be run with Python 3.9.",
+    )
     parser.add_argument("--query", required=True)
     parser.add_argument("--env", default=None, help="Path to .env (default: <skill_root>/.env)")
     parser.add_argument("--top", type=int, default=10)
