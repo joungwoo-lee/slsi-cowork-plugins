@@ -3,7 +3,8 @@
 PST 파일을 Outlook 없이 직접 디코딩하여 **메일 본문 + 첨부파일(PDF/DOCX) 텍스트**를 통합 마크다운으로 만들고, **SQLite FTS5(키워드) + Qdrant(의미)** 하이브리드 검색을 제공하는 Claude Code 스킬.
 
 ## 핵심 특징
-- **첨부파일 본문까지 검색** — PDF는 PyMuPDF로, Word(.docx)는 python-docx로 텍스트를 추출하여 메일 본문 마크다운 뒤에 `[첨부파일: 파일명.pdf]` 구분자와 함께 병합.
+- **첨부파일 본문까지 검색** — 메일 본문 + 모든 첨부파일 텍스트를 하나의 `body.md`로 통합. 첨부 안 단어로 매칭돼도 메일 단위 결과로 반환되며, 통합 마크다운에 본문과 첨부 내용이 모두 들어 있어 한 파일만 읽으면 풀 컨텍스트 확보.
+- **첨부 변환 형식**: `.pdf` (PyMuPDF), `.docx` (python-docx), `.xlsx` (openpyxl, 시트별 표), `.pptx` (python-pptx, 슬라이드+노트), `.rtf` (striprtf), `.html`/`.htm` (markdownify), 텍스트 계열(`.txt`/`.csv`/`.tsv`/`.log`/`.md`/`.json`/`.xml`/`.yaml`/`.ini`/`.sql`/`.py`/`.js`/`.ts`/`.sh`/`.bat`/`.ps1`). 이미지(`.jpg`/`.png` 등)와 미지원 형식은 한 줄 스텁으로 표기 + 원본 파일은 `attachments/`에 보관.
 - **2-Track 검색** — 정확한 단어(품번, 계약번호 등)는 SQLite FTS5, 의미적 질의는 Qdrant 로컬 컬렉션.
 - **Windows 네이티브 + Python 3.9** — pypff 등 prebuilt wheel 사용. C++ Build Tools 불필요.
 - **로컬 임베딩 연산 없음** — 외부 API endpoint 호출로 Dense Vector 획득.
@@ -84,10 +85,12 @@ VectorDB\                        # Qdrant 로컬
 ```
 libpff-python==20211114   # PST 디코딩 (모듈 import는 pypff). 이 버전만 Windows wheel 제공.
 markdownify               # HTML 본문 → 마크다운
-striprtf                  # RTF 전용 본문 폴백 (순수 Python, 컴파일러 불필요)
-pymupdf                   # PDF 텍스트 추출
-python-docx               # DOCX 텍스트 추출
-qdrant-client             # Qdrant 로컬 모드
+striprtf                  # RTF 본문 / .rtf 첨부 (순수 Python)
+pymupdf                   # .pdf 첨부
+python-docx               # .docx 첨부
+openpyxl                  # .xlsx 첨부 (순수 Python)
+python-pptx               # .pptx 첨부 (순수 Python)
+qdrant-client==1.7.0      # 임베디드 모드 (별도 서버 불필요)
 requests                  # 외부 임베딩 API 호출
 python-dotenv             # .env 로더
 ```
@@ -97,6 +100,7 @@ python-dotenv             # .env 로더
 ## 제한 사항
 - Windows 전용. macOS/Linux/WSL에서는 pypff wheel이 없어 동작하지 않음.
 - 비밀번호로 보호된 PST는 미지원.
-- 첨부파일 중 PDF/DOCX만 본문 추출 대상. 그 외 형식(xlsx, pptx, zip 등)은 메타데이터만 인덱싱하고 원본은 보관.
+- 첨부파일 본문 추출 대상: PDF, DOCX, XLSX, PPTX, RTF, HTML, 텍스트 계열. 레거시 OLE 형식(`.doc`/`.xls`/`.ppt`)과 `.msg`/`.eml`/`.zip`/이미지 등은 원본만 `attachments/`에 보관하고 `body.md`에는 한 줄 스텁만 표기 (검색 인덱스에 파일명·확장자 정도는 포함).
+- 이미지 OCR 미지원 (의도적; tesseract 의존성 추가 부담).
 
 자세한 명령은 [`SKILL.md`](./SKILL.md) 참조.

@@ -25,6 +25,8 @@ DEPS = [
     ("striprtf.striprtf", "striprtf"),
     ("fitz", "pymupdf"),
     ("docx", "python-docx"),
+    ("openpyxl", "openpyxl"),
+    ("pptx", "python-pptx"),
     ("qdrant_client", "qdrant-client"),
     ("requests", "requests"),
     ("dotenv", "python-dotenv"),

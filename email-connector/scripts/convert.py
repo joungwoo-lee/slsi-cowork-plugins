@@ -77,9 +77,11 @@ def _write_message(cfg: Config, msg: MailMessage) -> Path | None:
         if not att.data:
             continue
         _save_attachment(att_dir, att.filename, att.data)
+        # attachment_to_markdown always returns a non-empty string now
+        # (unsupported / image types fall back to a one-line stub) so the
+        # unified body.md is a complete record of every attachment the mail had.
         md = attachment_to_markdown(att.filename, att.data, cfg.ingest.max_attachment_chars)
-        if md:
-            attachment_sections.append((att.filename, md))
+        attachment_sections.append((att.filename, md))
 
     unified = build_unified_markdown(
         subject=msg.subject,

@@ -6,10 +6,12 @@
 libpff-python==20211114
 
 # Mail body / attachment conversion
-markdownify>=0.11.6
-striprtf>=0.0.26      # fallback for RTF-only mail bodies (pure Python, no compiler)
-pymupdf>=1.23.0
-python-docx>=1.1.0
+markdownify>=0.11.6     # HTML body / .html attachment → markdown
+striprtf>=0.0.26        # RTF-only mail bodies + .rtf attachments (pure Python)
+pymupdf>=1.23.0         # .pdf attachments
+python-docx>=1.1.0      # .docx attachments
+openpyxl>=3.1.0         # .xlsx attachments (pure Python)
+python-pptx>=0.6.21     # .pptx attachments (pure Python)
 
 # Storage + API
 # Pin qdrant-client to 1.7.0: storage.vector_search uses client.search()
