@@ -12,10 +12,10 @@ pymupdf>=1.23.0
 python-docx>=1.1.0
 
 # Storage + API
-# Pin qdrant-client to 1.7.0: that release predates the search() ->
-# query_points() migration (1.10) and the python>=3.10 requirement (1.15),
-# so our storage.py code matches its API exactly on Python 3.9.
-qdrant-client==1.7.0
+# qdrant-client 1.10 introduced query_points() (used by storage.vector_search);
+# 1.15 dropped Python 3.9 support. Range below targets the post-migration API
+# while staying installable on Python 3.9 (pip will resolve to 1.14.x).
+qdrant-client>=1.10.0,<1.15
 requests>=2.31.0
 
 # Config from .env (matches retriever_engine project's variable scheme)
