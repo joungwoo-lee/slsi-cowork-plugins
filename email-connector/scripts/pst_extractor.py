@@ -3,10 +3,24 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import sys
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
+
+# libpff-python ships only a cp39-win_amd64 wheel (version 20211114). Importing
+# pypff from any other interpreter either fails with ImportError ("DLL load
+# failed", "no module named pypff") or pulls a stale build. Fail fast with a
+# message that tells the operator exactly how to invoke the script.
+if sys.version_info[:2] != (3, 9):
+    raise RuntimeError(
+        "email-connector requires Python 3.9 (got "
+        f"{sys.version_info.major}.{sys.version_info.minor}). "
+        "The libpff-python wheel only exists for cp39-win_amd64. "
+        "Run scripts with the explicit launcher selector: "
+        "`py -3.9 scripts\\<name>.py` — never plain `python` or `py`."
+    )
 
 import pypff
 

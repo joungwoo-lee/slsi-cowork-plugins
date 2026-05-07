@@ -5,7 +5,23 @@ description: Decode local PST files (no Outlook required) and build a hybrid key
 
 # Email Connector Skill (PST → Hybrid Search)
 
-PST 파일을 직접 디코딩하여 메일 본문 + 첨부파일(PDF, DOCX) 텍스트를 통합 마크다운으로 변환하고, **SQLite FTS5 (키워드)** + **Qdrant 로컬 (의미)** 두 트랙으로 인덱싱하는 스킬.
+PST 파일을 직접 디코딩하여 메일 본문 + 첨부파일(PDF, DOCX, XLSX, PPTX 등) 텍스트를 통합 마크다운으로 변환하고, **SQLite FTS5 (키워드)** + **Qdrant 로컬 (의미)** 두 트랙으로 인덱싱하는 스킬.
+
+## ⚠️ Runtime invocation rule (READ FIRST)
+이 스킬의 **모든 Python 스크립트는 반드시 `py -3.9`로 실행한다**. 이유:
+- `libpff-python==20211114`는 `cp39-win_amd64` wheel만 존재 → Python 3.9 64-bit 외 환경에서는 `import pypff` 실패.
+- `pip install -r requirements.txt`는 3.9 site-packages에 의존성을 설치하므로, 다른 인터프리터에서 실행하면 모든 패키지가 ImportError.
+- `pst_extractor.py`는 import 시점에 `sys.version_info`를 검사하고 3.9가 아니면 RuntimeError를 던진다 (Phase 2 스크립트도 같은 site-packages 위에 동작하므로 동일 규칙 적용).
+
+| | 올바른 호출 | 잘못된 호출 |
+|---|---|---|
+| ingest | `py -3.9 scripts\ingest.py` | `python scripts\ingest.py`, `py scripts\ingest.py` |
+| convert | `py -3.9 scripts\convert.py` | `python3 scripts\convert.py` |
+| index | `py -3.9 scripts\index.py` | `python.exe scripts\index.py` |
+| search | `py -3.9 scripts\search.py --query ...` | `python -m scripts.search ...` |
+| doctor | `py -3.9 scripts\doctor.py` | `py -3 scripts\doctor.py` (3.10이 우선될 수 있음) |
+
+**에이전트는 이 스킬에서 Bash 명령을 만들 때 `py -3.9`를 빼먹지 말 것.** README/SETUP의 모든 명령 예시도 `py -3.9` 기준이며, 이를 임의로 `python`으로 줄이지 말 것.
 
 ## When to use
 - 사용자가 .pst 아카이브에서 메일을 검색하려 할 때 (Outlook 실행 없이).
@@ -94,7 +110,7 @@ PST 경로는 `.env`의 `PST_PATH`에서 읽으므로 인자 생략 가능.
 
 **연속 실행**
 ```cmd
-python scripts\ingest.py
+py -3.9 scripts\ingest.py
 ```
 옵션:
 - `--pst <path>` — `.env` 대신 직접 지정
@@ -105,19 +121,19 @@ python scripts\ingest.py
 
 **Phase 1 단독 (변환만)**
 ```cmd
-python scripts\convert.py [--pst <path>] [--limit N]
+py -3.9 scripts\convert.py [--pst <path>] [--limit N]
 ```
 산출: `<DATA_ROOT>\Files\[Mail_ID]\{body.md, meta.json, attachments\...}`
 
 **Phase 2 단독 (인덱싱만)**
 ```cmd
-python scripts\index.py [--skip-embedding] [--mail-id ID ...]
+py -3.9 scripts\index.py [--skip-embedding] [--mail-id ID ...]
 ```
 PST를 다시 읽지 않고 `Files/` 디렉토리만 스캔. 임베딩 모델/dim 변경 후 재인덱싱에 유용.
 
 ### 3. 검색
 ```cmd
-python scripts\search.py --query "협력사 보안 점검 결과 보고서" --top 10
+py -3.9 scripts\search.py --query "협력사 보안 점검 결과 보고서" --top 10
 ```
 옵션:
 - `--mode hybrid|keyword|semantic` — 검색 모드 (기본 hybrid)
