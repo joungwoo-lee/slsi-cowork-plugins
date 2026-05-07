@@ -7,6 +7,7 @@ libpff-python==20211114
 
 # Mail body / attachment conversion
 markdownify>=0.11.6
+striprtf>=0.0.26      # fallback for RTF-only mail bodies (pure Python, no compiler)
 pymupdf>=1.23.0
 python-docx>=1.1.0
 

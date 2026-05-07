@@ -49,7 +49,8 @@ VectorDB\                        # Qdrant 로컬
 ## 의존성
 ```
 libpff-python==20211114   # PST 디코딩 (모듈 import는 pypff). 이 버전만 Windows wheel 제공.
-markdownify               # HTML → 마크다운
+markdownify               # HTML 본문 → 마크다운
+striprtf                  # RTF 전용 본문 폴백 (순수 Python, 컴파일러 불필요)
 pymupdf                   # PDF 텍스트 추출
 python-docx               # DOCX 텍스트 추출
 qdrant-client             # Qdrant 로컬 모드

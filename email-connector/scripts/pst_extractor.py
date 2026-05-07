@@ -59,6 +59,29 @@ def _make_mail_id(subject: str, received: str, sender: str, identifier: int | No
     return hashlib.sha1(raw).hexdigest()[:20]
 
 
+def _rtf_fallback(message) -> str:
+    """Some mails store body only as compressed RTF. pypff decompresses it for us;
+    we strip RTF control words to plain text via striprtf."""
+    try:
+        rtf = message.get_rtf_body()
+    except Exception:
+        return ""
+    if not rtf:
+        return ""
+    if isinstance(rtf, bytes):
+        rtf = rtf.decode("latin-1", errors="replace")
+    try:
+        from striprtf.striprtf import rtf_to_text
+    except ImportError:
+        log.warning("striprtf not installed; RTF-only body will be skipped")
+        return ""
+    try:
+        return rtf_to_text(rtf, errors="ignore").strip()
+    except Exception as exc:
+        log.warning("striprtf failed: %s", exc)
+        return ""
+
+
 def _extract_attachments(message) -> list[Attachment]:
     out: list[Attachment] = []
     try:
@@ -106,6 +129,8 @@ def iter_messages(pst_path: str) -> Iterator[MailMessage]:
                 identifier = getattr(msg, "identifier", None)
                 body_html = _safe_str(getattr(msg, "html_body", None) or msg.get_html_body())
                 body_plain = _safe_str(getattr(msg, "plain_text_body", None) or msg.get_plain_text_body())
+                if not body_html.strip() and not body_plain.strip():
+                    body_plain = _rtf_fallback(msg)
                 recipients = _safe_str(getattr(msg, "transport_headers", "") or "")
                 yield MailMessage(
                     mail_id=_make_mail_id(subject, received, sender, identifier),

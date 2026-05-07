@@ -21,6 +21,7 @@ if __package__ in (None, ""):
 DEPS = [
     ("pypff", "libpff-python"),
     ("markdownify", "markdownify"),
+    ("striprtf.striprtf", "striprtf"),
     ("fitz", "pymupdf"),
     ("docx", "python-docx"),
     ("qdrant_client", "qdrant-client"),
