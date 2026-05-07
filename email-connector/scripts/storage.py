@@ -159,10 +159,11 @@ def upsert_vector(
 def vector_search(
     client: QdrantClient, cfg: Config, vector: list[float], limit: int
 ) -> list[dict]:
-    # qdrant-client 1.10+: search() is deprecated in favour of query_points().
-    response = client.query_points(
+    # qdrant-client 1.7.0: client.search returns a list of ScoredPoint directly
+    # (no .points wrapper). query_points() only exists from 1.10+.
+    response = client.search(
         collection_name=cfg.qdrant.collection,
-        query=vector,
+        query_vector=vector,
         limit=limit,
         with_payload=True,
     )
@@ -172,7 +173,7 @@ def vector_search(
             "score": float(h.score),
             "payload": h.payload,
         }
-        for h in response.points
+        for h in response
         if h.payload and h.payload.get("mail_id")
     ]
 
