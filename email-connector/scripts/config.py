@@ -22,6 +22,11 @@ class EmbeddingConfig:
     x_system_name: str = "email-connector"
     batch_size: int = 16
     timeout_sec: int = 60
+    # Minimum spacing between batch calls (seconds). Mirrors the
+    # retriever_engine upload script's `time.sleep(1)` rate-limit guard:
+    # one batch per second is the sustained pace embedding endpoints
+    # in our environments tolerate without 429.
+    min_interval_sec: float = 1.0
     # SSL cert verification is OFF by default to accommodate corporate
     # MITM proxies / private CAs. Set EMBEDDING_VERIFY_SSL=true in .env to
     # enforce strict verification (e.g. against api.openai.com).
@@ -109,6 +114,7 @@ def load_config(env_path: str | os.PathLike[str] | None = None) -> Config:
             x_system_name=os.getenv("EMBEDDING_API_X_SYSTEM_NAME", "email-connector").strip(),
             batch_size=int(os.getenv("EMBEDDING_BATCH_SIZE", "16")),
             timeout_sec=int(os.getenv("EMBEDDING_TIMEOUT_SEC", "60")),
+            min_interval_sec=float(os.getenv("EMBEDDING_MIN_INTERVAL_SEC", "1.0")),
             verify_ssl=_bool(os.getenv("EMBEDDING_VERIFY_SSL"), False),
         ),
         qdrant=QdrantConfig(
