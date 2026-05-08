@@ -15,6 +15,14 @@ if sys.version_info[:2] != (3, 9):
         "Run with the launcher: py -3.9 scripts\\doctor.py"
     )
 
+# Force UTF-8 so Korean detail strings (paths, model names) in JSON survive
+# the Windows cp949 console.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:  # pragma: no cover
+    pass
+
 import argparse
 import importlib
 import json

@@ -12,6 +12,15 @@ if sys.version_info[:2] != (3, 9):
         "Run with the launcher: py -3.9 scripts\\search.py --query \"...\""
     )
 
+# Windows console defaults to cp949 (Korean) / cp1252 (English) which mangles
+# non-ASCII json output. Force UTF-8 on stdout/stderr so subjects, snippets,
+# folder paths etc. survive print() and redirection.
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:  # pragma: no cover - sys.stdout might be wrapped by a runner
+    pass
+
 import argparse
 import json
 import logging
