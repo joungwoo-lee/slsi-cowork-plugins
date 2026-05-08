@@ -16,10 +16,13 @@ for both projects:
 Response is OpenAI-compatible: either {"data": [{"embedding": [...], "index": N}, ...]}
 or {"embeddings": [[...], [...]]}; both shapes are handled.
 
-Rate limiting: enforce a minimum spacing between batch calls (cfg.min_interval_sec,
-default 1.0s). Mirrors the retriever_engine upload_folder_to_retriever_engine.py
-pattern of `time.sleep(1)` between document uploads. On HTTP 429 honor any
-Retry-After header; otherwise back off in 5 s steps for up to 5 attempts.
+Rate limiting: enforce a minimum spacing of 0.5 s between batch calls (~2 RPS).
+Mirrors the retriever_engine upload_folder_to_retriever_engine.py pattern of
+sleeping between requests, but tuned tighter for our endpoint. The interval is
+hardcoded on purpose — there is no .env knob, since experience showed any
+configurable value drifts away from what the gateway actually tolerates.
+On HTTP 429 honor any Retry-After header; otherwise back off in 5 s steps for
+up to 5 attempts.
 """
 from __future__ import annotations
 
@@ -34,6 +37,7 @@ from .config import EmbeddingConfig
 log = logging.getLogger(__name__)
 
 _MAX_ATTEMPTS = 5
+_MIN_INTERVAL_SEC = 0.5  # hardcoded; do not move to .env
 
 
 class EmbeddingClient:
@@ -86,11 +90,9 @@ class EmbeddingClient:
     # ------------------------------------------------------------------
 
     def _throttle(self) -> None:
-        """Sleep just enough to keep one batch per cfg.min_interval_sec."""
-        if self.cfg.min_interval_sec <= 0:
-            return
+        """Sleep just enough to keep one batch per _MIN_INTERVAL_SEC (0.5 s)."""
         elapsed = time.monotonic() - self._last_call_at
-        wait = self.cfg.min_interval_sec - elapsed
+        wait = _MIN_INTERVAL_SEC - elapsed
         if wait > 0:
             time.sleep(wait)
 
