@@ -35,10 +35,19 @@ email-mcp 폴더를 email-connector와 **같은 부모 폴더** 아래에 두면
 %USERPROFILE%\.claude\skills\
 ├── email-connector\         (이미 있어야 함)
 └── email-mcp\               (이번에 추가)
-    ├── server.py
+    ├── server.py            (얇은 진입점)
     ├── README.md
     ├── SETUP.md
-    └── claude_desktop_config.example.json
+    ├── requirements.txt
+    ├── claude_desktop_config.example.json
+    └── mcp_server\          (서버 본체)
+        ├── __init__.py
+        ├── bootstrap.py
+        ├── protocol.py
+        ├── runtime.py
+        ├── catalog.py
+        ├── handlers.py
+        └── dispatch.py
 ```
 
 ### 1-1. 복사 [USER]
@@ -110,7 +119,10 @@ dir "%APPDATA%\Claude\claude_desktop_config.json"
 설정 파일 변경은 재시작 후에만 반영. Claude Desktop 종료 → 재실행.
 
 ### 3-4. 도구 노출 검증 [USER][CHECK]
-Claude Desktop 입력창 옆 도구 아이콘에서 `email` 서버의 `search` / `read_mail` / `doctor` / `ingest` 4개가 보이면 성공.
+Claude Desktop 입력창 옆 도구 아이콘에서 `email` 서버의 도구 10개가 보이면 성공:
+- 검색/읽기: `search`, `list_mails`, `read_mail`, `read_meta`, `read_attachment`, `stats`
+- 파이프라인: `convert`, `index`, `ingest`
+- 진단: `doctor`
 
 도구가 안 보이면:
 - Claude Desktop 로그 확인 (`%APPDATA%\Claude\logs\mcp-server-email.log`).
@@ -132,10 +144,18 @@ Claude Desktop / Code에서 다음 prompt를 보내 동작 확인:
 
 1. **doctor**: "email-mcp의 doctor 도구로 진단해줘"
    → JSON `{"all_ok": true, "checks": [...]}` 반환되면 성공.
-2. **search** (PST 인덱싱이 끝난 상태에서): "email 검색으로 '회의' 관련 메일 5개 찾아줘"
+2. **stats**: "이메일 인덱스 stats 보여줘"
+   → `{sqlite: {total_mails, with_vector}, files_root_dirs, ...}`. `total_mails` > 0 이어야 검색 가능.
+3. **list_mails**: "이메일 목록 5개만 보여줘 (limit=5)"
+   → `mails` 배열에 최신순 5개 반환.
+4. **search** (PST 인덱싱이 끝난 상태에서): "email 검색으로 '회의' 관련 메일 5개 찾아줘"
    → 메일 메타 배열 반환.
-3. **read_mail**: 위 결과의 mail_id 하나로 본문 읽기 요청.
+5. **read_mail**: 위 결과의 mail_id 하나로 본문 읽기 요청.
    → `body.md` 내용이 그대로 표시.
+6. **read_attachment**: 같은 mail_id로 첨부 목록 요청 (filename 생략).
+   → `attachments` 배열에 파일명/크기.
+
+`total_mails == 0` 이면 인덱싱이 안 된 상태 — `email-connector` CLI 로 `py -3.9 scripts\ingest.py` 돌리거나, MCP `ingest {limit: 50}` 으로 일부만 부어 보고 다시 stats 확인.
 
 ## 셋업 종료 보고
 - ✅/❌ 각 STEP 결과
