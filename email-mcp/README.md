@@ -63,19 +63,42 @@ email-mcp/
 2. Windows 10/11 네이티브.
 3. `email-mcp/` 와 `email-connector/` 가 같은 부모 폴더에 있거나, 환경변수 `EMAIL_CONNECTOR_PATH` 로 경로가 지정돼 있어야 한다.
 
-## 빠른 설치
+## 빠른 설치 — 자동 설치 (권장)
+
+email-connector 와 같은 부모 폴더에 email-mcp 가 있는 상태에서 (예: 둘 다 `%USERPROFILE%\.claude\skills\` 아래):
 
 ```cmd
-:: 1. email-connector 셋업 끝나 있다고 가정 (없으면 그쪽 SETUP.md부터)
-:: 2. 이 폴더를 email-connector와 같은 부모 아래에 둔다
-::    %USERPROFILE%\.claude\skills\email-mcp\
-::    %USERPROFILE%\.claude\skills\email-connector\
-
-:: 3. 추가 의존성 없음 (서버는 표준 라이브러리만 사용; email-connector deps 그대로 재사용)
-
-:: 4. 동작 확인 (서버 단독 기동 + initialize 한 번 보내기 — 자세한 절차는 SETUP.md STEP 2)
-echo {"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"manual","version":"0"}}} | py -3.9 server.py
+cd /d %USERPROFILE%\.claude\skills\email-mcp
+install.cmd
 ```
+
+`install.cmd` 는:
+1. Windows / Python 3.9 64-bit / py 런처 / email-connector 사이드 검증
+2. 누락된 email-connector 의존성 자동 `pip install`
+3. `email-connector\.env` 가 없으면 `.env.example` 에서 자동 생성
+4. 서버 stdio 스모크 테스트 (initialize 한 번 보내고 응답 검증)
+5. `%APPDATA%\Claude\claude_desktop_config.json` 에 email 항목 머지 (기존 파일은 `.bak.<timestamp>` 로 백업, **BOM 없이** 저장)
+6. `claude_code_install.cmd` 를 같은 폴더에 생성 (Claude Code CLI 사용자용)
+7. 마지막으로 `email-connector doctor.py --skip-api` 돌려 잔여 이슈 보고
+
+설치 후 **`%USERPROFILE%\.claude\skills\email-connector\.env`** 만 실제 값으로 편집하고 Claude Desktop 재시작하면 끝.
+
+### 변경 없이 결과만 보고 싶을 때
+```cmd
+install.cmd -DryRun
+```
+모든 검사를 돌려보고 무엇을 쓸 것인지만 출력 — 파일은 건드리지 않음.
+
+### 옵션
+```cmd
+install.cmd -EmailConnectorPath D:\skills\email-connector   :: 비-기본 경로
+install.cmd -SkipClaudeConfig                                :: Claude Desktop 설정 머지 생략
+install.cmd -SkipDeps                                        :: pip install 단계 생략
+```
+
+## 수동 설치
+
+자동 설치가 막히거나 단계별로 직접 보고 싶으면 `SETUP.md` 의 STEP A → 5 따라가기.
 
 ## Claude Desktop 연결
 

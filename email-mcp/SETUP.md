@@ -2,6 +2,39 @@
 
 `email-mcp`를 클라이언트 PC(Windows)에 설치하고 Claude Desktop / Code에 연결하는 절차서. 에이전트가 그대로 따라 실행할 수 있게 단계 마커(`[USER]` / `[AGENT]` / `[CHECK]`)를 사용한다.
 
+> **TL;DR**: `install.cmd` 더블클릭. 막히면 메시지대로 따라가고, 그래도 안 되면 아래 STEP A 부터 수동으로.
+
+## 자동 설치 (권장)
+
+email-mcp 폴더의 `install.cmd` 를 더블클릭하거나 콘솔에서:
+```cmd
+cd /d %USERPROFILE%\.claude\skills\email-mcp
+install.cmd
+```
+
+`install.ps1` 이 다음을 자동 처리:
+1. Windows / Python 3.9 64-bit / `py` 런처 검증
+2. email-connector 위치 확인 (`-EmailConnectorPath` 로 override 가능, 기본은 sibling)
+3. 누락된 email-connector 의존성 `pip install`
+4. `.env` 자동 생성 (없으면 `.env.example` 복사)
+5. 서버 stdio 스모크 테스트 (initialize 한 번 보내고 `serverInfo.name == "email-mcp"` 확인)
+6. `%APPDATA%\Claude\claude_desktop_config.json` 머지 — 기존 파일은 `.bak.<timestamp>` 로 백업, BOM 없는 UTF-8 로 저장, 다시 읽어 검증
+7. `claude_code_install.cmd` 생성 (Claude Code CLI 사용자용)
+8. `doctor.py --skip-api` 돌려 잔여 이슈 출력
+
+옵션:
+- `install.cmd -DryRun` — 아무것도 안 쓰고 검사만
+- `install.cmd -SkipClaudeConfig` — Desktop 머지 생략
+- `install.cmd -SkipDeps` — pip 생략
+
+설치 후 **`<email-connector>\.env`** 만 실제 값으로 편집하고 Claude Desktop 재시작.
+
+자동 설치가 어디서 막히면 그 메시지에 따라 아래 STEP 으로 들어와 수동 처리.
+
+---
+
+## 수동 설치 절차
+
 ## 단계 마커
 - **[USER]** — 사용자가 직접 해야 함. 완료 응답을 받기 전엔 다음 STEP으로 진행 금지.
 - **[AGENT]** — 에이전트가 명령을 실행하고 결과를 보고.
