@@ -1,0 +1,16 @@
+# email-mcp has no dependencies of its own.
+#
+# The MCP stdio JSON-RPC server in server.py uses only the Python standard
+# library, deliberately — the official MCP Python SDK requires Python >= 3.10
+# but email-connector pins libpff-python==20211114 which only ships a
+# cp39-win_amd64 wheel. To call email-connector's modules in-process the
+# server must run on Python 3.9, so we cannot use the SDK.
+#
+# All runtime dependencies (libpff-python, qdrant-client, requests, ...) come
+# from the sibling email-connector skill and are installed there:
+#
+#     cd /d %USERPROFILE%\.claude\skills\email-connector
+#     py -3.9 -m pip install -r requirements.txt
+#
+# Running `pip install -r email-mcp/requirements.txt` is therefore a no-op
+# but kept as a marker so tooling can detect that this is a Python project.

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "email": {
+      "command": "py",
+      "args": [
+        "-3.9",
+        "C:\\Users\\REPLACE_ME\\.claude\\skills\\email-mcp\\server.py"
+      ],
+      "env": {
+        "EMAIL_CONNECTOR_PATH": "C:\\Users\\REPLACE_ME\\.claude\\skills\\email-connector"
+      }
+    }
+  }
+}
