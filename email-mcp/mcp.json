@@ -8,7 +8,7 @@
         "C:\\Users\\joung\\slsi-cowork-plugins\\email-mcp\\server.py"
       ],
       "enabled": true,
-      "environment": {
+      "env": {
         "EMAIL_CONNECTOR_PATH": "C:\\Users\\joung\\slsi-cowork-plugins\\email-connector"
       }
     }
