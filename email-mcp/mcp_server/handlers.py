@@ -76,7 +76,7 @@ def tool_search(args: dict) -> dict:
             "display_example": (
                 "| 일련번호 | 제목 | 발신자 | 수신일 | 파일경로 |\n"
                 "|---|---|---|---|---|\n"
-                "| 1 | 회의 일정 | 홍길동 | 2026-05-12T01:23:45+00:00 | file:\\\\C:\\\\mail\\\\Files\\\\abc123\\\\body.md |"
+                "| 1 | 회의 일정 | joung@samsung.com | 2026-05-12 | file:\\\\C:\\\\mail\\\\Files\\\\abc123\\\\body.md |"
             ),
             "results": results,
         }
