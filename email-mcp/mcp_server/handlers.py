@@ -27,6 +27,15 @@ from .protocol import text_result
 from .runtime import resolve_env_path, silenced_stdout
 
 
+def _link(p) -> str:
+    """Render a path as a file:// URL so modern terminals make it clickable.
+
+    Windows Terminal, VS Code, iTerm2, and GNOME Terminal all auto-detect
+    `file:///...` URLs; plain `C:\\...` / `/home/...` strings are not clickable.
+    """
+    return Path(p).as_uri()
+
+
 # ---------------------------------------------------------------------------
 # Read-side tools
 # ---------------------------------------------------------------------------
@@ -144,7 +153,7 @@ def tool_read_mail(args: dict) -> dict:
     body = cfg.body_md_path(mail_id)
     if not body.exists():
         return text_result(
-            f"body.md not found for mail_id={mail_id} (looked at {body})", is_error=True
+            f"body.md not found for mail_id={mail_id} (looked at {_link(body)})", is_error=True
         )
     return text_result(body.read_text(encoding="utf-8", errors="replace"))
 
@@ -157,7 +166,7 @@ def tool_read_meta(args: dict) -> dict:
     meta_path = cfg.mail_dir(mail_id) / "meta.json"
     if not meta_path.exists():
         return text_result(
-            f"meta.json not found for mail_id={mail_id} (looked at {meta_path})",
+            f"meta.json not found for mail_id={mail_id} (looked at {_link(meta_path)})",
             is_error=True,
         )
     try:
@@ -176,7 +185,7 @@ def tool_read_attachment(args: dict) -> dict:
     att_dir = cfg.attachments_dir(mail_id)
     if not att_dir.exists():
         return text_result(
-            f"no attachments directory for mail_id={mail_id} (looked at {att_dir})",
+            f"no attachments directory for mail_id={mail_id} (looked at {_link(att_dir)})",
             is_error=True,
         )
 
@@ -185,7 +194,7 @@ def tool_read_attachment(args: dict) -> dict:
         for p in sorted(att_dir.iterdir()):
             if p.is_file():
                 items.append({"filename": p.name, "size": p.stat().st_size})
-        return text_result({"mail_id": mail_id, "attachments_dir": str(att_dir), "attachments": items})
+        return text_result({"mail_id": mail_id, "attachments_dir": _link(att_dir), "attachments": items})
 
     if not isinstance(filename, str):
         return text_result("filename must be a string", is_error=True)
@@ -206,7 +215,7 @@ def tool_read_attachment(args: dict) -> dict:
         {
             "mail_id": mail_id,
             "filename": filename,
-            "path": str(target),
+            "path": _link(target),
             "size": target.stat().st_size,
             "mime": mime or "application/octet-stream",
         }
@@ -216,10 +225,10 @@ def tool_read_attachment(args: dict) -> dict:
 def tool_stats(args: dict) -> dict:
     cfg = load_config(resolve_env_path())
     out: dict[str, Any] = {
-        "data_root": str(cfg.data_root),
-        "files_root": str(cfg.files_root),
-        "db_path": str(cfg.db_path),
-        "vector_db_path": str(cfg.vector_db_path),
+        "data_root": _link(cfg.data_root),
+        "files_root": _link(cfg.files_root),
+        "db_path": _link(cfg.db_path),
+        "vector_db_path": _link(cfg.vector_db_path),
         "files_root_dirs": 0,
         "sqlite": {"total_mails": 0, "with_vector": 0},
     }
@@ -259,7 +268,7 @@ def tool_convert(args: dict) -> dict:
         )
     with silenced_stdout():
         n = ec_convert.run_convert(pst, cfg, limit=int(limit))
-    return text_result({"converted": n, "files_root": str(cfg.files_root)})
+    return text_result({"converted": n, "files_root": _link(cfg.files_root)})
 
 
 def tool_index(args: dict) -> dict:
@@ -275,7 +284,7 @@ def tool_index(args: dict) -> dict:
 
     with silenced_stdout():
         n = ec_index.run_index(cfg, skip_embedding=skip_embedding, mail_ids=mail_ids)
-    return text_result({"indexed": n, "db": str(cfg.db_path)})
+    return text_result({"indexed": n, "db": _link(cfg.db_path)})
 
 
 def tool_ingest(args: dict) -> dict:
@@ -313,8 +322,8 @@ def tool_ingest(args: dict) -> dict:
         {
             "converted": converted,
             "indexed": indexed,
-            "files_root": str(cfg.files_root),
-            "db": str(cfg.db_path),
+            "files_root": _link(cfg.files_root),
+            "db": _link(cfg.db_path),
         }
     )
 
