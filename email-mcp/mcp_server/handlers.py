@@ -79,13 +79,17 @@ def tool_search(args: dict) -> dict:
             "display_instruction": (
                 "User-facing display instruction: return the search results as a markdown table "
                 "with exactly these columns in this order: 일련번호, 제목, 발신자, 수신일, 파일경로. "
-                "Use body_path as the 파일경로 value. Do not read the mail body unless the user asks "
-                "to inspect a specific result in more detail."
+                "For 파일경로, convert body_path to a clickable file:// URL by replacing "
+                "backslashes with forward slashes and prepending 'file:///' "
+                "(e.g. C:\\mail\\Files\\abc\\body.md → file:///C:/mail/Files/abc/body.md). "
+                "Emit the URL as plain text inside the table cell — do NOT wrap it in "
+                "markdown link syntax like [text](url). Do not read the mail body unless "
+                "the user asks to inspect a specific result in more detail."
             ),
             "display_example": (
                 "| 일련번호 | 제목 | 발신자 | 수신일 | 파일경로 |\n"
                 "|---|---|---|---|---|\n"
-                "| 1 | 회의 일정 | joung@samsung.com | 2026-05-12 | file:\\\\C:\\\\mail\\\\Files\\\\abc123\\\\body.md |"
+                "| 1 | 회의 일정 | joung@samsung.com | 2026-05-12 | file:///C:/mail/Files/abc123/body.md |"
             ),
             "results": results,
         }
