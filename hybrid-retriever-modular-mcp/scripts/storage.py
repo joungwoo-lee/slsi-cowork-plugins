@@ -264,13 +264,23 @@ def vector_search(client, cfg: Config, vector: list[float], dataset_ids: list[st
     from qdrant_client.http import models as qm
 
     query_filter = qm.Filter(must=[qm.FieldCondition(key="dataset_id", match=qm.MatchAny(any=dataset_ids))]) if dataset_ids else None
-    response = client.search(
-        collection_name=cfg.qdrant.collection,
-        query_vector=vector,
-        limit=limit,
-        with_payload=True,
-        query_filter=query_filter,
-    )
+    if hasattr(client, "search"):
+        response = client.search(
+            collection_name=cfg.qdrant.collection,
+            query_vector=vector,
+            limit=limit,
+            with_payload=True,
+            query_filter=query_filter,
+        )
+    else:
+        result = client.query_points(
+            collection_name=cfg.qdrant.collection,
+            query=vector,
+            limit=limit,
+            with_payload=True,
+            query_filter=query_filter,
+        )
+        response = result.points
     return [{"chunk_id": h.payload.get("chunk_id"), "score": float(h.score), "payload": h.payload} for h in response if h.payload and h.payload.get("chunk_id")]
 
 
