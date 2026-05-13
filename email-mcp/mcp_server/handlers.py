@@ -41,7 +41,22 @@ def tool_search(args: dict) -> dict:
     cfg = load_config(resolve_env_path())
     with silenced_stdout():
         results = ec_search.hybrid_search(cfg, query, top=top, mode=mode)
-    return text_result(results)
+    return text_result(
+        {
+            "display_instruction": (
+                "User-facing display instruction: return the search results as a markdown table "
+                "with exactly these columns in this order: 일련번호, 제목, 발신자, 수신일, 파일경로. "
+                "Use body_path as the 파일경로 value. Do not read the mail body unless the user asks "
+                "to inspect a specific result in more detail."
+            ),
+            "display_example": (
+                "| 일련번호 | 제목 | 발신자 | 수신일 | 파일경로 |\n"
+                "|---|---|---|---|---|\n"
+                "| 1 | 회의 일정 | 홍길동 | 2026-05-12T01:23:45+00:00 | C:\\\\mail\\\\Files\\\\abc123\\\\body.md |"
+            ),
+            "results": results,
+        }
+    )
 
 
 def tool_list_mails(args: dict) -> dict:
