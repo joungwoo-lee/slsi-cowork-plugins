@@ -5,11 +5,11 @@
       "command": [
         "py",
         "-3.9",
-        "C:\\Users\\joung\\slsi-cowork-plugins\\email-mcp\\server.py"
+        "C:\\Users\\joungwoo.lee\\slsi-cowork-plugins\\email-mcp\\server.py"
       ],
       "enabled": true,
       "env": {
-        "EMAIL_CONNECTOR_PATH": "C:\\Users\\joung\\slsi-cowork-plugins\\email-connector"
+        "EMAIL_CONNECTOR_PATH": "C:\\Users\\joungwoo.lee\\slsi-cowork-plugins\\email-connector"
       }
     }
   }
