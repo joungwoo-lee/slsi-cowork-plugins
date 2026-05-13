@@ -89,7 +89,46 @@ def upsert_metadata(
     )
 
 
-def fts_search(conn: sqlite3.Connection, query: str, limit: int) -> list[dict]:
+def candidate_mail_ids(
+    conn: sqlite3.Connection,
+    *,
+    sender_like: str | None = None,
+    sender_not_like: str | None = None,
+    sender_exact: str | None = None,
+    received_from: str | None = None,
+    received_to: str | None = None,
+) -> list[str] | None:
+    clauses: list[str] = []
+    params: list[str] = []
+    if sender_exact:
+        clauses.append("sender = ?")
+        params.append(sender_exact)
+    if sender_like:
+        clauses.append("LOWER(sender) LIKE ?")
+        params.append(f"%{sender_like.lower()}%")
+    if sender_not_like:
+        clauses.append("LOWER(sender) NOT LIKE ?")
+        params.append(f"%{sender_not_like.lower()}%")
+    if received_from:
+        clauses.append("received >= ?")
+        params.append(received_from)
+    if received_to:
+        clauses.append("received <= ?")
+        params.append(received_to)
+    if not clauses:
+        return None
+    sql = "SELECT mail_id FROM mail_metadata WHERE " + " AND ".join(clauses)
+    rows = conn.execute(sql, params).fetchall()
+    return [row[0] for row in rows]
+
+
+def fts_search(
+    conn: sqlite3.Connection,
+    query: str,
+    limit: int,
+    *,
+    candidate_mail_ids: list[str] | None = None,
+) -> list[dict]:
     """Return [{mail_id, score, snippet, subject, sender, received, body_path}, ...]."""
     sql = """
         SELECT m.mail_id, m.subject, m.sender, m.received, m.body_path,
@@ -97,11 +136,18 @@ def fts_search(conn: sqlite3.Connection, query: str, limit: int) -> list[dict]:
                snippet(mail_fts, 3, '<<', '>>', ' … ', 12) AS snippet
         FROM mail_fts
         JOIN mail_metadata m ON m.mail_id = mail_fts.mail_id
-        WHERE mail_fts MATCH ?
-        ORDER BY score
-        LIMIT ?
     """
-    rows = conn.execute(sql, (query, limit)).fetchall()
+    params: list[object] = [query]
+    where = ["mail_fts MATCH ?"]
+    if candidate_mail_ids is not None:
+        if not candidate_mail_ids:
+            return []
+        placeholders = ",".join("?" * len(candidate_mail_ids))
+        where.append(f"m.mail_id IN ({placeholders})")
+        params.extend(candidate_mail_ids)
+    sql += " WHERE " + " AND ".join(where) + " ORDER BY score LIMIT ?"
+    params.append(limit)
+    rows = conn.execute(sql, params).fetchall()
     cols = ["mail_id", "subject", "sender", "received", "body_path", "score", "snippet"]
     return [dict(zip(cols, row)) for row in rows]
 
@@ -157,15 +203,28 @@ def upsert_vector(
 
 
 def vector_search(
-    client: QdrantClient, cfg: Config, vector: list[float], limit: int
+    client: QdrantClient,
+    cfg: Config,
+    vector: list[float],
+    limit: int,
+    *,
+    candidate_mail_ids: list[str] | None = None,
 ) -> list[dict]:
     # qdrant-client 1.7.0: client.search returns a list of ScoredPoint directly
     # (no .points wrapper). query_points() only exists from 1.10+.
+    query_filter = None
+    if candidate_mail_ids is not None:
+        if not candidate_mail_ids:
+            return []
+        query_filter = qm.Filter(
+            must=[qm.FieldCondition(key="mail_id", match=qm.MatchAny(any=candidate_mail_ids))]
+        )
     response = client.search(
         collection_name=cfg.qdrant.collection,
         query_vector=vector,
         limit=limit,
         with_payload=True,
+        query_filter=query_filter,
     )
     return [
         {

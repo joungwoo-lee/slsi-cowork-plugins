@@ -61,14 +61,27 @@ def hybrid_search(
     *,
     top: int = 10,
     mode: str = "hybrid",
+    sender_like: str | None = None,
+    sender_not_like: str | None = None,
+    sender_exact: str | None = None,
+    received_from: str | None = None,
+    received_to: str | None = None,
 ) -> list[dict]:
     keyword_rows: list[dict] = []
     semantic_rows: list[dict] = []
     snippets: dict[str, str] = {}
 
     with storage.sqlite_session(cfg) as conn:
+        candidate_ids = storage.candidate_mail_ids(
+            conn,
+            sender_like=sender_like,
+            sender_not_like=sender_not_like,
+            sender_exact=sender_exact,
+            received_from=received_from,
+            received_to=received_to,
+        )
         if mode in ("hybrid", "keyword"):
-            keyword_rows = storage.fts_search(conn, query, top * 4)
+            keyword_rows = storage.fts_search(conn, query, top * 4, candidate_mail_ids=candidate_ids)
             snippets = {r["mail_id"]: r.get("snippet", "") for r in keyword_rows}
 
         if mode in ("hybrid", "semantic"):
@@ -76,7 +89,13 @@ def hybrid_search(
             [vector] = client.embed([query])
             qdrant = storage.open_qdrant(cfg)
             storage.ensure_collection(qdrant, cfg)
-            semantic_rows = storage.vector_search(qdrant, cfg, vector, top * 4)
+            semantic_rows = storage.vector_search(
+                qdrant,
+                cfg,
+                vector,
+                top * 4,
+                candidate_mail_ids=candidate_ids,
+            )
 
         kw_scores = _normalize_keyword_scores(keyword_rows)
         sem_scores = _normalize_semantic_scores(semantic_rows)
@@ -123,6 +142,11 @@ def main() -> None:
     parser.add_argument("--env", default=None, help="Path to .env (default: <skill_root>/.env)")
     parser.add_argument("--top", type=int, default=10)
     parser.add_argument("--mode", choices=("hybrid", "keyword", "semantic"), default="hybrid")
+    parser.add_argument("--sender-like", default=None)
+    parser.add_argument("--sender-not-like", default=None)
+    parser.add_argument("--sender-exact", default=None)
+    parser.add_argument("--received-from", default=None)
+    parser.add_argument("--received-to", default=None)
     parser.add_argument("-v", "--verbose", action="store_true")
     args = parser.parse_args()
 
@@ -131,7 +155,17 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     )
     cfg = load_config(args.env)
-    results = hybrid_search(cfg, args.query, top=args.top, mode=args.mode)
+    results = hybrid_search(
+        cfg,
+        args.query,
+        top=args.top,
+        mode=args.mode,
+        sender_like=args.sender_like,
+        sender_not_like=args.sender_not_like,
+        sender_exact=args.sender_exact,
+        received_from=args.received_from,
+        received_to=args.received_to,
+    )
     print(json.dumps(results, ensure_ascii=False, indent=2))
 
 

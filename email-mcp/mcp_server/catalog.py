@@ -13,20 +13,47 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "search",
         "description": (
-            "Hybrid search over an ingested PST archive: SQLite FTS5 (keyword) + Qdrant "
-            "(semantic) with score fusion. Returns ranked mail metadata (subject, sender, "
-            "received, score, snippet, body_path). Read body_path with the read_mail tool "
-            "to get the unified body+attachments markdown."
+            "Primary tool for any request to find something in email, mail, Outlook mailboxes, "
+            "or a PST archive. Use this instead of generic filesystem or text-search tools when "
+            "the user is asking about messages. Hybrid search over an ingested PST archive: "
+            "SQLite FTS5 (keyword) + Qdrant (semantic) with score fusion. Optional sender/date "
+            "filters are applied first to form the candidate mail set, then keyword/semantic "
+            "search runs only inside that filtered set. Returns ranked mail metadata (subject, "
+            "sender, received, score, snippet, body_path). Read body_path with the read_mail "
+            "tool to get the unified body+attachments markdown."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
-                "query": {"type": "string", "description": "Natural-language or keyword query."},
+                "query": {
+                    "type": "string",
+                    "description": "Natural-language or keyword query, e.g. '출장비 정산', 'budget review', or 'find the mail about server outage'.",
+                },
+                "sender_like": {
+                    "type": "string",
+                    "description": "Only search mails whose sender contains this case-insensitive substring. Example: 'kim' or 'naver.com'.",
+                },
+                "sender_not_like": {
+                    "type": "string",
+                    "description": "Exclude mails whose sender contains this case-insensitive substring. Example: 'noreply' or 'notification'.",
+                },
+                "sender_exact": {
+                    "type": "string",
+                    "description": "Only search mails whose sender exactly matches this string. Use this when you know the exact sender value.",
+                },
+                "received_from": {
+                    "type": "string",
+                    "description": "Only search mails received on or after this ISO-8601 timestamp. Example: '2026-01-01T00:00:00+00:00'.",
+                },
+                "received_to": {
+                    "type": "string",
+                    "description": "Only search mails received on or before this ISO-8601 timestamp. Example: '2026-12-31T23:59:59+00:00'.",
+                },
                 "mode": {
                     "type": "string",
                     "enum": ["hybrid", "keyword", "semantic"],
                     "default": "hybrid",
-                    "description": "hybrid combines FTS5 + Qdrant; keyword-only or semantic-only also available.",
+                    "description": "hybrid combines FTS5 + Qdrant inside the filtered candidate set; keyword-only or semantic-only also available.",
                 },
                 "top": {"type": "integer", "minimum": 1, "maximum": 100, "default": 10},
             },
@@ -36,9 +63,10 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "list_mails",
         "description": (
-            "List indexed mails from the SQLite metadata table, newest first. Supports "
-            "substring filters on sender / subject and offset-based pagination. Use this "
-            "to browse without forming a query."
+            "Use this when the user wants to browse or enumerate emails rather than search by "
+            "topic, such as 'show recent mails', 'list mails from Alice', or 'browse messages "
+            "with this subject'. Lists indexed mails from the SQLite metadata table, newest "
+            "first. Supports substring filters on sender / subject and offset-based pagination."
         ),
         "inputSchema": {
             "type": "object",
@@ -53,9 +81,10 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "read_mail",
         "description": (
-            "Read the unified body.md (mail body + every attachment converted to markdown, "
-            "in one file) for a given mail_id as returned by `search` / `list_mails`. "
-            "Returns the file's full UTF-8 contents."
+            "Use this only after search/list_mails identified a specific candidate that needs "
+            "deeper inspection. Reads the unified body.md (mail body + every attachment "
+            "converted to markdown, in one file) for a given mail_id as returned by `search` / "
+            "`list_mails`. Returns the file's full UTF-8 contents."
         ),
         "inputSchema": {
             "type": "object",

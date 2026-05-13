@@ -34,13 +34,37 @@ def tool_search(args: dict) -> dict:
     query = args.get("query")
     if not isinstance(query, str) or not query.strip():
         return text_result("query is required and must be a non-empty string", is_error=True)
+    sender_like = args.get("sender_like")
+    sender_not_like = args.get("sender_not_like")
+    sender_exact = args.get("sender_exact")
+    received_from = args.get("received_from")
+    received_to = args.get("received_to")
+    for key, value in {
+        "sender_like": sender_like,
+        "sender_not_like": sender_not_like,
+        "sender_exact": sender_exact,
+        "received_from": received_from,
+        "received_to": received_to,
+    }.items():
+        if value is not None and not isinstance(value, str):
+            return text_result(f"{key} must be a string", is_error=True)
     mode = args.get("mode", "hybrid")
     if mode not in ("hybrid", "keyword", "semantic"):
         return text_result(f"invalid mode: {mode}", is_error=True)
     top = int(args.get("top", 10))
     cfg = load_config(resolve_env_path())
     with silenced_stdout():
-        results = ec_search.hybrid_search(cfg, query, top=top, mode=mode)
+        results = ec_search.hybrid_search(
+            cfg,
+            query,
+            top=top,
+            mode=mode,
+            sender_like=sender_like,
+            sender_not_like=sender_not_like,
+            sender_exact=sender_exact,
+            received_from=received_from,
+            received_to=received_to,
+        )
     return text_result(
         {
             "display_instruction": (
