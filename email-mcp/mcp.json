@@ -1,12 +1,14 @@
 {
-  "mcpServers": {
-    "email": {
-      "command": "py",
-      "args": [
+  "mcp": {
+    "email_mcp": {
+      "type": "local",
+      "command": [
+        "py",
         "-3.9",
         "C:\\Users\\joung\\slsi-cowork-plugins\\email-mcp\\server.py"
       ],
-      "env": {
+      "enabled": true,
+      "environment": {
         "EMAIL_CONNECTOR_PATH": "C:\\Users\\joung\\slsi-cowork-plugins\\email-connector"
       }
     }
