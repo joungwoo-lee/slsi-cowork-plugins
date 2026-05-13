@@ -6,10 +6,6 @@ Responsibilities (all happen at module import time, in order):
    stall JSON-RPC handshake until the buffer fills.
 2. Add the root `email-mcp` directory to sys.path so `from scripts.config import ...`
    works in handlers.
-
-A wrong launch (missing dependencies, broken interpreter) MUST raise
-SystemExit here ??better to die loudly at startup than to half-start and
-fail mysteriously on the first tool call.
 """
 from __future__ import annotations
 
@@ -40,8 +36,3 @@ if not (ROOT_PATH / "scripts").is_dir():
     )
 
 sys.path.insert(0, str(ROOT_PATH))
-
-# Sanity: import config module so a broken install fails at
-# server startup, not on the first tool call. doctor() can still run after
-# this because it inspects each dep individually with importlib.
-from scripts.config import load_config as _ensure_loadable  # noqa: F401, E402
