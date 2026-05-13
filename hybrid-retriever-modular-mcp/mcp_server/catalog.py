@@ -4,8 +4,7 @@ Kept as data (not code) so a `tools/list` request stays cheap and so adding
 a new tool is just: add an entry here + a function in handlers.py + a row
 in handlers.HANDLERS.
 
-All tools are thin wrappers around the hybrid_retriever_windows_local
-FastAPI server (RAGFlow-compatible) at $RETRIEVER_BASE_URL.
+All tools run in-process against local SQLite FTS5 and optional Qdrant storage.
 """
 from __future__ import annotations
 
@@ -16,8 +15,8 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "search",
         "description": (
-            "Hybrid retrieval against the running retriever_engine "
-            "(SQLite FTS5 keyword + Qdrant local vector). Returns ranked chunks "
+            "Hybrid retrieval against the local retriever index "
+            "(SQLite FTS5 keyword + optional Qdrant local vector). Returns ranked chunks "
             "with document metadata, similarity scores, and a compact citations "
             "array. dataset_ids defaults to RETRIEVER_DEFAULT_DATASETS env if "
             "omitted."
@@ -63,6 +62,8 @@ TOOLS: list[dict[str, Any]] = [
                 "keyword": {"type": "boolean", "default": True},
                 "rerank_id": {"type": "string", "description": "Optional rerank model id."},
                 "pipeline_name": {"type": "string", "description": "Named retrieval pipeline (advanced)."},
+                "fusion": {"type": "string", "enum": ["linear", "rrf"], "default": "linear"},
+                "parent_chunk_replace": {"type": "boolean", "default": True},
                 "metadata_condition": {
                     "type": "object",
                     "description": "Server-side metadata filter (forwarded as-is).",
@@ -122,8 +123,8 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "upload_document",
         "description": (
-            "Upload a single local file to a dataset. The server parses, chunks, "
-            "embeds, and indexes synchronously. Creates the dataset auto-magically "
+            "Upload a single local text file to a dataset. The MCP parses, chunks, "
+            "embeds when configured, and indexes synchronously. Creates the dataset automatically "
             "if it doesn't exist. Returns the new document_id and chunk stats."
         ),
         "inputSchema": {
@@ -144,6 +145,12 @@ TOOLS: list[dict[str, Any]] = [
                     "description": "Contextual Retrieval (LLM-augmented). Omit to use server default.",
                 },
                 "pipeline_name": {"type": "string", "description": "Named ingest pipeline (advanced)."},
+                "skip_embedding": {"type": "boolean", "default": False},
+                "metadata": {
+                    "type": "object",
+                    "description": "Optional document metadata stored with every chunk.",
+                    "additionalProperties": True,
+                },
             },
             "required": ["dataset_id", "file_path"],
         },
@@ -235,9 +242,8 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "health",
         "description": (
-            "Hit /health/deep on retriever_engine: verifies keyword backend "
-            "(SQLite FTS5), Qdrant local mode, embedding/rerank model config, "
-            "and file store. Run first whenever search/upload misbehaves."
+            "Verify local SQLite FTS5 database, data root, optional embedding config, "
+            "and index counts. Run first whenever search/upload misbehaves."
         ),
         "inputSchema": {
             "type": "object",

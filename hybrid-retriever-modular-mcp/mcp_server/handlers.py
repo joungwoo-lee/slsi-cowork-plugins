@@ -1,27 +1,19 @@
-"""Tool handlers — one function per MCP tool. All call the retriever HTTP API.
-
-Each handler:
-  - Validates required arguments and returns text_result(..., is_error=True)
-    on bad input.
-  - Calls http_request() (stdlib urllib) for plain JSON endpoints.
-  - For `upload_document` only, falls back to a tiny multipart/form-data
-    encoder built in-process (also stdlib only) so the MCP has zero third-
-    party Python deps.
-  - Returns a tool-result dict (TextContent block).
-  - Lets exceptions propagate; dispatch.handle_tools_call converts them to
-    isError responses with the traceback on stderr.
-"""
+"""Tool handlers backed by local SQLite/Qdrant storage, not FastAPI."""
 from __future__ import annotations
 
-import mimetypes
-import os
-import secrets
+import json
+import shutil
 from pathlib import Path
 from typing import Any
 
+from scripts.config import load_config
+from scripts import ingest as local_ingest
+from scripts import search as local_search
+from scripts import storage
+
 from . import bootstrap
 from .protocol import text_result
-from .runtime import RetrieverHttpError, http_request, silenced_stdout
+from .runtime import silenced_stdout
 
 
 def _resolve_datasets(arg: Any) -> list[str]:
@@ -30,360 +22,270 @@ def _resolve_datasets(arg: Any) -> list[str]:
     return list(bootstrap.DEFAULT_DATASET_IDS)
 
 
-def _http_error(exc: RetrieverHttpError) -> dict:
-    payload: dict[str, Any] = {"error": str(exc)}
-    if exc.status is not None:
-        payload["status"] = exc.status
-    if exc.body is not None:
-        payload["body"] = exc.body
-    return text_result(payload, is_error=True)
+def _row_dict(row: tuple, cols: list[str]) -> dict:
+    return dict(zip(cols, row))
 
 
-# ---------------------------------------------------------------------------
-# Search
-# ---------------------------------------------------------------------------
+def _require_str(args: dict, key: str) -> str | None:
+    value = args.get(key)
+    return value if isinstance(value, str) and value.strip() else None
+
+
 def tool_search(args: dict) -> dict:
-    query = args.get("query")
-    if not isinstance(query, str) or not query.strip():
+    query = _require_str(args, "query")
+    if not query:
         return text_result("query is required and must be a non-empty string", is_error=True)
-
     datasets = _resolve_datasets(args.get("dataset_ids"))
     if not datasets:
-        return text_result(
-            "dataset_ids is empty. Pass `dataset_ids` explicitly or set the "
-            "RETRIEVER_DEFAULT_DATASETS env var (comma-separated).",
-            is_error=True,
+        return text_result("dataset_ids is empty. Pass dataset_ids or set RETRIEVER_DEFAULT_DATASETS.", is_error=True)
+
+    cfg = load_config()
+    with silenced_stdout():
+        data = local_search.hybrid_search(
+            cfg,
+            query.strip(),
+            datasets,
+            top=max(1, min(50, int(args.get("top_n", 12)))),
+            top_k=max(1, min(500, int(args.get("top_k", 200)))),
+            vector_similarity_weight=float(args.get("vector_similarity_weight", 0.5)),
+            keyword=bool(args.get("keyword", True)),
+            fusion=args.get("fusion") if isinstance(args.get("fusion"), str) else None,
+            parent_chunk_replace=args.get("parent_chunk_replace") if isinstance(args.get("parent_chunk_replace"), bool) else None,
+            metadata_condition=args.get("metadata_condition") if isinstance(args.get("metadata_condition"), dict) else None,
         )
-
-    top_n = max(1, min(50, int(args.get("top_n", 12))))
-    payload: dict[str, Any] = {
-        "question": query.strip(),
-        "query": query.strip(),
-        "dataset_ids": datasets,
-        "keyword": bool(args.get("keyword", True)),
-        "vector_similarity_weight": float(args.get("vector_similarity_weight", 0.5)),
-        "similarity_threshold": float(args.get("similarity_threshold", 0.0)),
-        "top_k": int(args.get("top_k", 200)),
-        "page": int(args.get("page", 1)),
-        "page_size": int(args.get("page_size", 100)),
-    }
-    if args.get("rerank_id"):
-        payload["rerank_id"] = args["rerank_id"]
-    if args.get("pipeline_name"):
-        payload["pipeline_name"] = args["pipeline_name"]
-    if isinstance(args.get("metadata_condition"), dict):
-        payload["metadata_condition"] = args["metadata_condition"]
-
-    try:
-        with silenced_stdout():
-            resp = http_request("POST", "/api/v1/retrieval", json_body=payload)
-    except RetrieverHttpError as exc:
-        return _http_error(exc)
-
-    data = (resp or {}).get("data") or {}
-    items_any = data.get("items") or data.get("chunks") or []
-    if not isinstance(items_any, list):
-        items_any = []
-    items = items_any[:top_n]
 
     contexts: list[dict[str, Any]] = []
     citations: list[dict[str, Any]] = []
-    for c in items:
-        if not isinstance(c, dict):
-            continue
-        pos = c.get("position")
-        if pos is None and isinstance(c.get("positions"), list) and c["positions"]:
-            pos = c["positions"][0]
-
-        def _f(x: Any) -> float:
-            try:
-                return float(x)
-            except (TypeError, ValueError):
-                return 0.0
-
+    for c in data["items"]:
         contexts.append({
-            "text": c.get("content", ""),
+            "text": c["content"],
             "source": {
-                "dataset_id": c.get("dataset_id"),
-                "document_id": c.get("document_id"),
-                "document_name": c.get("document_name") or c.get("name"),
-                "position": pos,
-                "chunk_id": c.get("id"),
-                "similarity": _f(c.get("similarity")),
-                "vector_similarity": _f(c.get("vector_similarity")),
-                "term_similarity": _f(c.get("term_similarity")),
+                "dataset_id": c["dataset_id"],
+                "document_id": c["document_id"],
+                "document_name": c["document_name"],
+                "position": c["position"],
+                "chunk_id": c["chunk_id"],
+                "similarity": c["similarity"],
+                "vector_similarity": c["vector_similarity"],
+                "term_similarity": c["term_similarity"],
             },
         })
         citations.append({
-            "document_name": c.get("document_name") or c.get("name"),
-            "position": pos,
-            "score": _f(c.get("similarity")),
-            "chunk_id": c.get("id"),
+            "document_name": c["document_name"],
+            "position": c["position"],
+            "score": c["similarity"],
+            "chunk_id": c["chunk_id"],
         })
-
-    return text_result({
-        "query": query.strip(),
-        "dataset_ids": datasets,
-        "total": data.get("total", len(items_any)),
-        "page": data.get("page"),
-        "page_size": data.get("page_size"),
-        "contexts": contexts,
-        "citations": citations,
-    })
+    return text_result({"query": query.strip(), "dataset_ids": datasets, "total": data["total"], "contexts": contexts, "citations": citations})
 
 
-# ---------------------------------------------------------------------------
-# Datasets
-# ---------------------------------------------------------------------------
 def tool_list_datasets(_args: dict) -> dict:
-    try:
-        resp = http_request("GET", "/api/v1/datasets")
-    except RetrieverHttpError as exc:
-        return _http_error(exc)
-    return text_result((resp or {}).get("data") or resp)
+    cfg = load_config()
+    with storage.sqlite_session(cfg) as conn:
+        rows = conn.execute("SELECT dataset_id, name, description, created_at FROM datasets ORDER BY created_at DESC").fetchall()
+    cols = ["id", "name", "description", "created_at"]
+    return text_result([_row_dict(row, cols) for row in rows])
 
 
 def tool_get_dataset(args: dict) -> dict:
-    ds = args.get("dataset_id")
-    if not isinstance(ds, str) or not ds:
+    ds = _require_str(args, "dataset_id")
+    if not ds:
         return text_result("dataset_id is required", is_error=True)
-    try:
-        resp = http_request("GET", f"/api/v1/datasets/{ds}")
-    except RetrieverHttpError as exc:
-        return _http_error(exc)
-    return text_result((resp or {}).get("data") or resp)
+    cfg = load_config()
+    with storage.sqlite_session(cfg) as conn:
+        row = conn.execute("SELECT dataset_id, name, description, created_at FROM datasets WHERE dataset_id = ?", (ds,)).fetchone()
+    if not row:
+        return text_result(f"dataset not found: {ds}", is_error=True)
+    return text_result(_row_dict(row, ["id", "name", "description", "created_at"]))
 
 
 def tool_create_dataset(args: dict) -> dict:
-    name = args.get("name")
-    if not isinstance(name, str) or not name.strip():
+    name = _require_str(args, "name")
+    if not name:
         return text_result("name is required", is_error=True)
-    form: dict[str, Any] = {"name": name.strip()}
-    if isinstance(args.get("description"), str):
-        form["description"] = args["description"]
-    try:
-        resp = http_request("POST", "/api/v1/datasets", form=form)
-    except RetrieverHttpError as exc:
-        return _http_error(exc)
-    return text_result((resp or {}).get("data") or resp)
+    dataset_id = storage.slug(name)
+    cfg = load_config()
+    with storage.sqlite_session(cfg) as conn:
+        storage.ensure_dataset(conn, dataset_id, name, str(args.get("description") or ""))
+    cfg.dataset_dir(dataset_id).mkdir(parents=True, exist_ok=True)
+    return text_result({"id": dataset_id, "name": name, "description": args.get("description") or ""})
 
 
 def tool_delete_dataset(args: dict) -> dict:
-    ds = args.get("dataset_id")
-    if not isinstance(ds, str) or not ds:
+    ds = _require_str(args, "dataset_id")
+    if not ds:
         return text_result("dataset_id is required", is_error=True)
-    try:
-        resp = http_request("DELETE", f"/api/v1/datasets/{ds}")
-    except RetrieverHttpError as exc:
-        return _http_error(exc)
-    return text_result((resp or {}).get("data") or resp)
-
-
-# ---------------------------------------------------------------------------
-# Documents
-# ---------------------------------------------------------------------------
-def _encode_multipart(
-    fields: dict[str, str],
-    file_field: str,
-    filename: str,
-    file_bytes: bytes,
-    content_type: str,
-) -> tuple[bytes, str]:
-    """Build a multipart/form-data body with stdlib only.
-
-    Avoids pulling in `requests` just for one upload endpoint.
-    """
-    boundary = "----retriever-mcp-" + secrets.token_hex(16)
-    crlf = b"\r\n"
-    parts: list[bytes] = []
-    for key, val in fields.items():
-        if val is None:
-            continue
-        parts.append(f"--{boundary}".encode())
-        parts.append(
-            f'Content-Disposition: form-data; name="{key}"'.encode()
-        )
-        parts.append(b"")
-        parts.append(str(val).encode("utf-8"))
-    parts.append(f"--{boundary}".encode())
-    parts.append(
-        f'Content-Disposition: form-data; name="{file_field}"; filename="{filename}"'.encode(
-            "utf-8"
-        )
-    )
-    parts.append(f"Content-Type: {content_type}".encode())
-    parts.append(b"")
-    parts.append(file_bytes)
-    parts.append(f"--{boundary}--".encode())
-    parts.append(b"")
-
-    body = crlf.join(parts)
-    return body, f"multipart/form-data; boundary={boundary}"
+    cfg = load_config()
+    with storage.sqlite_session(cfg) as conn:
+        conn.execute("DELETE FROM chunk_fts WHERE dataset_id = ?", (ds,))
+        conn.execute("DELETE FROM chunks WHERE dataset_id = ?", (ds,))
+        conn.execute("DELETE FROM documents WHERE dataset_id = ?", (ds,))
+        conn.execute("DELETE FROM datasets WHERE dataset_id = ?", (ds,))
+    shutil.rmtree(cfg.dataset_dir(ds), ignore_errors=True)
+    return text_result({"deleted": ds})
 
 
 def tool_upload_document(args: dict) -> dict:
-    ds = args.get("dataset_id")
-    if not isinstance(ds, str) or not ds:
+    ds = _require_str(args, "dataset_id")
+    fp = _require_str(args, "file_path")
+    if not ds:
         return text_result("dataset_id is required", is_error=True)
-    fp = args.get("file_path")
-    if not isinstance(fp, str) or not fp:
+    if not fp:
         return text_result("file_path is required", is_error=True)
-
-    path = Path(fp).expanduser()
-    if not path.is_file():
-        return text_result(f"file not found: {path}", is_error=True)
-    size = path.stat().st_size
-    if size == 0:
-        return text_result(f"file is empty: {path}", is_error=True)
-
-    mime, _ = mimetypes.guess_type(path.name)
-    content_type = mime or "application/octet-stream"
-
-    form: dict[str, Any] = {}
-    if args.get("use_hierarchical") is not None:
-        form["use_hierarchical"] = str(args["use_hierarchical"]).lower()
-    if args.get("use_contextual") is not None:
-        form["use_contextual"] = str(bool(args["use_contextual"])).lower()
-    if isinstance(args.get("pipeline_name"), str) and args["pipeline_name"]:
-        form["pipeline_name"] = args["pipeline_name"]
-
-    with path.open("rb") as fh:
-        file_bytes = fh.read()
-    body, ctype = _encode_multipart(
-        fields={k: str(v) for k, v in form.items()},
-        file_field="file",
-        filename=path.name,
-        file_bytes=file_bytes,
-        content_type=content_type,
-    )
-
-    try:
-        with silenced_stdout():
-            resp = http_request(
-                "POST",
-                f"/api/v1/datasets/{ds}/documents",
-                raw_body=body,
-                content_type=ctype,
-                # Ingest is synchronous on the server side; allow a long timeout.
-                timeout=max(bootstrap.REQUEST_TIMEOUT, 600.0),
-            )
-    except RetrieverHttpError as exc:
-        return _http_error(exc)
-
-    out = (resp or {}).get("data") or resp
-    return text_result({
-        "dataset_id": ds,
-        "file": str(path),
-        "size_bytes": size,
-        "response": out,
-    })
+    cfg = load_config()
+    with silenced_stdout():
+        metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
+        out = local_ingest.upload_document(
+            cfg,
+            ds,
+            fp,
+            skip_embedding=bool(args.get("skip_embedding", False)),
+            use_hierarchical=args.get("use_hierarchical"),
+            metadata=metadata,
+        )
+    return text_result({"dataset_id": ds, "file": fp, "response": out})
 
 
 def tool_list_documents(args: dict) -> dict:
-    ds = args.get("dataset_id")
-    if not isinstance(ds, str) or not ds:
+    ds = _require_str(args, "dataset_id")
+    if not ds:
         return text_result("dataset_id is required", is_error=True)
-    query = {
-        "keywords": args.get("keywords"),
-        "offset": int(args.get("offset", 0)),
-        "limit": int(args.get("limit", 30)),
-        "orderby": args.get("orderby", "created_at"),
-        "desc": "true" if args.get("desc", True) else "false",
-    }
-    try:
-        resp = http_request("GET", f"/api/v1/datasets/{ds}/documents", query=query)
-    except RetrieverHttpError as exc:
-        return _http_error(exc)
-    return text_result((resp or {}).get("data") or resp)
+    keywords = args.get("keywords")
+    offset = int(args.get("offset", 0))
+    limit = int(args.get("limit", 30))
+    cfg = load_config()
+    sql = "SELECT document_id, dataset_id, name, source_path, content_path, size_bytes, chunk_count, has_vector, metadata_json, created_at FROM documents WHERE dataset_id = ?"
+    params: list[Any] = [ds]
+    if isinstance(keywords, str) and keywords:
+        sql += " AND LOWER(name) LIKE ?"
+        params.append(f"%{keywords.lower()}%")
+    sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+    with storage.sqlite_session(cfg) as conn:
+        rows = conn.execute(sql, params).fetchall()
+    cols = ["document_id", "dataset_id", "name", "source_path", "content_path", "size_bytes", "chunk_count", "has_vector", "metadata_json", "created_at"]
+    docs = []
+    for row in rows:
+        doc = _row_dict(row, cols)
+        doc["metadata"] = json.loads(doc.pop("metadata_json") or "{}")
+        docs.append(doc)
+    return text_result(docs)
 
 
 def tool_get_document(args: dict) -> dict:
-    ds = args.get("dataset_id")
-    doc = args.get("document_id")
-    if not isinstance(ds, str) or not ds:
-        return text_result("dataset_id is required", is_error=True)
-    if not isinstance(doc, str) or not doc:
-        return text_result("document_id is required", is_error=True)
-    try:
-        resp = http_request("GET", f"/api/v1/datasets/{ds}/documents/{doc}")
-    except RetrieverHttpError as exc:
-        return _http_error(exc)
-    return text_result((resp or {}).get("data") or resp)
+    ds = _require_str(args, "dataset_id")
+    doc = _require_str(args, "document_id")
+    if not ds or not doc:
+        return text_result("dataset_id and document_id are required", is_error=True)
+    cfg = load_config()
+    with storage.sqlite_session(cfg) as conn:
+        row = conn.execute(
+            "SELECT document_id, dataset_id, name, source_path, content_path, size_bytes, chunk_count, has_vector, metadata_json, created_at FROM documents WHERE dataset_id = ? AND document_id = ?",
+            (ds, doc),
+        ).fetchone()
+    if not row:
+        return text_result(f"document not found: {doc}", is_error=True)
+    cols = ["document_id", "dataset_id", "name", "source_path", "content_path", "size_bytes", "chunk_count", "has_vector", "metadata_json", "created_at"]
+    doc_obj = _row_dict(row, cols)
+    doc_obj["metadata"] = json.loads(doc_obj.pop("metadata_json") or "{}")
+    return text_result(doc_obj)
 
 
 def tool_list_chunks(args: dict) -> dict:
-    ds = args.get("dataset_id")
-    doc = args.get("document_id")
-    if not isinstance(ds, str) or not ds:
-        return text_result("dataset_id is required", is_error=True)
-    if not isinstance(doc, str) or not doc:
-        return text_result("document_id is required", is_error=True)
-    query = {
-        "keywords": args.get("keywords"),
-        "offset": int(args.get("offset", 0)),
-        "limit": int(args.get("limit", 30)),
-    }
-    try:
-        resp = http_request(
-            "GET", f"/api/v1/datasets/{ds}/documents/{doc}/chunks", query=query
-        )
-    except RetrieverHttpError as exc:
-        return _http_error(exc)
-    return text_result((resp or {}).get("data") or resp)
+    ds = _require_str(args, "dataset_id")
+    doc = _require_str(args, "document_id")
+    if not ds or not doc:
+        return text_result("dataset_id and document_id are required", is_error=True)
+    keywords = args.get("keywords")
+    offset = int(args.get("offset", 0))
+    limit = int(args.get("limit", 30))
+    cfg = load_config()
+    sql = "SELECT chunk_id, document_id, dataset_id, position, content, parent_content, parent_id, child_id, is_hierarchical, is_contextual, metadata_json, has_vector FROM chunks WHERE dataset_id = ? AND document_id = ?"
+    params: list[Any] = [ds, doc]
+    if isinstance(keywords, str) and keywords:
+        sql += " AND LOWER(content) LIKE ?"
+        params.append(f"%{keywords.lower()}%")
+    sql += " ORDER BY position LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+    with storage.sqlite_session(cfg) as conn:
+        rows = conn.execute(sql, params).fetchall()
+    cols = ["id", "document_id", "dataset_id", "position", "content", "parent_content", "parent_id", "child_id", "is_hierarchical", "is_contextual", "metadata_json", "has_vector"]
+    chunks = []
+    for row in rows:
+        chunk = _row_dict(row, cols)
+        chunk["metadata"] = json.loads(chunk.pop("metadata_json") or "{}")
+        chunk["is_hierarchical"] = bool(chunk["is_hierarchical"])
+        chunk["is_contextual"] = bool(chunk["is_contextual"])
+        chunks.append(chunk)
+    return text_result(chunks)
 
 
 def tool_get_document_content(args: dict) -> dict:
-    ds = args.get("dataset_id")
-    doc = args.get("document_id")
-    if not isinstance(ds, str) or not ds:
-        return text_result("dataset_id is required", is_error=True)
-    if not isinstance(doc, str) or not doc:
-        return text_result("document_id is required", is_error=True)
-    try:
-        resp = http_request("GET", f"/api/v1/datasets/{ds}/documents/{doc}/content")
-    except RetrieverHttpError as exc:
-        return _http_error(exc)
-    return text_result((resp or {}).get("data") or resp)
+    ds = _require_str(args, "dataset_id")
+    doc = _require_str(args, "document_id")
+    if not ds or not doc:
+        return text_result("dataset_id and document_id are required", is_error=True)
+    cfg = load_config()
+    with storage.sqlite_session(cfg) as conn:
+        row = conn.execute("SELECT content_path FROM documents WHERE dataset_id = ? AND document_id = ?", (ds, doc)).fetchone()
+    if not row:
+        return text_result(f"document not found: {doc}", is_error=True)
+    path = Path(row[0])
+    return text_result({"document_id": doc, "content_path": str(path), "content": path.read_text(encoding="utf-8", errors="replace")})
 
 
 def tool_delete_document(args: dict) -> dict:
-    ds = args.get("dataset_id")
-    doc = args.get("document_id")
-    if not isinstance(ds, str) or not ds:
-        return text_result("dataset_id is required", is_error=True)
-    if not isinstance(doc, str) or not doc:
-        return text_result("document_id is required", is_error=True)
-    try:
-        resp = http_request("DELETE", f"/api/v1/datasets/{ds}/documents/{doc}")
-    except RetrieverHttpError as exc:
-        return _http_error(exc)
-    return text_result((resp or {}).get("data") or resp)
+    ds = _require_str(args, "dataset_id")
+    doc = _require_str(args, "document_id")
+    if not ds or not doc:
+        return text_result("dataset_id and document_id are required", is_error=True)
+    cfg = load_config()
+    with storage.sqlite_session(cfg) as conn:
+        conn.execute("DELETE FROM chunk_fts WHERE document_id = ?", (doc,))
+        conn.execute("DELETE FROM chunks WHERE document_id = ?", (doc,))
+        conn.execute("DELETE FROM documents WHERE document_id = ?", (doc,))
+    shutil.rmtree(cfg.document_dir(ds, doc), ignore_errors=True)
+    return text_result({"deleted": doc})
 
 
-# ---------------------------------------------------------------------------
-# Pipelines + Diagnostics
-# ---------------------------------------------------------------------------
 def tool_list_pipelines(_args: dict) -> dict:
-    try:
-        resp = http_request("GET", "/api/v1/ingest-pipelines")
-    except RetrieverHttpError as exc:
-        return _http_error(exc)
-    return text_result((resp or {}).get("data") or resp)
+    cfg = load_config()
+    return text_result({
+        "default_ingest": {"chunk_chars": cfg.ingest.chunk_chars, "chunk_overlap": cfg.ingest.chunk_overlap},
+        "hierarchical_ingest": {
+            "parent_chunk_chars": cfg.ingest.parent_chunk_chars,
+            "parent_chunk_overlap": cfg.ingest.parent_chunk_overlap,
+            "child_chunk_chars": cfg.ingest.child_chunk_chars,
+            "child_chunk_overlap": cfg.ingest.child_chunk_overlap,
+        },
+        "default_retrieval": {
+            "hybrid_alpha": cfg.search.hybrid_alpha,
+            "fusion": cfg.search.fusion,
+            "rrf_k": cfg.search.rrf_k,
+            "parent_chunk_replace": cfg.search.parent_chunk_replace,
+            "backend": "local_sqlite_qdrant",
+        },
+    })
 
 
-def tool_health(args: dict) -> dict:
-    path = "/health" if args.get("shallow") else "/health/deep"
-    try:
-        resp = http_request("GET", path, timeout=10.0)
-    except RetrieverHttpError as exc:
-        return _http_error(exc)
-    out = {"base_url": bootstrap.BASE_URL, "endpoint": path, "response": resp}
-    return text_result(out)
+def tool_health(_args: dict) -> dict:
+    cfg = load_config()
+    cfg.ensure_dirs()
+    with storage.sqlite_session(cfg) as conn:
+        datasets = conn.execute("SELECT COUNT(*) FROM datasets").fetchone()[0]
+        documents = conn.execute("SELECT COUNT(*) FROM documents").fetchone()[0]
+        chunks = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+    return text_result({
+        "status": "healthy",
+        "backend": "self-contained",
+        "data_root": str(cfg.data_root),
+        "db_path": str(cfg.db_path),
+        "vector_db_path": str(cfg.vector_db_path),
+        "embedding_configured": bool(cfg.embedding.api_url and cfg.embedding.dim > 0),
+        "counts": {"datasets": datasets, "documents": documents, "chunks": chunks},
+    })
 
 
-# ---------------------------------------------------------------------------
-# Registry consumed by dispatch.handle_tools_call
-# ---------------------------------------------------------------------------
 HANDLERS = {
     "search": tool_search,
     "list_datasets": tool_list_datasets,

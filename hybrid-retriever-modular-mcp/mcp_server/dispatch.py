@@ -105,7 +105,7 @@ def dispatch(msg: dict) -> Optional[dict]:
 def main() -> int:
     log(
         f"starting {SERVER_NAME} v{SERVER_VERSION} "
-        f"(base_url={bootstrap.BASE_URL}, default_datasets={bootstrap.DEFAULT_DATASET_IDS or '-'})"
+        f"(backend=self-contained, default_datasets={bootstrap.DEFAULT_DATASET_IDS or '-'})"
     )
     for line in sys.stdin:
         line = line.strip()
