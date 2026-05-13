@@ -1,0 +1,20 @@
+오픈코드에 mcp를 이런 식으로 써서 mcp 연결하려고 한다.
+    "mcp": {
+      "email_mcp": {
+        "type": "local",
+        "command": [
+            "py",
+            "-3.9",
+            "C:\\Users\\joungwoo.lee\\slsi-cowork-plugins\\email-mcp\\server.py"
+          ],
+          "enabled": true,
+          "environment": {
+            "EMAIL_CONNECTOR_PATH": "C:\\Users\\joungwoo.lee\\slsi-cowork-plugins\\email-mcp"
+          }
+        }
+    }
+
+mcp는 이 안에 있는 걸 클론해와서 연결해야 한다.
+https://github.com/joungwoo-lee/slsi-cowork-plugins/blob/main/email-mcp
+
+그안에 diagnose.ps1  라는 진단 파일도 있는데 만약 연결안되면 이걸 돌려봐서 진단해야 한다.
