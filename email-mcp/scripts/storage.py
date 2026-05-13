@@ -179,5 +179,11 @@ def vector_search(
 
 
 def _qdrant_id(mail_id: str) -> int:
-    """Qdrant accepts int / UUID. Hash mail_id to a stable 63-bit int."""
-    return int(mail_id[:15], 16)
+    """Qdrant accepts int / UUID. Hash mail_id to a stable 64-bit int."""
+    import hashlib
+    # Use MD5 and take the first 8 bytes (64 bits) to convert to int.
+    # Qdrant's integer IDs must be within 0 and 2^64-1 (unsigned).
+    # Python's int is arbitrary precision, but for safety with Qdrant, 
+    # we'll use 63 bits to avoid potential signed/unsigned issues in some backends.
+    h = hashlib.md5(mail_id.encode("utf-8")).hexdigest()
+    return int(h[:15], 16)
