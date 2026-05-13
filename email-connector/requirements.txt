@@ -1,4 +1,4 @@
-# PST decoding — libpff-python is the correct PyPI name (NOT pypff-python).
+﻿# PST decoding — libpff-python is the correct PyPI name (NOT pypff-python).
 # Pin to 20211114 because it is the only version that ships a prebuilt
 # Windows wheel (cp39-win_amd64). Newer releases have macOS wheels only,
 # so on Windows pip would fall back to sdist → C build → fail.

@@ -1,4 +1,4 @@
-# diagnose-email-mcp.ps1
+﻿# diagnose-email-mcp.ps1
 # email-mcp -32000 Connection closed 진단 스크립트
 # 사용법: PowerShell에서 powershell -ExecutionPolicy Bypass -File diagnose-email-mcp.ps1
 # 옵션: -EmailMcpPath, -EmailConnectorPath 로 경로 명시 가능

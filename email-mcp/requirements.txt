@@ -1,4 +1,4 @@
-# email-mcp has no dependencies of its own.
+﻿# email-mcp has no dependencies of its own.
 #
 # The MCP stdio JSON-RPC server in server.py uses only the Python standard
 # library, deliberately — the official MCP Python SDK requires Python >= 3.10
