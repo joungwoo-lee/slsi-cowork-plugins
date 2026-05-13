@@ -1,0 +1,18 @@
+{
+  "mcp": {
+    "retriever_mcp": {
+      "type": "local",
+      "command": [
+        "py",
+        "-3",
+        "C:\\Users\\joungwoo.lee\\slsi-cowork-plugins\\retriever-mcp\\server.py"
+      ],
+      "enabled": true,
+      "env": {
+        "RETRIEVER_BASE_URL": "http://127.0.0.1:9380",
+        "RETRIEVER_API_KEY": "ragflow-key",
+        "RETRIEVER_DEFAULT_DATASETS": "my_docs"
+      }
+    }
+  }
+}

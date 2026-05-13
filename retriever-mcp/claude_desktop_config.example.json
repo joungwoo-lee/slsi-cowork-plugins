@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "retriever": {
+      "command": "py",
+      "args": [
+        "-3",
+        "C:\\Users\\<YOU>\\.claude\\skills\\retriever-mcp\\server.py"
+      ],
+      "env": {
+        "RETRIEVER_BASE_URL": "http://127.0.0.1:9380",
+        "RETRIEVER_API_KEY": "ragflow-key",
+        "RETRIEVER_DEFAULT_DATASETS": "my_docs"
+      }
+    }
+  }
+}

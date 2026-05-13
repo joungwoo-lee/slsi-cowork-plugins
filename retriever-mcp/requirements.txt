@@ -1,0 +1,2 @@
+# retriever-mcp 는 표준 라이브러리(urllib + json)만 사용해 retriever_engine HTTP API 를 호출한다.
+# 별도 의존성 없음.

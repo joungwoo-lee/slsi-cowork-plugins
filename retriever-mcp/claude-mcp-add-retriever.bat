@@ -1,0 +1,1 @@
+claude mcp add retriever_mcp "py -3 C:\slsi-cowork-plugins\retriever-mcp\server.py" --env RETRIEVER_BASE_URL=http://127.0.0.1:9380 --env RETRIEVER_API_KEY=ragflow-key --env RETRIEVER_DEFAULT_DATASETS=my_docs
