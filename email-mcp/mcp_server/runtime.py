@@ -6,11 +6,11 @@ import os
 import sys
 from pathlib import Path
 
-from .bootstrap import EC_PATH
+from .bootstrap import ROOT_PATH
 
 
 def log(msg: str) -> None:
-    """Emit a log line to stderr. NEVER use print() to stdout — would corrupt JSON-RPC."""
+    """Emit a log line to stderr. NEVER use print() to stdout ??would corrupt JSON-RPC."""
     print(f"[email-mcp] {msg}", file=sys.stderr, flush=True)
 
 
@@ -19,12 +19,12 @@ def resolve_env_path() -> str:
 
     Override priority:
       1. EMAIL_MCP_ENV env var (explicit per-MCP override)
-      2. <email-connector>/.env (default — same .env the skill uses)
+      2. <email-mcp>/.env (default)
     """
     explicit = os.getenv("EMAIL_MCP_ENV")
     if explicit:
         return explicit
-    return str(EC_PATH / ".env")
+    return str(ROOT_PATH / ".env")
 
 
 @contextlib.contextmanager

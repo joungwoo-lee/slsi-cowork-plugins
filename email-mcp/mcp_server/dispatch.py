@@ -105,10 +105,10 @@ def dispatch(msg: dict) -> Optional[dict]:
 # I/O loop
 # ---------------------------------------------------------------------------
 def main() -> int:
-    # bootstrap.EC_PATH already validated; report it for log clarity.
-    from .bootstrap import EC_PATH
+    # bootstrap.ROOT_PATH already validated; report it for log clarity.
+    from .bootstrap import ROOT_PATH
 
-    log(f"starting {SERVER_NAME} v{SERVER_VERSION} (email-connector at {EC_PATH})")
+    log(f"starting {SERVER_NAME} v{SERVER_VERSION} (email-mcp root at {ROOT_PATH})")
     for line in sys.stdin:
         line = line.strip()
         if not line:

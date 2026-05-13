@@ -1,16 +1,26 @@
-﻿# email-mcp has no dependencies of its own.
-#
-# The MCP stdio JSON-RPC server in server.py uses only the Python standard
-# library, deliberately — the official MCP Python SDK requires Python >= 3.10
-# but email-connector pins libpff-python==20211114 which only ships a
-# cp39-win_amd64 wheel. To call email-connector's modules in-process the
-# server must run on Python 3.9, so we cannot use the SDK.
-#
-# All runtime dependencies (libpff-python, qdrant-client, requests, ...) come
-# from the sibling email-connector skill and are installed there:
-#
-#     cd /d %USERPROFILE%\.claude\skills\email-connector
-#     py -3.9 -m pip install -r requirements.txt
-#
-# Running `pip install -r email-mcp/requirements.txt` is therefore a no-op
-# but kept as a marker so tooling can detect that this is a Python project.
+﻿# PST decoding — libpff-python is the correct PyPI name (NOT pypff-python).
+# Pin to 20211114 because it is the only version that ships a prebuilt
+# Windows wheel (cp39-win_amd64). Newer releases have macOS wheels only,
+# so on Windows pip would fall back to sdist → C build → fail.
+# Requires: Python 3.9, 64-bit, Windows.
+libpff-python==20211114
+
+# Mail body / attachment conversion
+markdownify>=0.11.6     # HTML body / .html attachment → markdown
+striprtf>=0.0.26        # RTF-only mail bodies + .rtf attachments (pure Python)
+pymupdf>=1.23.0         # .pdf attachments
+python-docx>=1.1.0      # .docx attachments
+openpyxl>=3.1.0         # .xlsx attachments (pure Python)
+python-pptx>=0.6.21     # .pptx attachments (pure Python)
+
+# Storage + API
+# Pin qdrant-client to 1.7.0: storage.vector_search uses client.search()
+# which returns a flat list of ScoredPoint. From 1.10 onward search() is
+# deprecated in favour of query_points() with a different return shape,
+# and from 1.15 onward Python 3.9 is no longer supported. Pinning here
+# keeps the API contract stable on Python 3.9.
+qdrant-client==1.7.0
+requests>=2.31.0
+
+# Config from .env (matches retriever_engine project's variable scheme)
+python-dotenv>=1.0.0
