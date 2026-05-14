@@ -59,6 +59,7 @@ REQUIRED_DEPS = (
     "openpyxl",
     "chardet",
     "urllib3",
+    "win32api",
 )
 
 _BOOT_DOCTOR_OK = False

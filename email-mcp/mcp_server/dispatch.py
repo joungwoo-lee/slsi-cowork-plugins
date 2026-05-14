@@ -81,6 +81,7 @@ REQUIRED_DEPS = (
     "requests",
     "dotenv",
     "urllib3",
+    "win32api",
 )
 
 _BOOT_DOCTOR_OK = False

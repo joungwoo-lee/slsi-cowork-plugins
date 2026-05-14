@@ -29,3 +29,6 @@ python-dotenv>=1.0.0
 # .env disables TLS verify. Normally pulled in transitively by `requests`,
 # but listed here so the dependency is explicit.
 urllib3>=1.26.0
+
+# Required on Windows by portalocker (used by qdrant-client)
+pywin32>=306
