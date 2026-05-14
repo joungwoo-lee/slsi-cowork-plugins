@@ -112,7 +112,7 @@ powershell -ExecutionPolicy Bypass -File mcp_server\install.ps1
 ```json
 {
   "mcpServers": {
-    "email": {
+    "email_mcp": {
       "command": "py",
       "args": [
         "-3.9",
@@ -131,7 +131,7 @@ Claude Desktop 재시작 후 도구 10개가 노출된다. (또는 `powershell -
 ## Claude Code 연결
 
 ```cmd
-claude mcp add email py -3.9 %USERPROFILE%\.claude\skills\email-mcp\server.py ^
+claude mcp add email_mcp "py -3.9 \"%USERPROFILE%\\.claude\\skills\\email-mcp\\server.py\"" ^
   --env EMAIL_MCP_PATH=%USERPROFILE%\.claude\skills\email-mcp
 ```
 
