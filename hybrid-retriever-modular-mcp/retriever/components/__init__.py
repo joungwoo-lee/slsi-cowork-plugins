@@ -3,6 +3,7 @@
 The components mirror gilad-rubin/modular-rag's decomposition but run against
 this project's SQLite FTS5 + optional local Qdrant + embedded Kuzu graph.
 """
+from .email_loader import EmailFileLoader
 from .file_loader import LocalFileLoader
 from .hierarchical_splitter import HierarchicalSplitter
 from .document_embedder import HttpDocumentEmbedder, HttpTextEmbedder
@@ -12,6 +13,7 @@ from .hybrid_joiner import HybridJoiner
 from .parent_replace import ParentChunkReplacer
 
 __all__ = [
+    "EmailFileLoader",
     "LocalFileLoader",
     "HierarchicalSplitter",
     "HttpDocumentEmbedder",

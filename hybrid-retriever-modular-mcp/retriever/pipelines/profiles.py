@@ -154,3 +154,34 @@ register(
         search_kwargs={"vector_similarity_weight": 0.0, "fusion": "rrf"},
     )
 )
+
+
+# Email profile is registered with a deferred import to keep
+# retriever/pipelines/profiles.py importable in environments that don't
+# have the email components installed yet (e.g. boot-doctor sentinel runs).
+def _register_email_profile() -> None:
+    from .email_indexing import build_email_indexing_pipeline
+
+    register(
+        PipelineProfile(
+            name="email",
+            description=(
+                "Email ingestion pipeline. Accepts a single .eml file (parsed via "
+                "stdlib email) or an email-mcp Phase-1 mail directory containing "
+                "meta.json + body.md + attachments/. Headers (subject, sender, "
+                "recipients, received, folder_path) are folded into Document "
+                "metadata so search can filter via metadata_condition. Retrieval "
+                "uses the default hybrid pipeline."
+            ),
+            indexing_overrides={
+                # Emails are short relative to chunk_chars defaults; keep flat
+                # chunking by default so each chunk is one ~512-char span and
+                # the unified header block usually lives in the first chunk.
+                "use_hierarchical": "false",
+            },
+            build_indexing=build_email_indexing_pipeline,
+        )
+    )
+
+
+_register_email_profile()

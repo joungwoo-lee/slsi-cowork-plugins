@@ -77,14 +77,22 @@ def run_indexing(
     Returns the same dict shape as ``scripts.ingest.upload_document``.
     """
     path = Path(file_path).expanduser()
-    if not path.is_file():
-        raise FileNotFoundError(f"file not found: {path}")
+    if not (path.is_file() or path.is_dir()):
+        raise FileNotFoundError(f"file or directory not found: {path}")
     doc_id = _document_id_for(dataset_id, path)
     doc_dir = cfg.document_dir(dataset_id, doc_id)
     doc_dir.mkdir(parents=True, exist_ok=True)
     stored_source = cfg.source_path(dataset_id, doc_id, path.name)
     stored_content = cfg.content_path(dataset_id, doc_id)
-    shutil.copy2(path, stored_source)
+    if path.is_dir():
+        # Pre-converted email-mcp folder (or any structured source) -- copy
+        # the whole tree under the document's storage dir so future tools
+        # (read_attachment, etc.) can still find the originals.
+        if stored_source.exists():
+            shutil.rmtree(stored_source, ignore_errors=True)
+        shutil.copytree(path, stored_source)
+    else:
+        shutil.copy2(path, stored_source)
 
     pipeline = (builder or build_indexing_pipeline)(cfg, indexing_opts)
     result = pipeline.run(
@@ -110,17 +118,34 @@ def run_indexing(
 
     stored_content.write_text(loader_out["text"], encoding="utf-8", errors="replace")
 
+    # Loader-provided structured metadata (e.g. EmailFileLoader emits
+    # subject/sender/recipients/...) is merged INTO the caller-provided
+    # ``metadata`` so search-side ``metadata_condition`` filters can match on
+    # both at once. Caller-provided keys win on collision.
+    loader_meta = loader_out.get("email_metadata") if isinstance(loader_out.get("email_metadata"), dict) else None
+    combined_metadata: dict[str, Any] | None
+    if loader_meta and metadata:
+        combined_metadata = {**loader_meta, **metadata}
+    elif loader_meta:
+        combined_metadata = dict(loader_meta)
+    else:
+        combined_metadata = metadata
+
+    fallback_size = path.stat().st_size if path.is_file() else 0
     for doc in documents:
         doc.meta.update(
             {
                 "document_name": path.name,
                 "source_path": str(stored_source),
                 "content_path": str(stored_content),
-                "size_bytes": int(loader_out.get("size_bytes") or path.stat().st_size),
+                "size_bytes": int(loader_out.get("size_bytes") or fallback_size),
                 "has_vector": has_vector,
-                "document_metadata": metadata,
+                "document_metadata": combined_metadata,
             }
         )
+        if combined_metadata is not None:
+            chunk_metadata = doc.meta.get("metadata") or {}
+            doc.meta["metadata"] = {**combined_metadata, **chunk_metadata}
     store = SqliteFts5DocumentStore(cfg)
     store.write_documents(documents)
 
@@ -138,6 +163,20 @@ def run_indexing(
 
 
 def _document_id_for(dataset_id: str, path: Path) -> str:
-    stat = path.stat()
-    raw = f"{dataset_id}|{path.resolve()}|{stat.st_size}|{stat.st_mtime_ns}"
+    """Stable id for a file OR a directory source.
+
+    Files use ``size`` + ``mtime_ns`` (legacy behavior). Directories use
+    their own mtime plus a recursive content fingerprint so two distinct
+    email-mcp mail dirs do not collide.
+    """
+    if path.is_dir():
+        size = sum(p.stat().st_size for p in path.rglob("*") if p.is_file())
+        try:
+            mtime_ns = path.stat().st_mtime_ns
+        except OSError:
+            mtime_ns = 0
+        raw = f"{dataset_id}|{path.resolve()}|dir|{size}|{mtime_ns}"
+    else:
+        stat = path.stat()
+        raw = f"{dataset_id}|{path.resolve()}|{stat.st_size}|{stat.st_mtime_ns}"
     return hashlib.sha1(raw.encode("utf-8", errors="replace")).hexdigest()[:20]

@@ -263,6 +263,82 @@ def main() -> int:
             f"(active), term_sim={def_src['term_similarity']}, fused={def_src['similarity']}"
         )
 
+        # 10e) Email profile (live OpenAI embedding path)
+        import tempfile
+
+        eml_marker = uuid.uuid4().hex
+        with tempfile.TemporaryDirectory(prefix="e2e_live_email_") as tmpdir:
+            tmp_path = Path(tmpdir)
+            eml = tmp_path / "live_alice.eml"
+            eml.write_bytes(
+                (
+                    "From: Alice Lee <alice.live@example.com>\r\n"
+                    "To: Bob Live <bob.live@example.com>\r\n"
+                    "Subject: Live email pipeline check\r\n"
+                    "Date: Wed, 14 May 2026 11:00:00 +0900\r\n"
+                    f"Message-ID: <{eml_marker}@example.com>\r\n"
+                    "MIME-Version: 1.0\r\n"
+                    "Content-Type: text/plain; charset=utf-8\r\n"
+                    "\r\n"
+                    f"Live retriever modular pipeline marker {eml_marker}. "
+                    "Haystack 기반 email profile이 동작합니다.\r\n"
+                ).encode("utf-8")
+            )
+            up_eml = call(
+                "upload_document",
+                {
+                    "dataset_id": dataset_id,
+                    "file_path": str(eml),
+                    "pipeline": "email",
+                    "skip_embedding": False,
+                },
+            )
+            assert not up_eml["isError"], up_eml
+            eml_doc = up_eml["payload"]["response"]
+            assert eml_doc["has_vector"], eml_doc
+            print(
+                f"[ok] live email .eml ingest: doc={eml_doc['document_id']} "
+                f"chunks={eml_doc['chunks_count']} has_vector={eml_doc['has_vector']}"
+            )
+
+            s_eml = call(
+                "search",
+                {
+                    "query": "live email pipeline",
+                    "dataset_ids": [dataset_id],
+                    "top_n": 3,
+                    "vector_similarity_weight": 0.5,
+                    "pipeline": "email",
+                },
+            )
+            assert not s_eml["isError"], s_eml
+            assert s_eml["payload"]["total"] >= 1, s_eml
+            src = s_eml["payload"]["contexts"][0]["source"]
+            assert src["chunk_id"].startswith(eml_doc["document_id"]), src
+            # Live OpenAI embedding must produce a real vector similarity
+            assert src["vector_similarity"] > 0.0, src
+            print(
+                f"[ok] live email search: vec_sim={src['vector_similarity']:.3f} "
+                f"term_sim={src['term_similarity']:.3f} fused={src['similarity']:.3f}"
+            )
+
+            # metadata_condition filter on email sender
+            s_filter = call(
+                "search",
+                {
+                    "query": "marker",
+                    "dataset_ids": [dataset_id],
+                    "top_n": 3,
+                    "vector_similarity_weight": 0.0,
+                    "metadata_condition": {"sender": "Alice Lee <alice.live@example.com>"},
+                },
+            )
+            assert not s_filter["isError"], s_filter
+            assert s_filter["payload"]["total"] >= 1, s_filter
+            print(
+                f"[ok] live email metadata filter: total={s_filter['payload']['total']}"
+            )
+
         # 11) graph_rebuild + Cypher
         gr = call("graph_rebuild")
         assert not gr["isError"], gr
