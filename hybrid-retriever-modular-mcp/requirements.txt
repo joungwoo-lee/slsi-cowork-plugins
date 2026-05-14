@@ -9,9 +9,15 @@ chardet>=5.2.0
 kiwipiepy>=0.17.0
 # Embedded property-graph DB (Cypher) used by the graph_query tool.
 kuzu>=0.4.0
-# Used directly by scripts/embedding_client.py for InsecureRequestWarning.
+# Used directly by retriever/embedding_client.py for InsecureRequestWarning.
 # Normally pulled transitively by `requests`; listed for explicitness.
 urllib3>=1.26.0
 
 # Required on Windows by portalocker (used by qdrant-client)
 pywin32>=306
+
+# Modular RAG: Haystack 2.x pipelines and Hypster configuration space.
+# These power the retriever/ package; legacy scripts/ modules now delegate
+# to them while preserving their public surface.
+haystack-ai>=2.10.0
+hypster>=0.3.0

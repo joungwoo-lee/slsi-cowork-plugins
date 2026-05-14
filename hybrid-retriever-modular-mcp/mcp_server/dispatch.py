@@ -62,6 +62,9 @@ REQUIRED_DEPS = (
     "win32api",
     "kiwipiepy",
     "kuzu",
+    # Modular pipeline stack: see retriever/ package and requirements.txt.
+    "haystack",
+    "hypster",
 )
 
 _BOOT_DOCTOR_OK = False

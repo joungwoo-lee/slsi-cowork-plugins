@@ -1,0 +1,337 @@
+"""End-to-end MCP stdio test for the modular retriever.
+
+Spawns ``py -3 server.py`` as a child process, drives JSON-RPC through
+stdin/stdout, and asserts that every MCP tool returns the legacy response
+shape with the new modular pipelines wired in.
+
+Run:    py -3 scripts_test/e2e_stdio.py
+"""
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+
+
+def main() -> int:
+    data_root = Path(tempfile.mkdtemp(prefix="retriever_e2e_"))
+    env = os.environ.copy()
+    env["RETRIEVER_DATA_ROOT"] = str(data_root)
+    env["RETRIEVER_DEFAULT_DATASETS"] = "e2e_docs"
+    # No embedding API configured -> keyword-only search path.
+    env["EMBEDDING_API_URL"] = ""
+    env["EMBEDDING_DIM"] = "0"
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUNBUFFERED"] = "1"
+    env["PYTHONPATH"] = str(REPO) + os.pathsep + env.get("PYTHONPATH", "")
+
+    print(f"[e2e] data_root={data_root}")
+
+    server_py = REPO / "server.py"
+    proc = subprocess.Popen(
+        [sys.executable, str(server_py)],
+        cwd=str(REPO),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        env=env,
+        text=True,
+        encoding="utf-8",
+        bufsize=1,
+    )
+
+    next_id = iter(range(1, 10_000))
+
+    def send(method: str, params: dict | None = None, *, is_notification: bool = False):
+        msg: dict = {"jsonrpc": "2.0", "method": method}
+        if not is_notification:
+            msg["id"] = next(next_id)
+        if params is not None:
+            msg["params"] = params
+        proc.stdin.write(json.dumps(msg) + "\n")
+        proc.stdin.flush()
+        if is_notification:
+            return None
+        return _read_response(proc, msg["id"])
+
+    def call_tool(name: str, arguments: dict | None = None) -> dict:
+        resp = send("tools/call", {"name": name, "arguments": arguments or {}})
+        result = resp.get("result")
+        assert result is not None, f"tool {name} returned no result: {resp}"
+        content = result.get("content") or []
+        text = content[0].get("text") if content else ""
+        try:
+            payload = json.loads(text) if text else None
+        except json.JSONDecodeError:
+            payload = text
+        is_error = bool(result.get("isError"))
+        return {"isError": is_error, "payload": payload, "raw": result}
+
+    try:
+        # 1. initialize
+        init = send(
+            "initialize",
+            {
+                "protocolVersion": "2025-06-18",
+                "capabilities": {},
+                "clientInfo": {"name": "e2e", "version": "1.0"},
+            },
+        )
+        assert init["result"]["protocolVersion"], init
+        send("notifications/initialized", {}, is_notification=True)
+        print("[ok] initialize")
+
+        # 2. tools/list
+        listing = send("tools/list")
+        tools = listing["result"]["tools"]
+        names = {t["name"] for t in tools}
+        for required in (
+            "search",
+            "upload_document",
+            "list_datasets",
+            "list_chunks",
+            "list_pipelines",
+            "health",
+            "graph_query",
+            "graph_rebuild",
+        ):
+            assert required in names, f"missing tool: {required}"
+        print(f"[ok] tools/list ({len(tools)} tools)")
+
+        # 3. create_dataset
+        create = call_tool("create_dataset", {"name": "e2e docs"})
+        assert not create["isError"], create
+        dataset_id = create["payload"]["id"]
+        print(f"[ok] create_dataset -> {dataset_id}")
+
+        # 4. upload_document — write a tiny Korean+English text file
+        sample = data_root / "sample.md"
+        sample.write_text(
+            "# 모듈러 RAG 노트\n\n"
+            "이 문서는 Haystack 파이프라인과 Hypster 설정 공간을 합쳐 "
+            "검색 엔진을 모듈러로 분해한 사례입니다. RRF fusion과 linear "
+            "fusion 두 가지 모드를 모두 지원합니다.\n\n"
+            "Modular RAG decomposes retrieval into reusable components.",
+            encoding="utf-8",
+        )
+        up = call_tool(
+            "upload_document",
+            {"dataset_id": dataset_id, "file_path": str(sample), "skip_embedding": True},
+        )
+        assert not up["isError"], up
+        doc = up["payload"]["response"]
+        document_id = doc["document_id"]
+        assert doc["chunks_count"] >= 1, doc
+        print(
+            f"[ok] upload_document -> doc {document_id}, "
+            f"chunks={doc['chunks_count']}, has_vector={doc['has_vector']}"
+        )
+
+        # 5. list_documents
+        ld = call_tool("list_documents", {"dataset_id": dataset_id})
+        assert not ld["isError"], ld
+        assert any(d["document_id"] == document_id for d in ld["payload"]), ld["payload"]
+        print(f"[ok] list_documents ({len(ld['payload'])})")
+
+        # 6. list_chunks
+        chunks = call_tool(
+            "list_chunks", {"dataset_id": dataset_id, "document_id": document_id, "limit": 20}
+        )
+        assert not chunks["isError"], chunks
+        assert chunks["payload"], "expected chunks"
+        print(f"[ok] list_chunks ({len(chunks['payload'])})")
+
+        # 7. search — Korean keyword, linear fusion (default)
+        s1 = call_tool(
+            "search",
+            {
+                "query": "모듈러",
+                "dataset_ids": [dataset_id],
+                "top_n": 5,
+                "vector_similarity_weight": 0.0,
+                "fusion": "linear",
+            },
+        )
+        assert not s1["isError"], s1
+        assert s1["payload"]["total"] >= 1, s1["payload"]
+        first_ctx = s1["payload"]["contexts"][0]
+        assert first_ctx["source"]["chunk_id"].startswith(document_id), first_ctx
+        print(
+            "[ok] search linear/korean: "
+            f"total={s1['payload']['total']}, top_score={first_ctx['source']['similarity']}"
+        )
+
+        # 8. search — English keyword, RRF
+        s2 = call_tool(
+            "search",
+            {
+                "query": "Modular",
+                "dataset_ids": [dataset_id],
+                "top_n": 5,
+                "vector_similarity_weight": 0.0,
+                "fusion": "rrf",
+            },
+        )
+        assert not s2["isError"], s2
+        assert s2["payload"]["total"] >= 1, s2["payload"]
+        print(f"[ok] search rrf/english: total={s2['payload']['total']}")
+
+        # 9. list_pipelines
+        lp = call_tool("list_pipelines")
+        assert not lp["isError"], lp
+        assert "default_retrieval" in lp["payload"], lp
+        print("[ok] list_pipelines")
+
+        # 10. health
+        h = call_tool("health")
+        assert not h["isError"], h
+        assert h["payload"]["counts"]["documents"] >= 1, h
+        print(f"[ok] health: counts={h['payload']['counts']}")
+
+        # 11. graph_rebuild + graph_query
+        gr = call_tool("graph_rebuild")
+        assert not gr["isError"], gr
+        assert gr["payload"]["chunks"] >= 1, gr
+        print(f"[ok] graph_rebuild: {gr['payload']}")
+
+        gq = call_tool(
+            "graph_query",
+            {"cypher": "MATCH (c:Chunk) RETURN COUNT(c) AS n", "limit": 5},
+        )
+        assert not gq["isError"], gq
+        assert gq["payload"]["rows"], gq
+        print(f"[ok] graph_query: rows={gq['payload']['rows']}")
+
+        # 11b. upload_document — larger file + hierarchical chunking
+        large_path = data_root / "large.md"
+        long_para = (
+            "Haystack 컴포넌트는 입력과 출력 타입이 정해진 작은 블록입니다. "
+            "Hypster는 이런 블록을 모듈러하게 조합하기 위한 설정 공간을 제공합니다. "
+            "RRF fusion, linear fusion, parent-child chunking은 모두 독립 컴포넌트로 분해됩니다.\n\n"
+        )
+        large_path.write_text((long_para * 12) + "End of doc.", encoding="utf-8")
+        up2 = call_tool(
+            "upload_document",
+            {
+                "dataset_id": dataset_id,
+                "file_path": str(large_path),
+                "skip_embedding": True,
+                "use_hierarchical": "true",
+            },
+        )
+        assert not up2["isError"], up2
+        doc2 = up2["payload"]["response"]
+        assert doc2["chunks_count"] > 1, doc2
+        assert doc2["is_hierarchical"], doc2
+        assert doc2["parent_chunks_count"] >= 1, doc2
+        print(
+            f"[ok] upload_document hierarchical: chunks={doc2['chunks_count']}, "
+            f"parents={doc2['parent_chunks_count']}"
+        )
+
+        s3 = call_tool(
+            "search",
+            {
+                "query": "fusion",
+                "dataset_ids": [dataset_id],
+                "top_n": 3,
+                "vector_similarity_weight": 0.0,
+                "fusion": "linear",
+                "parent_chunk_replace": True,
+            },
+        )
+        assert not s3["isError"], s3
+        assert s3["payload"]["total"] >= 1, s3["payload"]
+        first = s3["payload"]["contexts"][0]
+        assert first["source"]["chunk_id"].startswith(doc2["document_id"]) or first["source"]["chunk_id"].startswith(document_id), first
+        print(f"[ok] search hierarchical/parent-replace: total={s3['payload']['total']}")
+
+        # 11c. upload_directory bulk path
+        bulk_dir = data_root / "bulk"
+        bulk_dir.mkdir()
+        for i in range(3):
+            (bulk_dir / f"note_{i}.md").write_text(
+                f"# bulk doc {i}\n\nThis document mentions modular RAG and Haystack.",
+                encoding="utf-8",
+            )
+        ud = call_tool(
+            "upload_directory",
+            {
+                "dataset_id": dataset_id,
+                "dir_path": str(bulk_dir),
+                "skip_embedding": True,
+            },
+        )
+        assert not ud["isError"], ud
+        assert ud["payload"]["processed_count"] == 3, ud["payload"]
+        assert ud["payload"]["error_count"] == 0, ud["payload"]
+        print(f"[ok] upload_directory: processed={ud['payload']['processed_count']}")
+
+        # 12. delete_document + verify
+        dd = call_tool(
+            "delete_document", {"dataset_id": dataset_id, "document_id": document_id}
+        )
+        assert not dd["isError"], dd
+        post = call_tool("list_documents", {"dataset_id": dataset_id})
+        assert not any(d["document_id"] == document_id for d in post["payload"]), post
+        print("[ok] delete_document")
+
+        # 13. delete_dataset
+        del_ds = call_tool("delete_dataset", {"dataset_id": dataset_id})
+        assert not del_ds["isError"], del_ds
+        print("[ok] delete_dataset")
+
+        print("\nALL OK")
+        return 0
+    finally:
+        try:
+            proc.stdin.close()
+            proc.wait(timeout=5)
+        except Exception:
+            proc.kill()
+        try:
+            err_tail = proc.stderr.read()
+            if err_tail:
+                print("\n[server stderr tail]", err_tail[-2000:])
+        except Exception:
+            pass
+        shutil.rmtree(data_root, ignore_errors=True)
+
+
+def _read_response(proc: subprocess.Popen, req_id: int, timeout: float = 90.0) -> dict:
+    """Read JSON-RPC responses from the server until we see one with req_id.
+
+    Tolerates intermediate notifications/logs (per spec, those go to stderr,
+    but be defensive in case anything else slips out).
+    """
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        line = proc.stdout.readline()
+        if not line:
+            err_tail = proc.stderr.read() if proc.stderr else ""
+            raise RuntimeError(
+                f"server closed stdout before responding to id={req_id}.\nstderr:\n{err_tail}"
+            )
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(msg, dict) and msg.get("id") == req_id:
+            if "error" in msg:
+                raise RuntimeError(f"JSON-RPC error for id={req_id}: {msg['error']}")
+            return msg
+    raise RuntimeError(f"timeout waiting for id={req_id}")
+
+
+if __name__ == "__main__":
+    sys.exit(main())
