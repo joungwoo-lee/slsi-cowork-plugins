@@ -48,7 +48,7 @@ def upload_document(
         file_path,
         indexing_opts=opts,
         metadata=metadata,
-        builder=profile.build_indexing,
+        profile=profile,
     )
 
 
@@ -102,5 +102,5 @@ def hybrid_search(
         fusion=effective_fusion,
         parent_chunk_replace=effective_parent,
         metadata_condition=metadata_condition,
-        builder=profile.build_retrieval,
+        profile=profile,
     )

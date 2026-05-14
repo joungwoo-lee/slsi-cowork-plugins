@@ -17,7 +17,7 @@ from retriever.components.hierarchical_splitter import (  # noqa: F401
     _flat_records,
     _hierarchical_records as hierarchical_records,
 )
-from retriever.pipelines.indexing import _document_id_for as document_id_for  # noqa: F401
+from retriever.pipelines.engine import _document_id_for as document_id_for  # noqa: F401
 
 
 def upload_document(*args, **kwargs):

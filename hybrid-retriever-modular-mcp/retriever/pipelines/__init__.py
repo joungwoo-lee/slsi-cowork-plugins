@@ -1,18 +1,31 @@
-"""Pre-wired Haystack pipelines for indexing and retrieval.
+from .engine import (
+    PipelineProfile,
+    describe_profiles,
+    get_profile,
+    list_profile_names,
+    register,
+    run_indexing,
+    run_retrieval,
+    sync_profiles_with_disk,
+)
 
-Profiles (named bundles of components + config) live in ``profiles`` so
-third parties can register new compositions without touching the builders.
-"""
-from . import profiles
-from .indexing import build_indexing_pipeline, run_indexing
-from .profiles import PipelineProfile
-from .retrieval import build_retrieval_pipeline, run_retrieval
+# Alias for backward compatibility if any
+profiles = type("profiles", (), {
+    "get": get_profile,
+    "names": list_profile_names,
+    "describe": describe_profiles,
+    "sync_with_disk": sync_profiles_with_disk,
+    "register": register,
+})
 
 __all__ = [
-    "build_indexing_pipeline",
     "run_indexing",
-    "build_retrieval_pipeline",
     "run_retrieval",
     "PipelineProfile",
     "profiles",
+    "describe_profiles",
+    "get_profile",
+    "list_profile_names",
+    "register",
+    "sync_profiles_with_disk",
 ]

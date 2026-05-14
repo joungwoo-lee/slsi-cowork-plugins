@@ -6,6 +6,7 @@ directory keeps working without re-ingest.
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import List
 
 from haystack import Document, component
@@ -22,8 +23,13 @@ class LocalQdrantRetriever:
     embedder first; an empty vector means semantic search was disabled.
     """
 
-    def __init__(self, cfg: Config) -> None:
-        self.cfg = cfg
+    def __init__(
+        self,
+        data_root: str = r"C:\Retriever_Data",
+        collection: str = "retriever_chunks",
+    ) -> None:
+        self.data_root = data_root
+        self.collection = collection
 
     @component.output_types(documents=List[Document])
     def run(
@@ -34,12 +40,16 @@ class LocalQdrantRetriever:
     ) -> dict:
         if not embedding or not dataset_ids:
             return {"documents": []}
-        client = storage.open_qdrant(self.cfg)
-        storage.ensure_collection(client, self.cfg)
-        rows = storage.vector_search(client, self.cfg, list(embedding), dataset_ids, top_k)
+        
+        cfg = Config(data_root=Path(self.data_root), embedding=None) # type: ignore
+        cfg.qdrant.collection = self.collection
+
+        client = storage.open_qdrant(cfg)
+        storage.ensure_collection(client, cfg)
+        rows = storage.vector_search(client, cfg, list(embedding), dataset_ids, top_k)
         if not rows:
             return {"documents": []}
-        with storage.sqlite_session(self.cfg) as conn:
+        with storage.sqlite_session(cfg) as conn:
             chunks = storage.fetch_chunks(conn, [r["chunk_id"] for r in rows])
         docs: list[Document] = []
         for rank, row in enumerate(rows, 1):
@@ -71,15 +81,24 @@ class LocalQdrantRetriever:
 class LocalQdrantWriter:
     """Write embedded documents to the local Qdrant collection."""
 
-    def __init__(self, cfg: Config) -> None:
-        self.cfg = cfg
+    def __init__(
+        self,
+        data_root: str = r"C:\Retriever_Data",
+        collection: str = "retriever_chunks",
+    ) -> None:
+        self.data_root = data_root
+        self.collection = collection
 
     @component.output_types(written=int)
     def run(self, documents: List[Document], has_vector: bool = True) -> dict:
         if not has_vector or not documents:
             return {"written": 0}
-        client = storage.open_qdrant(self.cfg)
-        storage.ensure_collection(client, self.cfg)
+        
+        cfg = Config(data_root=Path(self.data_root), embedding=None) # type: ignore
+        cfg.qdrant.collection = self.collection
+
+        client = storage.open_qdrant(cfg)
+        storage.ensure_collection(client, cfg)
         rows: list[tuple[str, list[float], dict]] = []
         for doc in documents:
             embedding = getattr(doc, "embedding", None)
@@ -101,5 +120,5 @@ class LocalQdrantWriter:
                     },
                 )
             )
-        storage.upsert_vectors(client, self.cfg, rows)
+        storage.upsert_vectors(client, cfg, rows)
         return {"written": len(rows)}

@@ -7,6 +7,7 @@ normalization the legacy ``search.hybrid_search`` used).
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import List
 
 from haystack import Document, component
@@ -19,8 +20,8 @@ from ..config import Config
 class Fts5Retriever:
     """BM25 retrieval over the SQLite FTS5 chunk index."""
 
-    def __init__(self, cfg: Config) -> None:
-        self.cfg = cfg
+    def __init__(self, data_root: str = r"C:\Retriever_Data") -> None:
+        self.data_root = data_root
 
     @component.output_types(documents=List[Document])
     def run(
@@ -32,7 +33,11 @@ class Fts5Retriever:
     ) -> dict:
         if not enabled or not query or not dataset_ids:
             return {"documents": []}
-        with storage.sqlite_session(self.cfg) as conn:
+        
+        # Build a temporary config object for storage helper
+        cfg = Config(data_root=Path(self.data_root), embedding=None) # type: ignore
+        
+        with storage.sqlite_session(cfg) as conn:
             rows = storage.fts_search(conn, query, dataset_ids, top_k)
             chunk_ids = [r["chunk_id"] for r in rows]
             chunks = storage.fetch_chunks(conn, chunk_ids)
