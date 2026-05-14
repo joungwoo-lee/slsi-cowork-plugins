@@ -135,8 +135,12 @@ def boot_doctor() -> Optional[str]:
 
     if DEPS_PATH is None:
         DEPS_PATH = ROOT_PATH / ".mcp_deps"
-    if DEPS_PATH.exists() and str(DEPS_PATH) not in sys.path:
-        sys.path.insert(0, str(DEPS_PATH))
+        import site
+        # addsitedir appends to the end, we want to move them to the front
+        old_path = list(sys.path)
+        site.addsitedir(str(DEPS_PATH))
+        new_items = [p for p in sys.path if p not in old_path]
+        sys.path = new_items + old_path
 
     if sys.version_info[:2] != (3, 9):
         return (
@@ -161,8 +165,12 @@ def boot_doctor() -> Optional[str]:
             return f"Installation failed: {_INSTALL_ERROR}"
 
         importlib.invalidate_caches()
-        if str(DEPS_PATH) not in sys.path:
-            sys.path.insert(0, str(DEPS_PATH))
+        import site
+        # addsitedir appends to the end, we want to move them to the front
+        old_path = list(sys.path)
+        site.addsitedir(str(DEPS_PATH))
+        new_items = [p for p in sys.path if p not in old_path]
+        sys.path = new_items + old_path
         pending = find_missing()
         if pending:
             return f"pip install finished but these packages are still missing: {pending}"

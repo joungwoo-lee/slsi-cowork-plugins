@@ -65,8 +65,12 @@ REQUIRED_DEPS = (
 _BOOT_DOCTOR_OK = False
 DEPS_PATH = bootstrap.ROOT_PATH / ".mcp_deps"
 
+import site
 if DEPS_PATH.exists():
-    sys.path.insert(0, str(DEPS_PATH))
+    old_path = list(sys.path)
+    site.addsitedir(str(DEPS_PATH))
+    new_items = [p for p in sys.path if p not in old_path]
+    sys.path = new_items + old_path
 
 
 import threading
@@ -128,8 +132,12 @@ def boot_doctor() -> Optional[str]:
             return f"Installation failed: {_INSTALL_ERROR}"
 
         importlib.invalidate_caches()
-        if str(DEPS_PATH) not in sys.path:
-            sys.path.insert(0, str(DEPS_PATH))
+        import site
+        # addsitedir appends to the end, we want to move them to the front
+        old_path = list(sys.path)
+        site.addsitedir(str(DEPS_PATH))
+        new_items = [p for p in sys.path if p not in old_path]
+        sys.path = new_items + old_path
         pending = find_missing()
         if pending:
             return f"pip install finished but these packages are still missing: {pending}"
