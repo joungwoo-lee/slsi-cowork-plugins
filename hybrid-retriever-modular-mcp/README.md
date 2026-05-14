@@ -31,7 +31,7 @@ Claude Desktop / Code --stdio--> py server.py
 새 PC에서 한 번만:
 
 ```powershell
-.\claude-mcp-add-retriever.bat
+.\claude-mcp-add-retriever.ps1
 ```
 
 이게 Claude Code(CLI)에 MCP를 등록합니다. **의존성은 첫 도구 호출 시 자동 설치** — `mcp_server/dispatch.boot_doctor`가 누락 패키지를 확인하고, 현재 MCP 서버를 실행 중인 Python으로 `.mcp_deps/`에 `pip install -r requirements.txt --target .mcp_deps`를 실행합니다.
