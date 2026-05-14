@@ -33,7 +33,7 @@
     "vector": {
       "type": "retriever.components.vector_retriever.LocalQdrantRetriever",
       "init_parameters": {
-        "data_root": "C:\\Retriever_Data",
+        "data_root": "",
         "collection": "retriever_chunks"
       }
     }

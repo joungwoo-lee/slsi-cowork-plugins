@@ -11,6 +11,7 @@ canonical chunks/documents/datasets state.
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 import threading
 from pathlib import Path
@@ -18,6 +19,9 @@ from pathlib import Path
 import kuzu
 
 from .config import Config
+
+_LIMIT_RE = re.compile(r"\bLIMIT\s+\d+\b", re.IGNORECASE)
+_DESTRUCTIVE_KEYWORDS = frozenset({"CREATE", "DELETE", "DROP", "ALTER", "MERGE", "SET", "REMOVE"})
 
 _lock = threading.Lock()
 _db = None
@@ -149,19 +153,21 @@ def rebuild_from_sqlite(graph_conn, sqlite_conn: sqlite3.Connection) -> dict:
 def run_query(conn, cypher: str, params: dict | None = None, limit: int = 50) -> dict:
     """Execute a read-only Cypher statement and return rows as plain dicts.
 
-    Adds a safety LIMIT if the query doesn't have one. Read-only is enforced
-    by rejecting statements that start with destructive keywords.
+    Adds a safety LIMIT if the query doesn't already have one. Read-only is
+    enforced by rejecting statements that start with destructive keywords.
     """
-    stripped = cypher.strip()
-    head = stripped.split(None, 1)[0].upper() if stripped else ""
-    if head in {"CREATE", "DELETE", "DROP", "ALTER", "MERGE", "SET"}:
+    stripped = cypher.strip().rstrip(";").strip()
+    if not stripped:
+        raise ValueError("cypher is empty")
+    head = stripped.split(None, 1)[0].upper()
+    if head in _DESTRUCTIVE_KEYWORDS:
         raise ValueError(
             f"graph_query is read-only — refusing to run '{head}'. "
             "Use the dedicated ingest path or graph_rebuild instead."
         )
-    if " LIMIT " not in stripped.upper() and not stripped.upper().endswith(";"):
-        cypher = f"{stripped} LIMIT {int(limit)}"
-    result = conn.execute(cypher, params or {})
+    if not _LIMIT_RE.search(stripped):
+        stripped = f"{stripped} LIMIT {int(limit)}"
+    result = conn.execute(stripped, params or {})
     cols = result.get_column_names()
     rows: list[dict] = []
     while result.has_next():

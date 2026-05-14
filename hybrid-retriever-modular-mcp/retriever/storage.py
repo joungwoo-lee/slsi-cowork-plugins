@@ -280,8 +280,8 @@ def fetch_chunks(conn: sqlite3.Connection, chunk_ids: list[str]) -> dict[str, di
     for row in rows:
         item = dict(zip(cols, row))
         try:
-            item["metadata"] = __import__("json").loads(item.pop("metadata_json") or "{}")
-        except Exception:
+            item["metadata"] = json.loads(item.pop("metadata_json") or "{}")
+        except (TypeError, ValueError):
             item["metadata"] = {}
         item["is_hierarchical"] = bool(item["is_hierarchical"])
         item["is_contextual"] = bool(item["is_contextual"])
@@ -289,30 +289,47 @@ def fetch_chunks(conn: sqlite3.Connection, chunk_ids: list[str]) -> dict[str, di
     return out
 
 
+def metadata_matches(metadata: dict, condition: dict | None) -> bool:
+    """Type-aware metadata predicate shared by storage and the hybrid joiner.
+
+    Rules:
+    - ``condition`` is None or empty -> always match.
+    - A list value means "actual must be one of" (containment).
+    - A dict value with ``{"$in": [...]}`` is treated the same way.
+    - Otherwise compare with ``==`` so int/bool/str retain their semantics
+      (``"2024" != 2024`` once metadata blobs preserve JSON types).
+    """
+    if not condition:
+        return True
+    for key, expected in condition.items():
+        actual = metadata.get(key) if isinstance(metadata, dict) else None
+        if isinstance(expected, list):
+            if actual not in expected:
+                return False
+        elif isinstance(expected, dict) and "$in" in expected and isinstance(expected["$in"], list):
+            if actual not in expected["$in"]:
+                return False
+        elif actual != expected:
+            return False
+    return True
+
+
 def _filter_metadata(rows: list[dict], metadata_condition: dict | None) -> list[dict]:
+    """Filter SQLite result rows by ``metadata_condition``.
+
+    Looks for each key first at the top level of the row (so callers can
+    filter on ``dataset_id`` / ``document_id`` etc. directly) and falls back
+    to the parsed ``metadata`` blob.
+    """
     if not metadata_condition:
         return rows
-    out = []
+    out: list[dict] = []
     for row in rows:
-        match = True
-        # Try to find metadata in 'metadata' key (which comes from metadata_json)
-        # or top-level row fields
-        try:
-            row_meta = row.get("metadata") or {}
-        except:
+        row_meta = row.get("metadata") if isinstance(row, dict) else None
+        if not isinstance(row_meta, dict):
             row_meta = {}
-
-        for k, v in metadata_condition.items():
-            # Check row fields first (document_id, dataset_id, name, etc.)
-            # then check inside the metadata blob
-            actual = row.get(k)
-            if actual is None:
-                actual = row_meta.get(k)
-            
-            if str(actual) != str(v):
-                match = False
-                break
-        if match:
+        merged = {**row_meta, **{k: v for k, v in row.items() if k != "metadata"}}
+        if metadata_matches(merged, metadata_condition):
             out.append(row)
     return out
 

@@ -1,0 +1,83 @@
+"""Tests for components.hybrid_joiner — fusion arithmetic + metadata gate."""
+from __future__ import annotations
+
+import unittest
+
+from haystack import Document
+
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+from retriever.components.hybrid_joiner import HybridJoiner
+
+
+def _kw_doc(chunk_id: str, score: float, meta: dict | None = None) -> Document:
+    base = {"fts_score": score}
+    base.update(meta or {})
+    return Document(id=chunk_id, content="kw " + chunk_id, meta=base, score=score)
+
+
+def _sem_doc(chunk_id: str, score: float, meta: dict | None = None) -> Document:
+    base = {"vector_score": score}
+    base.update(meta or {})
+    return Document(id=chunk_id, content="sem " + chunk_id, meta=base, score=score)
+
+
+class HybridJoinerTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.j = HybridJoiner()
+
+    def test_rrf_first_rank_score(self) -> None:
+        out = self.j.run(
+            keyword_documents=[_kw_doc("a", 0.0)],
+            semantic_documents=[],
+            fusion="rrf",
+            rrf_k=60,
+        )
+        self.assertEqual(len(out["documents"]), 1)
+        # RRF rank-1 with k=60 is 1/61.
+        self.assertAlmostEqual(out["documents"][0].score, round(1.0 / 61, 6), places=5)
+
+    def test_linear_pure_keyword_when_weight_zero(self) -> None:
+        out = self.j.run(
+            keyword_documents=[_kw_doc("a", -5.0), _kw_doc("b", -2.0)],
+            semantic_documents=[],
+            fusion="linear",
+            vector_weight=0.0,
+        )
+        # keyword side normalizes -BM25, so the lower (more negative) score is the better doc.
+        ids = [d.id for d in out["documents"]]
+        self.assertEqual(ids[0], "a")
+
+    def test_metadata_condition_filters_results(self) -> None:
+        out = self.j.run(
+            keyword_documents=[
+                _kw_doc("a", 0.0, {"dataset_id": "ds1", "metadata": {"y": 2024}}),
+                _kw_doc("b", 0.0, {"dataset_id": "ds2", "metadata": {"y": 2025}}),
+            ],
+            semantic_documents=[],
+            fusion="linear",
+            vector_weight=0.0,
+            metadata_condition={"y": 2025},
+        )
+        self.assertEqual([d.id for d in out["documents"]], ["b"])
+
+    def test_metadata_condition_top_level_key(self) -> None:
+        # dataset_id lives at the top of Document.meta, not under "metadata".
+        # The joiner must merge both layers before evaluating.
+        out = self.j.run(
+            keyword_documents=[
+                _kw_doc("a", 0.0, {"dataset_id": "ds1"}),
+                _kw_doc("b", 0.0, {"dataset_id": "ds2"}),
+            ],
+            semantic_documents=[],
+            fusion="linear",
+            vector_weight=0.0,
+            metadata_condition={"dataset_id": "ds2"},
+        )
+        self.assertEqual([d.id for d in out["documents"]], ["b"])
+
+
+if __name__ == "__main__":
+    unittest.main()

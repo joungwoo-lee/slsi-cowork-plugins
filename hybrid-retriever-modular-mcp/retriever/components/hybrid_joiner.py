@@ -11,6 +11,8 @@ from typing import List
 
 from haystack import Document, component
 
+from ..storage import metadata_matches
+
 
 @component
 class HybridJoiner:
@@ -46,7 +48,10 @@ class HybridJoiner:
         weight = max(0.0, min(1.0, float(vector_weight)))
         merged: list[Document] = []
         for chunk_id, doc in by_id.items():
-            if not _metadata_match(doc.meta.get("metadata", {}) or {}, metadata_condition):
+            doc_meta = doc.meta or {}
+            inner_meta = doc_meta.get("metadata") if isinstance(doc_meta.get("metadata"), dict) else {}
+            merged_meta = {**inner_meta, **{k: v for k, v in doc_meta.items() if k != "metadata"}}
+            if not metadata_matches(merged_meta, metadata_condition):
                 continue
             kw = kw_scores.get(chunk_id, 0.0)
             sem = sem_scores.get(chunk_id, 0.0)
@@ -97,16 +102,3 @@ def _rrf_scores(keyword_rows: list[dict], semantic_rows: list[dict], k: int) -> 
     for rank, row in enumerate(semantic_rows, 1):
         scores[row["chunk_id"]] = scores.get(row["chunk_id"], 0.0) + 1.0 / (k + rank)
     return scores
-
-
-def _metadata_match(metadata: dict, condition: dict | None) -> bool:
-    if not condition:
-        return True
-    for key, expected in condition.items():
-        actual = metadata.get(key)
-        if isinstance(expected, list):
-            if actual not in expected:
-                return False
-        elif actual != expected:
-            return False
-    return True

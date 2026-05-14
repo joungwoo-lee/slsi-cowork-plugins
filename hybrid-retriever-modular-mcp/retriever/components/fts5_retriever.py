@@ -1,9 +1,9 @@
 """SQLite FTS5 retriever component with Korean morpheme query rewriting.
 
-Wraps ``storage.fts_search`` so it slots into a Haystack Pipeline. Output
-documents carry ``score`` (BM25, lower = better in raw form, but we expose the
-raw BM25 score so the downstream HybridJoiner can apply the same min-max
-normalization the legacy ``search.hybrid_search`` used).
+Wraps ``storage.fts_search`` so it slots into a Haystack Pipeline. The raw
+BM25 score from FTS5 is forwarded as ``Document.score`` and ``fts_score`` so
+the downstream HybridJoiner can apply the same min-max normalization the
+legacy ``search.hybrid_search`` used.
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from ..config import Config
 class Fts5Retriever:
     """BM25 retrieval over the SQLite FTS5 chunk index."""
 
-    def __init__(self, data_root: str = r"C:\Retriever_Data") -> None:
+    def __init__(self, data_root: str = "") -> None:
         self.data_root = data_root
 
     @component.output_types(documents=List[Document])
@@ -31,12 +31,11 @@ class Fts5Retriever:
         top_k: int = 200,
         enabled: bool = True,
     ) -> dict:
-        if not enabled or not query or not dataset_ids:
+        if not enabled or not query or not dataset_ids or not self.data_root:
             return {"documents": []}
-        
-        # Build a temporary config object for storage helper
-        cfg = Config(data_root=Path(self.data_root), embedding=None) # type: ignore
-        
+
+        cfg = Config(data_root=Path(self.data_root))
+
         with storage.sqlite_session(cfg) as conn:
             rows = storage.fts_search(conn, query, dataset_ids, top_k)
             chunk_ids = [r["chunk_id"] for r in rows]
