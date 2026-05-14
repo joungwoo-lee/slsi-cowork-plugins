@@ -15,11 +15,10 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "search",
         "description": (
-            "Hybrid retrieval against the local retriever index "
-            "(SQLite FTS5 keyword + optional Qdrant local vector). Returns ranked chunks "
-            "with document metadata, similarity scores, and a compact citations "
-            "array. dataset_ids defaults to RETRIEVER_DEFAULT_DATASETS env if "
-            "omitted."
+            "[Search] Search indexed chunks by question or keywords. Omit dataset_ids "
+            "to use RETRIEVER_DEFAULT_DATASETS first; use list_datasets only when no "
+            "default dataset is configured or when you need to inspect available "
+            "datasets. Returns ranked chunks with document metadata and citations."
         ),
         "inputSchema": {
             "type": "object",
@@ -44,8 +43,6 @@ TOOLS: list[dict[str, Any]] = [
                     "default": 200,
                     "description": "Server-side candidate pool size before paging.",
                 },
-                "page": {"type": "integer", "minimum": 1, "default": 1},
-                "page_size": {"type": "integer", "minimum": 1, "maximum": 500, "default": 100},
                 "vector_similarity_weight": {
                     "type": "number",
                     "minimum": 0.0,
@@ -60,8 +57,6 @@ TOOLS: list[dict[str, Any]] = [
                     "default": 0.0,
                 },
                 "keyword": {"type": "boolean", "default": True},
-                "rerank_id": {"type": "string", "description": "Optional rerank model id."},
-                "pipeline_name": {"type": "string", "description": "Named retrieval pipeline (advanced)."},
                 "fusion": {"type": "string", "enum": ["linear", "rrf"], "default": "linear"},
                 "parent_chunk_replace": {"type": "boolean", "default": True},
                 "metadata_condition": {
@@ -77,14 +72,15 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "list_datasets",
         "description": (
-            "List datasets visible to the configured API key. Returns id, name, "
-            "description, created_at."
+            "[Dataset] List available datasets. Use this when search cannot fall back "
+            "to RETRIEVER_DEFAULT_DATASETS or when you need to inspect choices before "
+            "uploading or searching."
         ),
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "get_dataset",
-        "description": "Fetch a single dataset's metadata by id.",
+        "description": "[Dataset] Fetch one dataset's metadata by id.",
         "inputSchema": {
             "type": "object",
             "properties": {"dataset_id": {"type": "string"}},
@@ -94,9 +90,9 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "create_dataset",
         "description": (
-            "Create a new dataset (knowledge base). dataset_id is auto-derived "
-            "from name by the server. Note: upload_document also auto-creates a "
-            "dataset on first upload, so this is only needed for empty buckets."
+            "[Dataset] Create a new empty dataset. Usually unnecessary before upload "
+            "because upload_document and upload_directory create the dataset "
+            "automatically when needed."
         ),
         "inputSchema": {
             "type": "object",
@@ -110,7 +106,7 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "delete_dataset",
         "description": (
-            "Delete a dataset and ALL its documents/chunks/vectors/files. "
+            "[Dataset] Delete a dataset and ALL its documents, chunks, vectors, and files. "
             "Irreversible — confirm with the user before calling."
         ),
         "inputSchema": {
@@ -123,9 +119,9 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "upload_document",
         "description": (
-            "Upload a single local text file to a dataset. The MCP parses, chunks, "
-            "embeds when configured, and indexes synchronously. Creates the dataset automatically "
-            "if it doesn't exist. Returns the new document_id and chunk stats."
+            "[Ingestion] Upload one local file into a dataset. Supports TXT, MD, PDF, "
+            "DOCX, XLSX, and CSV. Parses, chunks, and indexes synchronously; creates "
+            "the dataset automatically if it does not exist."
         ),
         "inputSchema": {
             "type": "object",
@@ -140,11 +136,6 @@ TOOLS: list[dict[str, Any]] = [
                     "enum": ["true", "false", "full"],
                     "description": "Parent-Child chunking. 'full' = full-doc parent. Omit to use server default.",
                 },
-                "use_contextual": {
-                    "type": "boolean",
-                    "description": "Contextual Retrieval (LLM-augmented). Omit to use server default.",
-                },
-                "pipeline_name": {"type": "string", "description": "Named ingest pipeline (advanced)."},
                 "skip_embedding": {"type": "boolean", "default": False},
                 "metadata": {
                     "type": "object",
@@ -158,9 +149,9 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "upload_directory",
         "description": (
-            "Recursively upload all supported files in a local directory to a dataset. "
-            "The MCP parses, chunks, embeds, and indexes each file synchronously. "
-            "Returns a summary of uploaded documents and any errors."
+            "[Ingestion] Upload all supported files in a local directory into a dataset. "
+            "Use this for bulk ingest; it walks the directory recursively and indexes "
+            "each supported file synchronously."
         ),
         "inputSchema": {
             "type": "object",
@@ -179,10 +170,6 @@ TOOLS: list[dict[str, Any]] = [
                     "enum": ["true", "false", "full"],
                     "description": "Parent-Child chunking. 'full' = full-doc parent. Omit to use server default.",
                 },
-                "use_contextual": {
-                    "type": "boolean",
-                    "description": "Contextual Retrieval (LLM-augmented). Omit to use server default.",
-                },
                 "skip_embedding": {"type": "boolean", "default": False},
                 "metadata": {
                     "type": "object",
@@ -195,7 +182,7 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "list_documents",
-        "description": "List documents in a dataset (newest first by default).",
+        "description": "[Document] List documents in a dataset, newest first by default.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -211,7 +198,7 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "get_document",
-        "description": "Fetch a single document's metadata (name, chunk counts, ingest config).",
+        "description": "[Document] Fetch one document's metadata, including chunk counts and ingest flags.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -224,7 +211,7 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "list_chunks",
         "description": (
-            "List the chunks of a document. Useful to inspect how the server "
+            "[Document] List a document's chunks. Useful to inspect how the server "
             "split a file after ingest."
         ),
         "inputSchema": {
@@ -242,9 +229,9 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "get_document_content",
         "description": (
-            "Read the ORIGINAL source content of a document from the local file "
-            "store (no chunking). Use after `search` to expand a hit into its full "
-            "source. Returns content as UTF-8 text when the file is text-like."
+            "[Document] Read the original stored source content for one document. "
+            "Use this after search when you need the full source rather than chunked "
+            "results."
         ),
         "inputSchema": {
             "type": "object",
@@ -257,7 +244,7 @@ TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "delete_document",
-        "description": "Delete a single document (and its chunks/vectors). Irreversible.",
+        "description": "[Document] Delete one document and its chunks/vectors. Irreversible — confirm with the user before calling.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -271,8 +258,7 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "list_pipelines",
         "description": (
-            "List named ingest/retrieval pipelines defined on the server, plus "
-            "the configured default and any ingest-profile aliases."
+            "[System] Show the active ingest and retrieval settings exposed by this local server."
         ),
         "inputSchema": {"type": "object", "properties": {}},
     },
@@ -280,8 +266,8 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "health",
         "description": (
-            "Verify local SQLite FTS5 database, data root, optional embedding config, "
-            "and index counts. Run first whenever search/upload misbehaves."
+            "[System] Check local database paths, embedding configuration, and index counts. "
+            "Run this first when search or upload misbehaves."
         ),
         "inputSchema": {
             "type": "object",
@@ -298,14 +284,10 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "graph_query",
         "description": (
-            "Run a read-only Cypher query against the embedded Kùzu property graph. "
-            "Schema: nodes Dataset(id,name), Document(id,name,dataset_id,source_path), "
-            "Chunk(id,document_id,dataset_id,position); edges "
-            "(Document)-[:IN_DATASET]->(Dataset), (Document)-[:HAS_CHUNK]->(Chunk), "
-            "(Chunk)-[:NEXT]->(Chunk). Use this for relationship traversal that BM25/"
-            "vector search cannot answer (e.g. neighbouring chunks, all docs in a "
-            "dataset, document fan-out). Call graph_rebuild first if the graph is "
-            "stale or empty."
+            "[Graph] Run a read-only Cypher query over the embedded document graph. "
+            "Use this for relationship traversal that normal search cannot answer, "
+            "such as neighboring chunks or document fan-out. Call graph_rebuild first "
+            "if the graph is stale or empty."
         ),
         "inputSchema": {
             "type": "object",
@@ -320,9 +302,8 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "graph_rebuild",
         "description": (
-            "Wipe and re-populate the embedded Kùzu graph from the canonical SQLite "
-            "state (datasets/documents/chunks). Idempotent and safe to call after "
-            "ingesting new documents. Returns counts."
+            "[Graph] Rebuild the embedded graph from the canonical SQLite state. Safe "
+            "to call after ingesting new documents."
         ),
         "inputSchema": {"type": "object", "properties": {}},
     },
