@@ -34,7 +34,7 @@ Claude Desktop / Code --stdio--> py server.py
 .\claude-mcp-add-retriever.bat
 ```
 
-이게 Claude Code(CLI)에 MCP를 등록합니다. **의존성/`.env`는 첫 도구 호출 시 자동 설치** — 서버가 부팅하면서 `mcp_server/dispatch.boot_doctor`가 누락 패키지를 확인하고 `mcp_server/install.ps1`을 자동 실행해서 `pip install -r requirements.txt` + `.env.example` → `.env` 복사까지 처리합니다.
+이게 Claude Code(CLI)에 MCP를 등록합니다. **의존성은 첫 도구 호출 시 자동 설치** — `mcp_server/dispatch.boot_doctor`가 누락 패키지를 확인하고, 현재 MCP 서버를 실행 중인 Python으로 `.mcp_deps/`에 `pip install -r requirements.txt --target .mcp_deps`를 실행합니다.
 
 `.env`만 실제 값으로 편집:
 

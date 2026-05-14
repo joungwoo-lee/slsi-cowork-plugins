@@ -62,14 +62,14 @@ email-mcp/
     ├── catalog.py                  # 10개 도구의 inputSchema 카탈로그 (data only)
     ├── handlers.py                 # 10개 tool 구현 (email-mcp library 호출)
     ├── dispatch.py                 # initialize / tools/list / tools/call 라우터 + boot_doctor
-    └── install.ps1                 # 의존성/.env 자동 설치 (boot_doctor가 호출)
+    └── install.ps1                 # 수동 설치/Claude Desktop config 머지용
 ```
 
 각 모듈의 책임은 `mcp_server/__init__.py` 상단의 docstring에 정리.
 
 ## 사전 조건
 
-1. **email-mcp가 먼저 셋업되어 있어야 한다.** Python 3.9 + 의존성 + `.env` + PST 인덱싱까지 끝낸 상태가 전제. 의존성과 `.env`는 첫 도구 호출 시 `boot_doctor`가 자동 해결하지만, PST 인덱싱은 별도로 CLI(`py -3.9 scripts\ingest.py`)로 돌려야 한다. `doctor` MCP 도구로 검증 가능.
+1. **email-mcp가 먼저 셋업되어 있어야 한다.** Python 3.9 + 의존성 + `.env` + PST 인덱싱까지 끝낸 상태가 전제. 의존성은 첫 도구 호출 시 `boot_doctor`가 현재 MCP 서버를 실행 중인 Python으로 `.mcp_deps/`에 직접 설치하지만, `.env` 값 입력과 PST 인덱싱은 별도로 처리해야 한다. `doctor` MCP 도구로 검증 가능.
 2. Windows 10/11 네이티브.
 3. `email-mcp/` 와 `email-mcp/` 가 같은 부모 폴더에 있거나, 환경변수 `EMAIL_MCP_PATH` 로 경로가 지정돼 있어야 한다.
 
@@ -81,13 +81,13 @@ email-mcp/
 claude-mcp-add-email.bat
 ```
 
-이게 Claude Code(CLI)에 MCP를 등록합니다. **의존성/`.env`/Claude Desktop config 머지는 첫 도구 호출 시 자동** — 서버가 부팅하면서 `mcp_server/dispatch.boot_doctor()`가 Python 3.9, 의존성 패키지를 검사하고 누락이면 `mcp_server/install.ps1 -SkipClaudeConfig`를 자동 호출합니다. `install.ps1`이 처리하는 것:
+이게 Claude Code(CLI)에 MCP를 등록합니다. **의존성은 첫 도구 호출 시 자동 설치** — `mcp_server/dispatch.boot_doctor()`가 Python 3.9, 의존성 패키지를 검사하고 누락이면 현재 MCP 서버를 실행 중인 Python으로 `.mcp_deps/`에 `pip install -r requirements.txt --target .mcp_deps`를 실행합니다. `install.ps1`은 수동 설치와 Claude Desktop config 머지용입니다.
 
-1. Python 3.9 (64-bit) 검증
-2. 누락 패키지 `pip install -r requirements.txt`
-3. `.env`가 없으면 `.env.example`에서 생성
-4. mcp_server 모듈 import 스모크 테스트
-5. `claude_code_install.cmd` 생성 (Claude Code CLI 등록 helper)
+첫 도구 호출 전 확인할 것:
+
+1. Python 3.9 (64-bit)로 MCP를 실행
+2. `.env` 실제 값 입력
+3. PST 인덱싱 수행
 
 `.env`만 실제 값으로 편집하고 클라이언트를 재시작하면 끝.
 
@@ -102,7 +102,7 @@ powershell -ExecutionPolicy Bypass -File mcp_server\install.ps1
 옵션:
 - `-DryRun` — 변경 없이 검사만
 - `-SkipDeps` — pip install 생략
-- `-SkipClaudeConfig` — Desktop config 머지 생략 (boot_doctor가 부를 때 쓰는 옵션)
+- `-SkipClaudeConfig` — Desktop config 머지 생략
 
 ## Claude Desktop 연결
 
@@ -146,7 +146,7 @@ claude mcp add email py -3.9 %USERPROFILE%\.claude\skills\email-mcp\server.py ^
 | 증상 | 원인/대응 |
 |---|---|
 | Claude가 도구 목록을 못 받음 | `py -3.9 server.py` 직접 실행해서 stderr에 어떤 에러가 뜨는지 확인. `email-mcp` 경로 문제면 `EMAIL_MCP_PATH` 명시. |
-| `doctor` 결과 `dep:libpff-python` ok=false | `boot_doctor` 자동 설치가 실패한 경우. `powershell -ExecutionPolicy Bypass -File mcp_server\install.ps1 -SkipClaudeConfig` 수동 실행으로 stderr 확인. |
+| `doctor` 결과 `dep:libpff-python` ok=false | `boot_doctor` 자동 설치가 실패한 경우. `py -3.9 -m pip install -r requirements.txt` 수동 실행으로 stderr 확인. |
 | `search` 응답이 비어 있음 | PST가 아직 인덱싱되지 않음. `stats` 도구로 `sqlite.total_mails` 확인. 0이면 CLI에서 `py -3.9 scripts\ingest.py` 또는 MCP `ingest` 도구로 인덱싱. |
 | `read_attachment` 가 path만 반환 | 의도된 설계. MCP 클라이언트는 같은 PC에 있으므로 절대경로로 직접 열 수 있다. base64 인라인 반환은 큰 파일에서 컨텍스트 폭발 위험. |
 | stdout에 JSON 외 문자 섞여서 클라가 끊김 | `runtime.silenced_stdout()` 로 stdout 가드 중. server.py / mcp_server 안에서 직접 print 추가하지 말 것 — 모든 디버그는 `runtime.log()` (stderr). |

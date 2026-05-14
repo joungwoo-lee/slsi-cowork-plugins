@@ -62,6 +62,10 @@ REQUIRED_DEPS = (
 )
 
 _BOOT_DOCTOR_OK = False
+DEPS_PATH = bootstrap.ROOT_PATH / ".mcp_deps"
+
+if DEPS_PATH.exists():
+    sys.path.insert(0, str(DEPS_PATH))
 
 
 def boot_doctor() -> Optional[str]:
@@ -70,9 +74,9 @@ def boot_doctor() -> Optional[str]:
     Returns None when the environment is ready. Returns a human-readable
     error string when something is wrong and cannot be auto-fixed.
 
-    Missing packages trigger one attempt at install.ps1 -SkipClaudeConfig,
-    followed by re-verification. importlib.util.find_spec is used instead
-    of `import` to avoid partial-module side effects during the probe.
+    Missing packages trigger one pip install into a local dependency directory,
+    followed by re-verification. importlib.util.find_spec is used instead of
+    `import` to avoid partial-module side effects during the probe.
     """
     import importlib
     import importlib.util
@@ -84,38 +88,49 @@ def boot_doctor() -> Optional[str]:
     if not pending:
         return None
 
-    log(f"boot doctor: missing dependencies {pending}; running install.ps1 ...")
+    log(f"boot doctor: missing dependencies {pending}; running pip install ...")
     import subprocess
 
-    script_path = bootstrap.ROOT_PATH / "mcp_server" / "install.ps1"
-    if not script_path.exists():
+    req_path = bootstrap.ROOT_PATH / "requirements.txt"
+    if not req_path.exists():
         return (
-            f"missing dependencies {pending} and install.ps1 not found at "
-            f"{script_path}. Install manually: py -3 -m pip install -r "
-            f"{bootstrap.ROOT_PATH / 'requirements.txt'}"
+            f"missing dependencies {pending} and requirements.txt not found at "
+            f"{req_path}. Install manually: {sys.executable} -m pip install -r {req_path}"
         )
 
-    cmd = [
-        "powershell.exe", "-NoProfile",
-        "-ExecutionPolicy", "Bypass",
-        "-File", str(script_path),
-        "-SkipClaudeConfig",
-    ]
+    DEPS_PATH.mkdir(parents=True, exist_ok=True)
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--upgrade",
+                "-r",
+                str(req_path),
+                "--target",
+                str(DEPS_PATH),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=600,
+        )
     except Exception as exc:  # noqa: BLE001
-        return f"install.ps1 execution failed: {exc}"
+        return f"pip install execution failed: {exc}"
     if result.returncode != 0:
         return (
-            f"install.ps1 exited with code {result.returncode}.\n"
+            f"pip install exited with code {result.returncode}.\n"
             f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
         )
 
     importlib.invalidate_caches()
+    if str(DEPS_PATH) not in sys.path:
+        sys.path.insert(0, str(DEPS_PATH))
     pending = find_missing()
     if pending:
         return (
-            f"install.ps1 reported success but these packages are still "
+            f"pip install reported success but these packages are still "
             f"missing after invalidate_caches: {pending}"
         )
     log("boot doctor: dependencies installed and verified")
