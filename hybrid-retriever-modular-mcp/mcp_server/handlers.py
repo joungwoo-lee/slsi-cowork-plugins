@@ -125,6 +125,67 @@ def tool_delete_dataset(args: dict) -> dict:
     return text_result({"deleted": ds})
 
 
+def tool_upload_directory(args: dict) -> dict:
+    from pathlib import Path
+    import traceback
+
+    ds = _require_str(args, "dataset_id")
+    dp = _require_str(args, "dir_path")
+    if not ds:
+        return text_result("dataset_id is required", is_error=True)
+    if not dp:
+        return text_result("dir_path is required", is_error=True)
+
+    dir_path = Path(dp)
+    if not dir_path.is_dir():
+        return text_result(f"Directory not found or not a directory: {dp}", is_error=True)
+
+    ext = args.get("file_extension")
+    if ext and not ext.startswith("."):
+        ext = "." + ext
+    
+    cfg = load_config()
+    metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
+    
+    results = []
+    errors = []
+    
+    # Supported extensions based on local_ingest capabilities
+    supported_exts = {".txt", ".md", ".pdf", ".docx", ".xlsx", ".csv"}
+    
+    with silenced_stdout():
+        for file_path in dir_path.rglob("*"):
+            if not file_path.is_file():
+                continue
+                
+            suffix = file_path.suffix.lower()
+            if ext and suffix != ext.lower():
+                continue
+            if not ext and suffix not in supported_exts:
+                continue
+                
+            try:
+                out = local_ingest.upload_document(
+                    cfg,
+                    ds,
+                    file_path,
+                    skip_embedding=bool(args.get("skip_embedding", False)),
+                    use_hierarchical=args.get("use_hierarchical"),
+                    metadata=metadata,
+                )
+                results.append({"file": str(file_path), "response": out})
+            except Exception as e:
+                errors.append({"file": str(file_path), "error": str(e)})
+
+    return text_result({
+        "dataset_id": ds,
+        "directory": dp,
+        "processed_count": len(results),
+        "error_count": len(errors),
+        "results": results,
+        "errors": errors
+    })
+
 def tool_upload_document(args: dict) -> dict:
     ds = _require_str(args, "dataset_id")
     fp = _require_str(args, "file_path")
@@ -293,6 +354,7 @@ HANDLERS = {
     "create_dataset": tool_create_dataset,
     "delete_dataset": tool_delete_dataset,
     "upload_document": tool_upload_document,
+    "upload_directory": tool_upload_directory,
     "list_documents": tool_list_documents,
     "get_document": tool_get_document,
     "list_chunks": tool_list_chunks,

@@ -156,6 +156,44 @@ TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "upload_directory",
+        "description": (
+            "Recursively upload all supported files in a local directory to a dataset. "
+            "The MCP parses, chunks, embeds, and indexes each file synchronously. "
+            "Returns a summary of uploaded documents and any errors."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "dataset_id": {"type": "string", "description": "Target dataset/knowledge-base id."},
+                "dir_path": {
+                    "type": "string",
+                    "description": "Absolute path to a local directory on the MCP-server host.",
+                },
+                "file_extension": {
+                    "type": "string",
+                    "description": "Optional specific extension to filter by (e.g. '.md' or '.pdf'). If omitted, processes all supported text/document files.",
+                },
+                "use_hierarchical": {
+                    "type": "string",
+                    "enum": ["true", "false", "full"],
+                    "description": "Parent-Child chunking. 'full' = full-doc parent. Omit to use server default.",
+                },
+                "use_contextual": {
+                    "type": "boolean",
+                    "description": "Contextual Retrieval (LLM-augmented). Omit to use server default.",
+                },
+                "skip_embedding": {"type": "boolean", "default": False},
+                "metadata": {
+                    "type": "object",
+                    "description": "Optional shared metadata stored with every chunk in the directory.",
+                    "additionalProperties": True,
+                },
+            },
+            "required": ["dataset_id", "dir_path"],
+        },
+    },
+    {
         "name": "list_documents",
         "description": "List documents in a dataset (newest first by default).",
         "inputSchema": {
