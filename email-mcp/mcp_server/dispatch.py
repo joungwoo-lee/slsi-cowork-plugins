@@ -98,12 +98,8 @@ def _install_worker(req_path, deps_path):
         )
         if result.returncode != 0:
             _INSTALL_ERROR = (
-                f"pip install exited with code {result.returncode}.
-"
-                f"STDOUT:
-{result.stdout}
-STDERR:
-{result.stderr}"
+                f"pip install exited with code {result.returncode}.\n"
+                f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
             )
         else:
             _INSTALL_ERROR = None
@@ -128,8 +124,7 @@ def boot_doctor() -> Optional[str]:
     if sys.version_info[:2] != (3, 9):
         return (
             f"email-mcp requires Python 3.9 (64-bit), got "
-            f"{sys.version.split()[0]} at {sys.executable}.
-"
+            f"{sys.version.split()[0]} at {sys.executable}.\n"
             "Install Python 3.9.13 from "
             "https://www.python.org/ftp/python/3.9.13/python-3.9.13-amd64.exe"
         )
