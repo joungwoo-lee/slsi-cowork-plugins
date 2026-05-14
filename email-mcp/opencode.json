@@ -7,10 +7,7 @@
         "-3.9",
         "C:\\Users\\joungwoo.lee\\slsi-cowork-plugins\\email-mcp\\server.py"
       ],
-      "enabled": true,
-      "env": {
-        "EMAIL_CONNECTOR_PATH": "C:\\Users\\joungwoo.lee\\slsi-cowork-plugins\\email-connector"
-      }
+      "enabled": true
     }
   }
 }

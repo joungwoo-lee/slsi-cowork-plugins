@@ -7,33 +7,7 @@
         "-3",
         "C:\\Users\\joungwoo.lee\\slsi-cowork-plugins\\hybrid-retriever-modular-mcp\\server.py"
       ],
-      "enabled": true,
-      "env": {
-        "RETRIEVER_DATA_ROOT": "C:\\Retriever_Data",
-        "RETRIEVER_DEFAULT_DATASETS": "my_docs",
-        "RETRIEVER_CHUNK_CHARS": "512",
-        "RETRIEVER_CHUNK_OVERLAP": "50",
-        "RETRIEVER_MAX_FILE_CHARS": "2000000",
-        "HYBRID_ALPHA": "0.5",
-        "RETRIEVER_FUSION": "linear",
-        "RRF_K": "60",
-        "ENABLE_PARENT_CHILD_CHUNKING": "true",
-        "PARENT_CHUNK_SIZE": "1024",
-        "PARENT_CHUNK_OVERLAP": "100",
-        "CHILD_CHUNK_SIZE": "256",
-        "CHILD_CHUNK_OVERLAP": "50",
-        "EMBEDDING_API_URL": "",
-        "EMBEDDING_API_KEY": "embedding_api_key",
-        "EMBEDDING_MODEL": "BAAI/bge-m3",
-        "EMBEDDING_DIM": "1024",
-        "EMBEDDING_API_X_DEP_TICKET": "your_credential_ticket",
-        "EMBEDDING_API_X_SYSTEM_NAME": "hybrid-retriever-modular-mcp",
-        "EMBEDDING_BATCH_SIZE": "16",
-        "EMBEDDING_TIMEOUT_SEC": "60",
-        "EMBEDDING_VERIFY_SSL": "false",
-        "QDRANT_COLLECTION": "retriever_chunks",
-        "QDRANT_DISTANCE": "Cosine"
-      }
+      "enabled": true
     }
   }
 }
