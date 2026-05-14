@@ -93,11 +93,10 @@ import threading
 _INSTALL_THREAD = None
 _INSTALL_ERROR = None
 
-def _install_worker(req_path, deps_path):
+def _install_worker(req_path):
     global _INSTALL_ERROR
     import subprocess
     try:
-        deps_path.mkdir(parents=True, exist_ok=True)
         result = subprocess.run(
             [
                 sys.executable,
@@ -107,8 +106,6 @@ def _install_worker(req_path, deps_path):
                 "--upgrade",
                 "-r",
                 str(req_path),
-                "--target",
-                str(deps_path),
             ],
             capture_output=True,
             text=True,
@@ -131,17 +128,7 @@ def boot_doctor() -> Optional[str]:
     import importlib
     import importlib.util
     from .bootstrap import ROOT_PATH
-    global _INSTALL_THREAD, _INSTALL_ERROR, DEPS_PATH
-
-    if DEPS_PATH is None:
-        DEPS_PATH = ROOT_PATH / ".mcp_deps"
-        import site
-        # addsitedir appends to the end, we want to move them to the front
-        old_path = list(sys.path)
-        site.addsitedir(str(DEPS_PATH))
-        new_items = [p for p in sys.path if p not in old_path]
-        sys.path = new_items + old_path
-
+    global _INSTALL_THREAD, _INSTALL_ERROR
     if sys.version_info[:2] != (3, 9):
         return (
             f"email-mcp requires Python 3.9 (64-bit), got "
@@ -165,12 +152,6 @@ def boot_doctor() -> Optional[str]:
             return f"Installation failed: {_INSTALL_ERROR}"
 
         importlib.invalidate_caches()
-        import site
-        # addsitedir appends to the end, we want to move them to the front
-        old_path = list(sys.path)
-        site.addsitedir(str(DEPS_PATH))
-        new_items = [p for p in sys.path if p not in old_path]
-        sys.path = new_items + old_path
         pending = find_missing()
         if pending:
             return f"pip install finished but these packages are still missing: {pending}"
@@ -182,7 +163,7 @@ def boot_doctor() -> Optional[str]:
         return f"missing dependencies {pending} and requirements.txt not found at {req_path}"
 
     _INSTALL_ERROR = None
-    _INSTALL_THREAD = threading.Thread(target=_install_worker, args=(req_path, DEPS_PATH), daemon=True)
+    _INSTALL_THREAD = threading.Thread(target=_install_worker, args=(req_path,), daemon=True)
     _INSTALL_THREAD.start()
 
     return f"Dependencies {pending} missing. A background installation has started. Please wait ~1 minute and try again."
