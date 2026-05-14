@@ -1,7 +1,3 @@
 $ErrorActionPreference = 'Stop'
 
-$scriptDir = (Resolve-Path -LiteralPath $PSScriptRoot).Path
-$serverPath = (Resolve-Path -LiteralPath (Join-Path $scriptDir 'server.py')).Path
-$command = "py -3.9 `"$serverPath`""
-
-claude mcp add email_mcp "$command" --env EMAIL_MCP_PATH="$scriptDir"
+claude mcp add email_mcp "py -3.9 C:\Users\joung\slsi-cowork-plugins\email-mcp\server.py" --env EMAIL_MCP_PATH=C:\Users\joung\slsi-cowork-plugins\email-mcp
