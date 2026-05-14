@@ -13,6 +13,12 @@ kuzu>=0.4.0
 # Normally pulled transitively by `requests`; listed for explicitness.
 urllib3>=1.26.0
 
+# Email and document conversion
+markdownify>=0.11.0
+pymupdf>=1.23.0
+python-pptx>=0.6.0
+striprtf>=0.0.26
+
 # Required on Windows by portalocker (used by qdrant-client)
 pywin32>=306
 

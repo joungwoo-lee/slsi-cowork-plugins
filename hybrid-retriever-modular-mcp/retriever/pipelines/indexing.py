@@ -116,12 +116,16 @@ def run_indexing(
     documents = embedder_out.get("documents") or splitter_out.get("documents") or []
     has_vector = bool(embedder_out.get("has_vector", False))
 
-    stored_content.write_text(loader_out["text"], encoding="utf-8", errors="replace")
+    if "text" in loader_out:
+        stored_content.write_text(loader_out["text"], encoding="utf-8", errors="replace")
+    elif "raw_emails" in loader_out:
+        # For multi-email sources (PST), we write a summary or the first email's body
+        # to stored_content just to keep the file existing.
+        summary = f"Multi-email source containing {len(loader_out['raw_emails'])} messages."
+        stored_content.write_text(summary, encoding="utf-8")
 
-    # Loader-provided structured metadata (e.g. EmailFileLoader emits
-    # subject/sender/recipients/...) is merged INTO the caller-provided
-    # ``metadata`` so search-side ``metadata_condition`` filters can match on
-    # both at once. Caller-provided keys win on collision.
+    # Loader-provided structured metadata (e.g. EmailSourceLoader emits
+    # email_metadata for single files or it's folded into Document.meta already)
     loader_meta = loader_out.get("email_metadata") if isinstance(loader_out.get("email_metadata"), dict) else None
     combined_metadata: dict[str, Any] | None
     if loader_meta and metadata:
