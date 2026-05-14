@@ -1,3 +1,6 @@
 $ErrorActionPreference = 'Stop'
 
-claude mcp add retriever_mcp -- py -3 "C:\Users\joung\slsi-cowork-plugins\hybrid-retriever-modular-mcp\server.py"
+$scriptDir = (Resolve-Path -LiteralPath $PSScriptRoot).Path
+$serverPath = (Resolve-Path -LiteralPath (Join-Path $scriptDir 'server.py')).Path
+
+claude mcp add retriever_mcp -- py -3 "$serverPath"
