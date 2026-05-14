@@ -126,7 +126,13 @@ def run_indexing(
 
     # Loader-provided structured metadata (e.g. EmailSourceLoader emits
     # email_metadata for single files or it's folded into Document.meta already)
-    loader_meta = loader_out.get("email_metadata") if isinstance(loader_out.get("email_metadata"), dict) else None
+    loader_meta = loader_out.get("email_metadata")
+    if not loader_meta and "raw_emails" in loader_out and loader_out["raw_emails"]:
+        # If it's a single email from the raw list (e.g. EML or directory)
+        # we can use its metadata if there's only one.
+        if len(loader_out["raw_emails"]) == 1:
+            loader_meta = loader_out["raw_emails"][0]
+
     combined_metadata: dict[str, Any] | None
     if loader_meta and metadata:
         combined_metadata = {**loader_meta, **metadata}

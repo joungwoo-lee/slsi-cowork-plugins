@@ -20,7 +20,7 @@ class Fts5Retriever:
     """BM25 retrieval over the SQLite FTS5 chunk index."""
 
     def __init__(self, cfg: Config) -> None:
-        self._cfg = cfg
+        self.cfg = cfg
 
     @component.output_types(documents=List[Document])
     def run(
@@ -32,7 +32,7 @@ class Fts5Retriever:
     ) -> dict:
         if not enabled or not query or not dataset_ids:
             return {"documents": []}
-        with storage.sqlite_session(self._cfg) as conn:
+        with storage.sqlite_session(self.cfg) as conn:
             rows = storage.fts_search(conn, query, dataset_ids, top_k)
             chunk_ids = [r["chunk_id"] for r in rows]
             chunks = storage.fetch_chunks(conn, chunk_ids)

@@ -23,7 +23,7 @@ class LocalQdrantRetriever:
     """
 
     def __init__(self, cfg: Config) -> None:
-        self._cfg = cfg
+        self.cfg = cfg
 
     @component.output_types(documents=List[Document])
     def run(
@@ -34,12 +34,12 @@ class LocalQdrantRetriever:
     ) -> dict:
         if not embedding or not dataset_ids:
             return {"documents": []}
-        client = storage.open_qdrant(self._cfg)
-        storage.ensure_collection(client, self._cfg)
-        rows = storage.vector_search(client, self._cfg, list(embedding), dataset_ids, top_k)
+        client = storage.open_qdrant(self.cfg)
+        storage.ensure_collection(client, self.cfg)
+        rows = storage.vector_search(client, self.cfg, list(embedding), dataset_ids, top_k)
         if not rows:
             return {"documents": []}
-        with storage.sqlite_session(self._cfg) as conn:
+        with storage.sqlite_session(self.cfg) as conn:
             chunks = storage.fetch_chunks(conn, [r["chunk_id"] for r in rows])
         docs: list[Document] = []
         for rank, row in enumerate(rows, 1):
@@ -72,14 +72,14 @@ class LocalQdrantWriter:
     """Write embedded documents to the local Qdrant collection."""
 
     def __init__(self, cfg: Config) -> None:
-        self._cfg = cfg
+        self.cfg = cfg
 
     @component.output_types(written=int)
     def run(self, documents: List[Document], has_vector: bool = True) -> dict:
         if not has_vector or not documents:
             return {"written": 0}
-        client = storage.open_qdrant(self._cfg)
-        storage.ensure_collection(client, self._cfg)
+        client = storage.open_qdrant(self.cfg)
+        storage.ensure_collection(client, self.cfg)
         rows: list[tuple[str, list[float], dict]] = []
         for doc in documents:
             embedding = getattr(doc, "embedding", None)
@@ -101,5 +101,5 @@ class LocalQdrantWriter:
                     },
                 )
             )
-        storage.upsert_vectors(client, self._cfg, rows)
+        storage.upsert_vectors(client, self.cfg, rows)
         return {"written": len(rows)}

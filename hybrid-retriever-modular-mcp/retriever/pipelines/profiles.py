@@ -183,3 +183,11 @@ def _register_email_profile() -> None:
 
 
 _register_email_profile()
+
+
+def sync_with_disk(cfg: Config) -> None:
+    """Load additional profiles from DATA_ROOT/pipelines.json."""
+    from .manager import load_and_register_profiles
+    json_path = cfg.data_root / "pipelines.json"
+    load_and_register_profiles(json_path)
+

@@ -31,6 +31,7 @@ def upload_document(
     defaults the caller can still override (e.g. ``skip_embedding=True`` as a
     default) or force values the caller cannot change.
     """
+    profiles.sync_with_disk(cfg)
     profile = profiles.get(pipeline)
     overrides: dict[str, Any] = {**profile.indexing_overrides}
     if skip_embedding:  # caller-provided True wins; profile False stays False unless caller bumps it
@@ -73,6 +74,7 @@ def hybrid_search(
     how ``keyword_only`` guarantees no vector branch even if a caller passes
     ``vector_similarity_weight=0.7``.
     """
+    profiles.sync_with_disk(cfg)
     profile = profiles.get(pipeline)
     overrides: dict[str, Any] = {
         **profile.retrieval_overrides,

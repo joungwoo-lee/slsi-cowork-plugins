@@ -26,14 +26,14 @@ class HttpDocumentEmbedder:
     """Embed a list of Documents in batches via the configured HTTP API."""
 
     def __init__(self, cfg: EmbeddingConfig) -> None:
-        self._cfg = cfg
+        self.cfg = cfg
         self._client: EmbeddingClient | None = None
 
     def _ensure_client(self) -> EmbeddingClient | None:
-        if not self._cfg.api_url or self._cfg.dim <= 0:
+        if not self.cfg.api_url or self.cfg.dim <= 0:
             return None
         if self._client is None:
-            self._client = EmbeddingClient(self._cfg)
+            self._client = EmbeddingClient(self.cfg)
         return self._client
 
     @component.output_types(documents=List[Document], has_vector=bool)
@@ -57,14 +57,14 @@ class HttpTextEmbedder:
     """Embed a single query string. Returns embedding=[] when disabled."""
 
     def __init__(self, cfg: EmbeddingConfig) -> None:
-        self._cfg = cfg
+        self.cfg = cfg
         self._client: EmbeddingClient | None = None
 
     def _ensure_client(self) -> EmbeddingClient | None:
-        if not self._cfg.api_url or self._cfg.dim <= 0:
+        if not self.cfg.api_url or self.cfg.dim <= 0:
             return None
         if self._client is None:
-            self._client = EmbeddingClient(self._cfg)
+            self._client = EmbeddingClient(self.cfg)
         return self._client
 
     @component.output_types(embedding=List[float])

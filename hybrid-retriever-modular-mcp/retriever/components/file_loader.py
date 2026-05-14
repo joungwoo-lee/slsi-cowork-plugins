@@ -18,14 +18,14 @@ class LocalFileLoader:
     """Read one local file and return its decoded text, truncated to a max length."""
 
     def __init__(self, max_chars: int = 2_000_000) -> None:
-        self._max_chars = int(max_chars)
+        self.max_chars = int(max_chars)
 
     @component.output_types(text=str, path=str, size_bytes=int)
     def run(self, path: str) -> dict:
         target = Path(path).expanduser()
         if not target.is_file():
             raise FileNotFoundError(f"file not found: {target}")
-        text = _read_text(target, self._max_chars)
+        text = _read_text(target, self.max_chars)
         return {"text": text, "path": str(target), "size_bytes": target.stat().st_size}
 
 

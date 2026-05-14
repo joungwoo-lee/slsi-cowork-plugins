@@ -15,14 +15,12 @@ class HierarchicalSplitter:
         child_chunk_chars: int = 256,
         child_chunk_overlap: int = 50,
     ) -> None:
-        self._cfg = {
-            "chunk_chars": int(chunk_chars),
-            "chunk_overlap": int(chunk_overlap),
-            "parent_chunk_chars": int(parent_chunk_chars),
-            "parent_chunk_overlap": int(parent_chunk_overlap),
-            "child_chunk_chars": int(child_chunk_chars),
-            "child_chunk_overlap": int(child_chunk_overlap),
-        }
+        self.chunk_chars = int(chunk_chars)
+        self.chunk_overlap = int(chunk_overlap)
+        self.parent_chunk_chars = int(parent_chunk_chars)
+        self.parent_chunk_overlap = int(parent_chunk_overlap)
+        self.child_chunk_chars = int(child_chunk_chars)
+        self.child_chunk_overlap = int(child_chunk_overlap)
 
     @component.output_types(documents=List[Document], chunks_count=int, parent_chunks_count=int)
     def run(
@@ -47,6 +45,15 @@ class HierarchicalSplitter:
         else:
             raise ValueError("HierarchicalSplitter requires either 'text' or 'documents'")
 
+        cfg = {
+            "chunk_chars": self.chunk_chars,
+            "chunk_overlap": self.chunk_overlap,
+            "parent_chunk_chars": self.parent_chunk_chars,
+            "parent_chunk_overlap": self.parent_chunk_overlap,
+            "child_chunk_chars": self.child_chunk_chars,
+            "child_chunk_overlap": self.child_chunk_overlap,
+        }
+
         for doc_idx, input_doc in enumerate(input_docs):
             # For multi-document sources, we might need unique IDs
             doc_id = input_doc.meta.get("mail_id") or document_id
@@ -56,15 +63,7 @@ class HierarchicalSplitter:
             doc_name = input_doc.meta.get("document_name") or document_name
             doc_meta_base = input_doc.meta.get("metadata") or metadata or {}
             
-            # If metadata key is missing but doc has other meta fields, use them
-            if not doc_meta_base and input_doc.meta:
-                doc_meta_base = {k: v for k, v in input_doc.meta.items() if k != "metadata"}
-            
-            # Ensure doc_meta_base is ALWAYS a dict
-            if doc_meta_base is None:
-                doc_meta_base = {}
-
-            records = _make_records(input_doc.content or "", self._cfg, use_hierarchical)
+            records = _make_records(input_doc.content or "", cfg, use_hierarchical)
             if not records: continue
             
             for pos, rec in enumerate(records):

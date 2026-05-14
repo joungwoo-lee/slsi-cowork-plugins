@@ -339,6 +339,7 @@ def tool_list_pipelines(_args: dict) -> dict:
     from retriever.pipelines import profiles as pipeline_profiles
 
     cfg = load_config()
+    pipeline_profiles.sync_with_disk(cfg)
     return text_result({
         "default_ingest": {"chunk_chars": cfg.ingest.chunk_chars, "chunk_overlap": cfg.ingest.chunk_overlap},
         "hierarchical_ingest": {
@@ -406,6 +407,47 @@ def tool_graph_rebuild(_args: dict) -> dict:
     return text_result({"status": "ok", **counts})
 
 
+def tool_save_pipeline(args: dict) -> dict:
+    """Create a new pipeline profile and save it to DATA_ROOT/pipelines.json."""
+    name = _require_str(args, "name")
+    if not name:
+        return text_result("name is required", is_error=True)
+    
+    cfg = load_config()
+    json_path = cfg.data_root / "pipelines.json"
+    
+    # Load existing
+    import json
+    existing_data = {}
+    if json_path.exists():
+        try:
+            with open(json_path, "r", encoding="utf-8") as f:
+                existing_data = json.load(f)
+        except Exception:
+            pass
+            
+    # Update or add new
+    existing_data[name] = {
+        "description": args.get("description", ""),
+        "indexing_overrides": args.get("indexing_overrides", {}),
+        "retrieval_overrides": args.get("retrieval_overrides", {}),
+        "search_kwargs": args.get("search_kwargs", {}),
+    }
+    
+    try:
+        json_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump(existing_data, f, indent=2, ensure_ascii=False)
+        
+        # Immediate sync for current process
+        from retriever.pipelines import profiles
+        profiles.sync_with_disk(cfg)
+        
+        return text_result({"status": "ok", "message": f"Pipeline '{name}' saved to {json_path}"})
+    except Exception as e:
+        return text_result(f"Failed to save pipeline: {e}", is_error=True)
+
+
 HANDLERS = {
     "search": tool_search,
     "list_datasets": tool_list_datasets,
@@ -420,6 +462,7 @@ HANDLERS = {
     "get_document_content": tool_get_document_content,
     "delete_document": tool_delete_document,
     "list_pipelines": tool_list_pipelines,
+    "save_pipeline": tool_save_pipeline,
     "health": tool_health,
     "graph_query": tool_graph_query,
     "graph_rebuild": tool_graph_rebuild,

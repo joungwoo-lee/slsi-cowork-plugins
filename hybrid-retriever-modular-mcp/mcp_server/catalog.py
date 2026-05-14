@@ -277,6 +277,37 @@ TOOLS: list[dict[str, Any]] = [
         ),
         "inputSchema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "save_pipeline",
+        "description": (
+            "[System] Create a new pipeline profile (modular combination of components) "
+            "and save it to DATA_ROOT/pipelines.json. This allows permanent reuse of "
+            "custom RAG configurations."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Unique name for the pipeline profile."},
+                "description": {"type": "string", "description": "Brief description of this pipeline's purpose."},
+                "indexing_overrides": {
+                    "type": "object",
+                    "description": "Hypster overrides for indexing (e.g. chunk_chars, use_hierarchical).",
+                    "additionalProperties": True,
+                },
+                "retrieval_overrides": {
+                    "type": "object",
+                    "description": "Hypster overrides for retrieval (e.g. fusion, top_n).",
+                    "additionalProperties": True,
+                },
+                "search_kwargs": {
+                    "type": "object",
+                    "description": "Per-call kwargs to force (e.g. vector_similarity_weight, parent_chunk_replace).",
+                    "additionalProperties": True,
+                },
+            },
+            "required": ["name"],
+        },
+    },
     # --- Diagnostics -----------------------------------------------------
     {
         "name": "health",
