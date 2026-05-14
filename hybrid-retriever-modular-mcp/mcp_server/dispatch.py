@@ -48,9 +48,63 @@ def handle_tools_list(_params: dict) -> dict:
     return {"tools": TOOLS}
 
 
+def auto_install_check() -> Optional[dict]:
+    """Lazy dependency check on first tool call.
+
+    Tries to import every package the handlers depend on. If any is missing,
+    invokes install.ps1 -SkipClaudeConfig once to fix it up. Mirrors the
+    email-mcp pattern so a fresh PC needs only the MCP-registration .bat —
+    actual dependency installation happens on first tool invocation.
+
+    Returns a tool-result error dict on failure, or None when the environment
+    is ready.
+    """
+    try:
+        import dotenv  # noqa: F401
+        import requests  # noqa: F401
+        import qdrant_client  # noqa: F401
+        import pypdf  # noqa: F401
+        import docx  # noqa: F401  (python-docx ships as `docx`)
+        import openpyxl  # noqa: F401
+        import chardet  # noqa: F401
+    except ImportError:
+        import subprocess
+
+        log("dependencies missing — auto-running install.ps1 ...")
+        script_path = bootstrap.ROOT_PATH / "install.ps1"
+        if not script_path.exists():
+            return text_result(
+                f"install.ps1 not found at {script_path}.\n"
+                "Install manually: py -3 -m pip install -r requirements.txt",
+                is_error=True,
+            )
+        cmd = [
+            "powershell.exe",
+            "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-File", str(script_path),
+            "-SkipClaudeConfig",
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+            if result.returncode != 0:
+                return text_result(
+                    f"Auto-install failed (exit {result.returncode}).\n\n"
+                    f"STDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}",
+                    is_error=True,
+                )
+        except Exception as exc:
+            return text_result(f"install.ps1 execution failed: {exc}", is_error=True)
+    return None
+
+
 def handle_tools_call(params: dict) -> dict:
     name = params.get("name", "")
     arguments = params.get("arguments") or {}
+
+    err_resp = auto_install_check()
+    if err_resp:
+        return err_resp
 
     try:
         from .handlers import HANDLERS
