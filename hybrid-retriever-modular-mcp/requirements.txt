@@ -9,4 +9,5 @@ chardet>=5.2.0
 # Normally pulled transitively by `requests`; listed for explicitness.
 urllib3>=1.26.0
 
-
+# Required on Windows by portalocker (used by qdrant-client)
+pywin32>=306
