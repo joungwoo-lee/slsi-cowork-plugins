@@ -83,6 +83,7 @@ def tool_search(args: dict) -> dict:
                 "similarity": c["similarity"],
                 "vector_similarity": c["vector_similarity"],
                 "term_similarity": c["term_similarity"],
+                "metadata": c.get("metadata", {}),
             },
         })
         citations.append({

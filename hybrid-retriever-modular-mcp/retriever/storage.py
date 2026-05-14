@@ -6,7 +6,9 @@ morphemes (kiwipiepy) on both the index and query side. See `morph.py`.
 from __future__ import annotations
 
 import hashlib
+import json
 import sqlite3
+from datetime import datetime
 from contextlib import contextmanager
 from typing import Iterator
 
@@ -171,16 +173,18 @@ def upsert_document(
     content_path: str,
     size_bytes: int,
     chunks: list[dict],
-    has_vector: bool,
+    has_vector: bool = False,
     metadata: dict | None = None,
 ) -> None:
-    import json
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Delete existing chunks
+    conn.execute("DELETE FROM chunk_fts WHERE chunk_id IN (SELECT chunk_id FROM chunks WHERE document_id = ?)", [document_id])
+    conn.execute("DELETE FROM chunks WHERE document_id = ?", [document_id])
 
-    conn.execute("DELETE FROM chunk_fts WHERE document_id = ?", (document_id,))
-    conn.execute("DELETE FROM chunks WHERE document_id = ?", (document_id,))
+    metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
     conn.execute(
         """
-        INSERT INTO documents(document_id, dataset_id, name, source_path, content_path, size_bytes, chunk_count, has_vector, metadata_json)
+        INSERT INTO documents (document_id, dataset_id, name, source_path, content_path, size_bytes, has_vector, created_at, metadata_json)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(document_id) DO UPDATE SET
             dataset_id=excluded.dataset_id,
@@ -188,11 +192,11 @@ def upsert_document(
             source_path=excluded.source_path,
             content_path=excluded.content_path,
             size_bytes=excluded.size_bytes,
-            chunk_count=excluded.chunk_count,
             has_vector=excluded.has_vector,
+            created_at=excluded.created_at,
             metadata_json=excluded.metadata_json
         """,
-        (document_id, dataset_id, name, source_path, content_path, size_bytes, len(chunks), int(has_vector), json.dumps(metadata or {}, ensure_ascii=False)),
+        [document_id, dataset_id, name, source_path, content_path, size_bytes, int(has_vector), now, metadata_json],
     )
     for pos, record in enumerate(chunks):
         content = record.get("child_content", "")
@@ -288,7 +292,29 @@ def fetch_chunks(conn: sqlite3.Connection, chunk_ids: list[str]) -> dict[str, di
 def _filter_metadata(rows: list[dict], metadata_condition: dict | None) -> list[dict]:
     if not metadata_condition:
         return rows
-    return rows
+    out = []
+    for row in rows:
+        match = True
+        # Try to find metadata in 'metadata' key (which comes from metadata_json)
+        # or top-level row fields
+        try:
+            row_meta = row.get("metadata") or {}
+        except:
+            row_meta = {}
+
+        for k, v in metadata_condition.items():
+            # Check row fields first (document_id, dataset_id, name, etc.)
+            # then check inside the metadata blob
+            actual = row.get(k)
+            if actual is None:
+                actual = row_meta.get(k)
+            
+            if str(actual) != str(v):
+                match = False
+                break
+        if match:
+            out.append(row)
+    return out
 
 
 def open_qdrant(cfg: Config):

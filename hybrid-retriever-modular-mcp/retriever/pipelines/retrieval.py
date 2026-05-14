@@ -95,6 +95,13 @@ def _doc_to_item(doc, parent_replace: bool) -> dict[str, Any]:
     parent_content = meta.get("parent_content", "") or ""
     is_hier = bool(meta.get("is_hierarchical"))
     content = doc.content or child_content
+    
+    # Ensure nested 'metadata' field is present in the response
+    # to maintain backward compatibility with legacy scripts and tests.
+    # Note: doc.meta already contains the flattened fields, but we need
+    # to make sure the key 'metadata' exists.
+    response_meta = meta.get("metadata") or {}
+    
     return {
         "id": doc.id,
         "chunk_id": doc.id,
@@ -109,7 +116,7 @@ def _doc_to_item(doc, parent_replace: bool) -> dict[str, Any]:
         "child_id": int(meta.get("child_id", meta.get("position", 0))),
         "is_hierarchical": is_hier,
         "is_contextual": bool(meta.get("is_contextual")),
-        "metadata": meta.get("metadata") or {},
+        "metadata": response_meta,
         "similarity": float(doc.score or 0.0),
         "vector_similarity": float(meta.get("vector_similarity", 0.0)),
         "term_similarity": float(meta.get("term_similarity", 0.0)),
