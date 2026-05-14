@@ -71,21 +71,55 @@ _BOOT_DOCTOR_OK = False
 DEPS_PATH = None
 
 
+import threading
+
+_INSTALL_THREAD = None
+_INSTALL_ERROR = None
+
+def _install_worker(req_path, deps_path):
+    global _INSTALL_ERROR
+    import subprocess
+    try:
+        deps_path.mkdir(parents=True, exist_ok=True)
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "install",
+                "--upgrade",
+                "-r",
+                str(req_path),
+                "--target",
+                str(deps_path),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            _INSTALL_ERROR = (
+                f"pip install exited with code {result.returncode}.
+"
+                f"STDOUT:
+{result.stdout}
+STDERR:
+{result.stderr}"
+            )
+        else:
+            _INSTALL_ERROR = None
+    except Exception as exc:
+        _INSTALL_ERROR = f"pip install execution failed: {exc}"
+
 def boot_doctor() -> Optional[str]:
     """Verify Python version and required dependencies at server startup.
 
-    Returns None when the environment is ready. Returns a human-readable
-    error string when something is wrong and cannot be auto-fixed.
-
-    Missing packages trigger one pip install into a local dependency directory,
-    followed by re-verification. importlib.util.find_spec is used instead of
-    `import` to avoid partial-module side effects during the probe.
+    If missing, starts a background installation to avoid MCP timeouts (32001).
     """
     import importlib
     import importlib.util
     from .bootstrap import ROOT_PATH
+    global _INSTALL_THREAD, _INSTALL_ERROR, DEPS_PATH
 
-    global DEPS_PATH
     if DEPS_PATH is None:
         DEPS_PATH = ROOT_PATH / ".mcp_deps"
     if DEPS_PATH.exists() and str(DEPS_PATH) not in sys.path:
@@ -94,7 +128,8 @@ def boot_doctor() -> Optional[str]:
     if sys.version_info[:2] != (3, 9):
         return (
             f"email-mcp requires Python 3.9 (64-bit), got "
-            f"{sys.version.split()[0]} at {sys.executable}.\n"
+            f"{sys.version.split()[0]} at {sys.executable}.
+"
             "Install Python 3.9.13 from "
             "https://www.python.org/ftp/python/3.9.13/python-3.9.13-amd64.exe"
         )
@@ -106,53 +141,31 @@ def boot_doctor() -> Optional[str]:
     if not pending:
         return None
 
-    log(f"boot doctor: missing dependencies {pending}; running pip install ...")
-    import subprocess
+    if _INSTALL_THREAD is not None:
+        if _INSTALL_THREAD.is_alive():
+            return f"Dependencies {pending} are installing in background... Please wait ~1 min and try again."
+        
+        if _INSTALL_ERROR:
+            return f"Installation failed: {_INSTALL_ERROR}"
 
+        importlib.invalidate_caches()
+        if str(DEPS_PATH) not in sys.path:
+            sys.path.insert(0, str(DEPS_PATH))
+        pending = find_missing()
+        if pending:
+            return f"pip install finished but these packages are still missing: {pending}"
+        return None
+
+    log(f"boot doctor: missing dependencies {pending}; starting background pip install ...")
     req_path = ROOT_PATH / "requirements.txt"
     if not req_path.exists():
-        return (
-            f"missing dependencies {pending} and requirements.txt not found at "
-            f"{req_path}. Install manually: {sys.executable} -m pip install -r {req_path}"
-        )
+        return f"missing dependencies {pending} and requirements.txt not found at {req_path}"
 
-    DEPS_PATH.mkdir(parents=True, exist_ok=True)
-    try:
-        result = subprocess.run(
-            [
-                sys.executable,
-                "-m",
-                "pip",
-                "install",
-                "--upgrade",
-                "-r",
-                str(req_path),
-                "--target",
-                str(DEPS_PATH),
-            ],
-            capture_output=True,
-            text=True,
-            timeout=600,
-        )
-    except Exception as exc:  # noqa: BLE001
-        return f"pip install execution failed: {exc}"
-    if result.returncode != 0:
-        return (
-            f"pip install exited with code {result.returncode}.\n"
-            f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
-        )
+    _INSTALL_ERROR = None
+    _INSTALL_THREAD = threading.Thread(target=_install_worker, args=(req_path, DEPS_PATH), daemon=True)
+    _INSTALL_THREAD.start()
 
-    importlib.invalidate_caches()
-    if str(DEPS_PATH) not in sys.path:
-        sys.path.insert(0, str(DEPS_PATH))
-    pending = find_missing()
-    if pending:
-        return (
-            f"pip install reported success but these packages are still "
-            f"missing after invalidate_caches: {pending}"
-        )
-    log("boot doctor: dependencies installed and verified")
-    return None
+    return f"Dependencies {pending} missing. A background installation has started. Please wait ~1 minute and try again."
 
 
 def ensure_boot_ready() -> Optional[str]:
