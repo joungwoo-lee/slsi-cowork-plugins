@@ -64,6 +64,7 @@ REQUIRED_DEPS = (
     "qdrant_client",
     "requests",
     "dotenv",
+    "urllib3",
 )
 
 
@@ -99,7 +100,7 @@ def boot_doctor() -> Optional[str]:
     import subprocess
     from .bootstrap import ROOT_PATH
 
-    script_path = ROOT_PATH / "install.ps1"
+    script_path = ROOT_PATH / "mcp_server" / "install.ps1"
     if not script_path.exists():
         return (
             f"missing dependencies {pending} and install.ps1 not found at "

@@ -28,12 +28,15 @@ Claude Desktop / Code --stdio--> py server.py
 
 ## 설치
 
+새 PC에서 한 번만:
+
 ```powershell
-py -3 -m pip install -r requirements.txt
-Copy-Item .env.example .env
+.\claude-mcp-add-retriever.bat
 ```
 
-`.env`에서 최소값을 설정합니다.
+이게 Claude Code(CLI)에 MCP를 등록합니다. **의존성/`.env`는 첫 도구 호출 시 자동 설치** — 서버가 부팅하면서 `mcp_server/dispatch.boot_doctor`가 누락 패키지를 확인하고 `mcp_server/install.ps1`을 자동 실행해서 `pip install -r requirements.txt` + `.env.example` → `.env` 복사까지 처리합니다.
+
+`.env`만 실제 값으로 편집:
 
 ```env
 RETRIEVER_DATA_ROOT=C:\Retriever_Data

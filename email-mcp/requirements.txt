@@ -24,3 +24,8 @@ requests>=2.31.0
 
 # Config from .env (matches retriever_engine project's variable scheme)
 python-dotenv>=1.0.0
+
+# Used directly by scripts/embedding_client.py for InsecureRequestWarning when
+# .env disables TLS verify. Normally pulled in transitively by `requests`,
+# but listed here so the dependency is explicit.
+urllib3>=1.26.0

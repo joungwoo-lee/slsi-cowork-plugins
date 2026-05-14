@@ -58,6 +58,7 @@ REQUIRED_DEPS = (
     "docx",
     "openpyxl",
     "chardet",
+    "urllib3",
 )
 
 
@@ -84,7 +85,7 @@ def boot_doctor() -> Optional[str]:
     log(f"boot doctor: missing dependencies {pending}; running install.ps1 ...")
     import subprocess
 
-    script_path = bootstrap.ROOT_PATH / "install.ps1"
+    script_path = bootstrap.ROOT_PATH / "mcp_server" / "install.ps1"
     if not script_path.exists():
         return (
             f"missing dependencies {pending} and install.ps1 not found at "

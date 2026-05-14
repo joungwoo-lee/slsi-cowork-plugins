@@ -30,7 +30,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$McpPath = $PSScriptRoot
+# This script lives at <mcp-root>/mcp_server/install.ps1, so the mcp root is
+# the parent of $PSScriptRoot.
+$McpPath = Split-Path -Parent $PSScriptRoot
 $serverPath = Join-Path $McpPath "server.py"
 $reqPath    = Join-Path $McpPath "requirements.txt"
 
@@ -93,7 +95,7 @@ Write-Step "3. dependencies"
 if ($SkipDeps) {
     Write-Warn "skipped (-SkipDeps)"
 } else {
-    $depCheck = & py -3 -c "import dotenv,requests,qdrant_client,pypdf,docx,openpyxl,chardet; print('ok')" 2>&1
+    $depCheck = & py -3 -c "import dotenv,requests,qdrant_client,pypdf,docx,openpyxl,chardet,urllib3; print('ok')" 2>&1
     if ($depCheck -match "^ok\s*$") {
         Write-Ok "all dependencies importable"
     } else {
