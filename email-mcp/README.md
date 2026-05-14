@@ -53,7 +53,7 @@ email-mcp/
 ├── server.py                       # 진입점 (얇음 — 3.9 가드 + main 호출만)
 ├── README.md
 ├── requirements.txt
-├── claude-mcp-add-email.bat        # 새 PC에서 Claude Code에 MCP 등록
+├── claude-mcp-add-email.ps1        # 새 PC에서 Claude Code에 MCP 등록
 ├── .env.example
 └── mcp_server/                     # MCP 서버 본체 + 설치 스크립트
     ├── __init__.py                 # bootstrap 트리거 + main export
@@ -78,8 +78,8 @@ email-mcp/
 
 새 PC에서 한 번만:
 
-```cmd
-claude-mcp-add-email.bat
+```powershell
+.\claude-mcp-add-email.ps1
 ```
 
 이게 Claude Code(CLI)에 MCP를 등록합니다. **의존성은 첫 도구 호출 시 자동 설치** — `mcp_server/dispatch.boot_doctor()`가 Python 3.9, 의존성 패키지를 검사하고 누락이면 현재 MCP 서버를 실행 중인 Python으로 `.mcp_deps/`에 `pip install -r requirements.txt --target .mcp_deps`를 실행합니다. `install.ps1`은 수동 설치와 Claude Desktop config 머지용입니다.
