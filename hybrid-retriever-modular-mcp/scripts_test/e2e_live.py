@@ -208,6 +208,61 @@ def main() -> int:
         assert marker in (marker_ctx["text"] or ""), marker_ctx
         print(f"[ok] marker search: found unique marker '{marker}' in returned text")
 
+        # 10b) Profile registry surfaces in list_pipelines
+        lp = call("list_pipelines")
+        assert not lp["isError"], lp
+        registered = [p["name"] for p in lp["payload"].get("profiles", [])]
+        assert "default" in registered, registered
+        assert "keyword_only" in registered, registered
+        print(f"[ok] list_pipelines: profiles={registered}")
+
+        # 10c) search via pipeline="keyword_only" -> vector forced off, RRF forced
+        s_kw_profile = call(
+            "search",
+            {
+                "query": "Hypster",
+                "dataset_ids": [dataset_id],
+                "top_n": 3,
+                # Try to enable vectors -- profile must force them off.
+                "vector_similarity_weight": 0.9,
+                "fusion": "linear",
+                "pipeline": "keyword_only",
+            },
+        )
+        assert not s_kw_profile["isError"], s_kw_profile
+        assert s_kw_profile["payload"]["total"] >= 1, s_kw_profile
+        kw_src = s_kw_profile["payload"]["contexts"][0]["source"]
+        assert kw_src["vector_similarity"] == 0.0, kw_src
+        expected_rrf = 1.0 / (60 + 1)
+        assert abs(kw_src["similarity"] - expected_rrf) < 1e-3, (kw_src, expected_rrf)
+        print(
+            f"[ok] search pipeline=keyword_only (live): vec_sim={kw_src['vector_similarity']} "
+            f"(forced 0), term_sim={kw_src['term_similarity']}, "
+            f"fused={kw_src['similarity']} (RRF rank-1 ~= {expected_rrf:.4f})"
+        )
+
+        # 10d) Same query via pipeline="default" -> hybrid path still uses vectors
+        s_def_profile = call(
+            "search",
+            {
+                "query": "Hypster",
+                "dataset_ids": [dataset_id],
+                "top_n": 3,
+                "vector_similarity_weight": 0.6,
+                "fusion": "linear",
+                "pipeline": "default",
+            },
+        )
+        assert not s_def_profile["isError"], s_def_profile
+        def_src = s_def_profile["payload"]["contexts"][0]["source"]
+        # The default profile keeps vector path on -- vec_sim must be > 0 here
+        # since the live embedding API is configured.
+        assert def_src["vector_similarity"] > 0.0, def_src
+        print(
+            f"[ok] search pipeline=default (live): vec_sim={def_src['vector_similarity']} "
+            f"(active), term_sim={def_src['term_similarity']}, fused={def_src['similarity']}"
+        )
+
         # 11) graph_rebuild + Cypher
         gr = call("graph_rebuild")
         assert not gr["isError"], gr

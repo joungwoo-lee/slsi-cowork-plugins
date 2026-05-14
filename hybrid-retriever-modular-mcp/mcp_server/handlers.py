@@ -32,6 +32,18 @@ def _require_str(args: dict, key: str) -> str | None:
     return value if isinstance(value, str) and value.strip() else None
 
 
+def _pipeline_name(args: dict) -> str:
+    """Extract the optional ``pipeline`` arg, defaulting to ``default``.
+
+    Accepts only non-empty strings; anything else falls back to ``default``
+    so a stray ``null`` from the client cannot blow up tool dispatch.
+    """
+    value = args.get("pipeline")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return "default"
+
+
 def tool_search(args: dict) -> dict:
     query = _require_str(args, "query")
     if not query:
@@ -41,11 +53,13 @@ def tool_search(args: dict) -> dict:
         return text_result("dataset_ids is empty. Pass dataset_ids or set RETRIEVER_DEFAULT_DATASETS.", is_error=True)
 
     cfg = load_config()
+    pipeline_name = _pipeline_name(args)
     with silenced_stdout():
         data = local_search.hybrid_search(
             cfg,
             query.strip(),
             datasets,
+            pipeline=pipeline_name,
             top=max(1, min(50, int(args.get("top_n", 12)))),
             top_k=max(1, min(500, int(args.get("top_k", 200)))),
             vector_similarity_weight=float(args.get("vector_similarity_weight", 0.5)),
@@ -146,30 +160,32 @@ def tool_upload_directory(args: dict) -> dict:
         ext = "." + ext
     
     cfg = load_config()
+    pipeline_name = _pipeline_name(args)
     metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
-    
+
     results = []
     errors = []
-    
+
     # Supported extensions based on local_ingest capabilities
     supported_exts = {".txt", ".md", ".pdf", ".docx", ".xlsx", ".csv"}
-    
+
     with silenced_stdout():
         for file_path in dir_path.rglob("*"):
             if not file_path.is_file():
                 continue
-                
+
             suffix = file_path.suffix.lower()
             if ext and suffix != ext.lower():
                 continue
             if not ext and suffix not in supported_exts:
                 continue
-                
+
             try:
                 out = local_ingest.upload_document(
                     cfg,
                     ds,
                     file_path,
+                    pipeline=pipeline_name,
                     skip_embedding=bool(args.get("skip_embedding", False)),
                     use_hierarchical=args.get("use_hierarchical"),
                     metadata=metadata,
@@ -195,12 +211,14 @@ def tool_upload_document(args: dict) -> dict:
     if not fp:
         return text_result("file_path is required", is_error=True)
     cfg = load_config()
+    pipeline_name = _pipeline_name(args)
     with silenced_stdout():
         metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
         out = local_ingest.upload_document(
             cfg,
             ds,
             fp,
+            pipeline=pipeline_name,
             skip_embedding=bool(args.get("skip_embedding", False)),
             use_hierarchical=args.get("use_hierarchical"),
             metadata=metadata,
@@ -311,6 +329,14 @@ def tool_delete_document(args: dict) -> dict:
 
 
 def tool_list_pipelines(_args: dict) -> dict:
+    """Return process defaults *and* the registered modular profile list.
+
+    ``profiles`` is the source of truth for the ``pipeline`` argument accepted
+    by ``search`` / ``upload_document`` / ``upload_directory`` -- each entry
+    here is a name that can be passed to those tools.
+    """
+    from retriever.pipelines import profiles as pipeline_profiles
+
     cfg = load_config()
     return text_result({
         "default_ingest": {"chunk_chars": cfg.ingest.chunk_chars, "chunk_overlap": cfg.ingest.chunk_overlap},
@@ -327,6 +353,7 @@ def tool_list_pipelines(_args: dict) -> dict:
             "parent_chunk_replace": cfg.search.parent_chunk_replace,
             "backend": "local_sqlite_qdrant",
         },
+        "profiles": pipeline_profiles.describe(),
     })
 
 

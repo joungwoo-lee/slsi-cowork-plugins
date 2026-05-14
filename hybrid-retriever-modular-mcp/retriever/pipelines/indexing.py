@@ -62,6 +62,7 @@ def run_indexing(
     *,
     indexing_opts: dict[str, Any],
     metadata: dict | None = None,
+    builder=None,
 ) -> dict:
     """Execute the indexing pipeline end-to-end and persist on-disk artifacts.
 
@@ -85,7 +86,7 @@ def run_indexing(
     stored_content = cfg.content_path(dataset_id, doc_id)
     shutil.copy2(path, stored_source)
 
-    pipeline = build_indexing_pipeline(cfg, indexing_opts)
+    pipeline = (builder or build_indexing_pipeline)(cfg, indexing_opts)
     result = pipeline.run(
         {
             "loader": {"path": str(path)},

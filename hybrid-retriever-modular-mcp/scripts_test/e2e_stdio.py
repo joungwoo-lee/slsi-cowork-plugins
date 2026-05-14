@@ -183,11 +183,63 @@ def main() -> int:
         assert s2["payload"]["total"] >= 1, s2["payload"]
         print(f"[ok] search rrf/english: total={s2['payload']['total']}")
 
-        # 9. list_pipelines
+        # 9. list_pipelines (now includes registered profiles)
         lp = call_tool("list_pipelines")
         assert not lp["isError"], lp
         assert "default_retrieval" in lp["payload"], lp
-        print("[ok] list_pipelines")
+        profile_names = [p["name"] for p in lp["payload"].get("profiles", [])]
+        assert "default" in profile_names, profile_names
+        assert "keyword_only" in profile_names, profile_names
+        print(f"[ok] list_pipelines: profiles={profile_names}")
+
+        # 9b. search with explicit pipeline="default" -> equals implicit default
+        s_default = call_tool(
+            "search",
+            {
+                "query": "모듈러",
+                "dataset_ids": [dataset_id],
+                "top_n": 5,
+                "vector_similarity_weight": 0.0,
+                "fusion": "linear",
+                "pipeline": "default",
+            },
+        )
+        assert not s_default["isError"], s_default
+        assert s_default["payload"]["total"] == s1["payload"]["total"], (
+            s_default["payload"], s1["payload"],
+        )
+        print(
+            f"[ok] search pipeline=default matches implicit default "
+            f"(total={s_default['payload']['total']})"
+        )
+
+        # 9c. search with pipeline="keyword_only" -> RRF, vector forced off
+        s_kw = call_tool(
+            "search",
+            {
+                "query": "모듈러",
+                "dataset_ids": [dataset_id],
+                "top_n": 5,
+                # Try to enable vectors -- the profile must override and force them off.
+                "vector_similarity_weight": 0.9,
+                "fusion": "linear",
+                "pipeline": "keyword_only",
+            },
+        )
+        assert not s_kw["isError"], s_kw
+        assert s_kw["payload"]["total"] >= 1, s_kw["payload"]
+        ctx_kw = s_kw["payload"]["contexts"][0]["source"]
+        # keyword_only forces vector_similarity_weight=0, so vector_similarity stays 0
+        assert ctx_kw["vector_similarity"] == 0.0, ctx_kw
+        # Forces fusion=rrf -> score collapses to 1/(rrf_k + rank).
+        # For rank 1 with rrf_k=60 that's 1/61 ~= 0.0164.
+        expected_rrf = 1.0 / (60 + 1)
+        assert abs(ctx_kw["similarity"] - expected_rrf) < 1e-3, (ctx_kw, expected_rrf)
+        print(
+            f"[ok] search pipeline=keyword_only: vec_sim={ctx_kw['vector_similarity']} "
+            f"(forced 0), term_sim={ctx_kw['term_similarity']}, "
+            f"fused={ctx_kw['similarity']} (RRF rank-1 ~= {expected_rrf:.4f})"
+        )
 
         # 10. health
         h = call_tool("health")

@@ -44,9 +44,10 @@ def run_retrieval(
     fusion: str | None = None,
     parent_chunk_replace: bool | None = None,
     metadata_condition: dict | None = None,
+    builder=None,
 ) -> dict:
     """Execute the retrieval pipeline and assemble the legacy response shape."""
-    pipeline = build_retrieval_pipeline(cfg)
+    pipeline = (builder or build_retrieval_pipeline)(cfg)
     weight = (
         float(vector_similarity_weight)
         if vector_similarity_weight is not None
