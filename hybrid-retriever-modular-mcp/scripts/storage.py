@@ -1,4 +1,8 @@
-"""SQLite FTS5 + optional local Qdrant storage for documents and chunks."""
+"""SQLite FTS5 + optional local Qdrant storage for documents and chunks.
+
+FTS uses the plain `unicode61` tokenizer but text is pre-tokenized into Korean
+morphemes (kiwipiepy) on both the index and query side. See `morph.py`.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -7,6 +11,12 @@ from contextlib import contextmanager
 from typing import Iterator
 
 from .config import Config
+from . import morph
+
+# Bump when the FTS5 build strategy changes so existing DBs are rebuilt on
+# the next open. 0 = legacy unicode61 (no morph), 1 = trigram, 2 = unicode61
+# fed by kiwipiepy morphemes (current).
+INDEX_SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS datasets (
@@ -53,7 +63,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(
     dataset_id UNINDEXED,
     document_name,
     content,
-    tokenize='trigram'
+    tokenize='unicode61'
 );
 """
 
@@ -88,15 +98,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_fts_tokenizer(conn: sqlite3.Connection) -> None:
-    # Rebuild chunk_fts with the trigram tokenizer so Korean substring queries
-    # match (unicode61 only splits on whitespace/punctuation, leaving Korean
-    # eojeol tokens like "보고서를" un-matchable by "보고서").
-    row = conn.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='chunk_fts'"
-    ).fetchone()
-    if not row or "trigram" in (row[0] or "").lower():
+    # Rebuild chunk_fts so it stores kiwipiepy-tokenized Korean morphemes
+    # under the plain unicode61 tokenizer. This lets queries like "메일"
+    # (2 chars) or "보고서" still match eojeol forms like "메일을" /
+    # "보고서를" via morpheme-level identity.
+    current = conn.execute("PRAGMA user_version").fetchone()[0]
+    if current >= INDEX_SCHEMA_VERSION:
         return
-    conn.execute("DROP TABLE chunk_fts")
+    conn.execute("DROP TABLE IF EXISTS chunk_fts")
     conn.executescript(
         """
         CREATE VIRTUAL TABLE chunk_fts USING fts5(
@@ -105,17 +114,28 @@ def _migrate_fts_tokenizer(conn: sqlite3.Connection) -> None:
             dataset_id UNINDEXED,
             document_name,
             content,
-            tokenize='trigram'
+            tokenize='unicode61'
         );
         """
     )
-    conn.execute(
+    rows = conn.execute(
         """
-        INSERT INTO chunk_fts(chunk_id, document_id, dataset_id, document_name, content)
         SELECT c.chunk_id, c.document_id, c.dataset_id, d.name, c.content
         FROM chunks c JOIN documents d ON d.document_id = c.document_id
         """
-    )
+    ).fetchall()
+    for chunk_id, document_id, dataset_id, name, content in rows:
+        conn.execute(
+            "INSERT INTO chunk_fts(chunk_id, document_id, dataset_id, document_name, content) VALUES (?, ?, ?, ?, ?)",
+            (
+                chunk_id,
+                document_id,
+                dataset_id,
+                morph.tokenize_for_index(name or ""),
+                morph.tokenize_for_index(content or ""),
+            ),
+        )
+    conn.execute(f"PRAGMA user_version = {INDEX_SCHEMA_VERSION}")
 
 
 @contextmanager
@@ -203,12 +223,21 @@ def upsert_document(
         )
         conn.execute(
             "INSERT INTO chunk_fts(chunk_id, document_id, dataset_id, document_name, content) VALUES (?, ?, ?, ?, ?)",
-            (chunk_id, document_id, dataset_id, name, content),
+            (
+                chunk_id,
+                document_id,
+                dataset_id,
+                morph.tokenize_for_index(name or ""),
+                morph.tokenize_for_index(content or ""),
+            ),
         )
 
 
 def fts_search(conn: sqlite3.Connection, query: str, dataset_ids: list[str], limit: int, metadata_condition: dict | None = None) -> list[dict]:
     if not dataset_ids:
+        return []
+    match_expr = morph.tokenize_for_query(query)
+    if not match_expr:
         return []
     placeholders = ",".join("?" * len(dataset_ids))
     rows = conn.execute(
@@ -222,7 +251,7 @@ def fts_search(conn: sqlite3.Connection, query: str, dataset_ids: list[str], lim
         WHERE chunk_fts MATCH ? AND c.dataset_id IN ({placeholders})
         ORDER BY score LIMIT ?
         """,
-        [query, *dataset_ids, limit],
+        [match_expr, *dataset_ids, limit],
     ).fetchall()
     cols = ["chunk_id", "document_id", "dataset_id", "document_name", "position", "content", "score", "snippet"]
     return _filter_metadata([dict(zip(cols, row)) for row in rows], metadata_condition)

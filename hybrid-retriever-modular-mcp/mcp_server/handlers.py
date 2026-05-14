@@ -10,6 +10,7 @@ from scripts.config import load_config
 from scripts import ingest as local_ingest
 from scripts import search as local_search
 from scripts import storage
+from scripts import graph as local_graph
 
 from . import bootstrap
 from .protocol import text_result
@@ -347,6 +348,36 @@ def tool_health(_args: dict) -> dict:
     })
 
 
+def tool_graph_query(args: dict) -> dict:
+    cypher = _require_str(args, "cypher")
+    if not cypher:
+        return text_result("cypher is required", is_error=True)
+    params = args.get("params") or {}
+    if not isinstance(params, dict):
+        return text_result("params must be an object", is_error=True)
+    limit = int(args.get("limit") or 50)
+    cfg = load_config()
+    try:
+        with silenced_stdout():
+            gconn = local_graph.open_graph(cfg)
+            result = local_graph.run_query(gconn, cypher, params, limit=limit)
+    except Exception as exc:
+        return text_result(f"graph_query failed: {exc}", is_error=True)
+    return text_result(result)
+
+
+def tool_graph_rebuild(_args: dict) -> dict:
+    cfg = load_config()
+    try:
+        with silenced_stdout():
+            with storage.sqlite_session(cfg) as sconn:
+                gconn = local_graph.open_graph(cfg)
+                counts = local_graph.rebuild_from_sqlite(gconn, sconn)
+    except Exception as exc:
+        return text_result(f"graph_rebuild failed: {exc}", is_error=True)
+    return text_result({"status": "ok", **counts})
+
+
 HANDLERS = {
     "search": tool_search,
     "list_datasets": tool_list_datasets,
@@ -362,4 +393,6 @@ HANDLERS = {
     "delete_document": tool_delete_document,
     "list_pipelines": tool_list_pipelines,
     "health": tool_health,
+    "graph_query": tool_graph_query,
+    "graph_rebuild": tool_graph_rebuild,
 }

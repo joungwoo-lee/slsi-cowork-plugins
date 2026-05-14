@@ -16,7 +16,7 @@
 ### 검색 / 읽기
 | 이름 | 용도 | 핵심 인자 |
 |---|---|---|
-| `search` | 하이브리드 검색 (FTS5 trigram 토크나이저 / 한국어 부분일치 + Qdrant) | `query`, `mode` (`hybrid`/`keyword`/`semantic`), `top` |
+| `search` | 하이브리드 검색 (FTS5 unicode61 + kiwipiepy 형태소, 한국어 2글자 매치 + Qdrant) | `query`, `mode` (`hybrid`/`keyword`/`semantic`), `top` |
 | `list_mails` | 최신순 메일 목록 (sender/subject substring 필터, 페이지네이션) | `sender_like`, `subject_like`, `limit`, `offset` |
 | `read_mail` | 메일의 통합 마크다운(`body.md`) 본문 | `mail_id` |
 | `read_meta` | 메일 헤더(`meta.json`) — body.md 보다 가벼움 | `mail_id` |
@@ -34,6 +34,12 @@
 | 이름 | 용도 | 핵심 인자 |
 |---|---|---|
 | `doctor` | Python/deps/.env/PST_PATH/임베딩 API 도달성 검사 | `skip_api`, `skip_pst` |
+
+### 그래프 (Kùzu embedded, 도커 불필요)
+| 이름 | 용도 | 핵심 인자 |
+|---|---|---|
+| `graph_rebuild` | mail_metadata에서 Mail/Person 노드 + SENT/RECEIVED 엣지 재구축 | — |
+| `graph_query` | 읽기 전용 Cypher 쿼리 (예: `MATCH (p:Person)-[:SENT]->(m:Mail) RETURN p.address, COUNT(m)`) | `cypher`, `params`, `limit` |
 
 > `convert` / `index` / `ingest` 는 PST 전체를 돌리면 분~시간 단위라 MCP 클라이언트가 타임아웃됨. **`limit`이 필수**이며, 풀 인덱싱은 `email-mcp` CLI(`py -3.9 scripts\ingest.py`)로 돌리고 MCP는 추가 배치/검수 용으로 사용한다. `index`는 `mail_ids`로 일부만 재인덱싱 가능.
 

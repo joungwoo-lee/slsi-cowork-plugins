@@ -1,4 +1,10 @@
-"""SQLite (metadata + FTS5) and Qdrant (local) storage layer."""
+"""SQLite (metadata + FTS5) and Qdrant (local) storage layer.
+
+FTS5 uses the plain `unicode61` tokenizer but indexed text and queries are
+pre-tokenized into Korean morphemes via kiwipiepy (see `morph.py`). The
+result is a Lucene-flavoured BM25 over morphemes which matches Korean
+substrings like "메일" / "보고서" without trigram fanout.
+"""
 from __future__ import annotations
 
 import sqlite3
@@ -10,6 +16,10 @@ from qdrant_client import QdrantClient
 from qdrant_client.http import models as qm
 
 from .config import Config
+from . import morph
+
+# 0 = legacy unicode61, 1 = trigram, 2 = unicode61 + morph (current).
+INDEX_SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS mail_metadata (
@@ -29,7 +39,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS mail_fts USING fts5(
     subject,
     sender,
     content,
-    tokenize='trigram'
+    tokenize='unicode61'
 );
 """
 
@@ -44,15 +54,12 @@ def open_sqlite(cfg: Config) -> sqlite3.Connection:
 
 
 def _migrate_fts_tokenizer(conn: sqlite3.Connection) -> None:
-    # Rebuild mail_fts with the trigram tokenizer so Korean substring queries
-    # match (unicode61 splits only on whitespace/punctuation, leaving Korean
-    # eojeol tokens un-matchable by their stem).
-    row = conn.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='mail_fts'"
-    ).fetchone()
-    if not row or "trigram" in (row[0] or "").lower():
+    # Rebuild mail_fts so it stores kiwipiepy-tokenized Korean morphemes
+    # under the plain unicode61 tokenizer.
+    current = conn.execute("PRAGMA user_version").fetchone()[0]
+    if current >= INDEX_SCHEMA_VERSION:
         return
-    conn.execute("DROP TABLE mail_fts")
+    conn.execute("DROP TABLE IF EXISTS mail_fts")
     conn.executescript(
         """
         CREATE VIRTUAL TABLE mail_fts USING fts5(
@@ -60,7 +67,7 @@ def _migrate_fts_tokenizer(conn: sqlite3.Connection) -> None:
             subject,
             sender,
             content,
-            tokenize='trigram'
+            tokenize='unicode61'
         );
         """
     )
@@ -76,8 +83,14 @@ def _migrate_fts_tokenizer(conn: sqlite3.Connection) -> None:
                 content = ""
         conn.execute(
             "INSERT INTO mail_fts(mail_id, subject, sender, content) VALUES (?, ?, ?, ?)",
-            (mail_id, subject or "", sender or "", content),
+            (
+                mail_id,
+                morph.tokenize_for_index(subject or ""),
+                morph.tokenize_for_index(sender or ""),
+                morph.tokenize_for_index(content),
+            ),
         )
+    conn.execute(f"PRAGMA user_version = {INDEX_SCHEMA_VERSION}")
 
 
 @contextmanager
@@ -123,7 +136,12 @@ def upsert_metadata(
     conn.execute("DELETE FROM mail_fts WHERE mail_id = ?", (mail_id,))
     conn.execute(
         "INSERT INTO mail_fts (mail_id, subject, sender, content) VALUES (?, ?, ?, ?)",
-        (mail_id, subject or "", sender or "", content or ""),
+        (
+            mail_id,
+            morph.tokenize_for_index(subject or ""),
+            morph.tokenize_for_index(sender or ""),
+            morph.tokenize_for_index(content or ""),
+        ),
     )
 
 
@@ -168,6 +186,9 @@ def fts_search(
     candidate_mail_ids: list[str] | None = None,
 ) -> list[dict]:
     """Return [{mail_id, score, snippet, subject, sender, received, body_path}, ...]."""
+    match_expr = morph.tokenize_for_query(query)
+    if not match_expr:
+        return []
     sql = """
         SELECT m.mail_id, m.subject, m.sender, m.received, m.body_path,
                bm25(mail_fts) AS score,
@@ -175,7 +196,7 @@ def fts_search(
         FROM mail_fts
         JOIN mail_metadata m ON m.mail_id = mail_fts.mail_id
     """
-    params: list[object] = [query]
+    params: list[object] = [match_expr]
     where = ["mail_fts MATCH ?"]
     if candidate_mail_ids is not None:
         if not candidate_mail_ids:

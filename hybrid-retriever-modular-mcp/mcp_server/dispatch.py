@@ -60,6 +60,8 @@ REQUIRED_DEPS = (
     "chardet",
     "urllib3",
     "win32api",
+    "kiwipiepy",
+    "kuzu",
 )
 
 _BOOT_DOCTOR_OK = False

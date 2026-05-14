@@ -215,4 +215,33 @@ TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+    # --- Graph (Kùzu embedded) -------------------------------------------
+    {
+        "name": "graph_query",
+        "description": (
+            "Run a read-only Cypher query against the embedded Kùzu property graph "
+            "of mails and people. Schema: Mail(id,subject,received,folder_path), "
+            "Person(address); edges (Person)-[:SENT]->(Mail), "
+            "(Person)-[:RECEIVED]->(Mail). Use for relationship questions BM25/"
+            "vector search cannot answer (e.g. all mails from one sender, "
+            "co-recipient graphs). Call graph_rebuild first if the graph is stale."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "cypher": {"type": "string", "description": "Read-only Cypher (no CREATE/DELETE/MERGE/SET/DROP/ALTER)."},
+                "params": {"type": "object", "description": "Optional named parameters referenced by $name in cypher."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 50},
+            },
+            "required": ["cypher"],
+        },
+    },
+    {
+        "name": "graph_rebuild",
+        "description": (
+            "Wipe and re-populate the embedded Kùzu graph from mail_metadata. "
+            "Idempotent. Returns {mails, people, edges}."
+        ),
+        "inputSchema": {"type": "object", "properties": {}},
+    },
 ]

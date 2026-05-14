@@ -47,6 +47,8 @@ DEPS = [
     ("qdrant_client", "qdrant-client"),
     ("requests", "requests"),
     ("dotenv", "python-dotenv"),
+    ("kiwipiepy", "kiwipiepy"),
+    ("kuzu", "kuzu"),
 ]
 
 

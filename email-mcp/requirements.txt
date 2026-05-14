@@ -22,6 +22,11 @@ python-pptx>=0.6.21     # .pptx attachments (pure Python)
 qdrant-client==1.7.0
 requests>=2.31.0
 
+# Korean morpheme tokenization for FTS5 keyword search.
+kiwipiepy>=0.17.0
+# Embedded property-graph DB (Cypher) used by the graph_query tool.
+kuzu>=0.4.0
+
 # Config from .env (matches retriever_engine project's variable scheme)
 python-dotenv>=1.0.0
 

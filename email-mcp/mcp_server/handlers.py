@@ -22,6 +22,7 @@ from scripts.config import load_config  # email-connector (sys.path injected by 
 from scripts import doctor as ec_doctor
 from scripts import search as ec_search
 from scripts import storage as ec_storage
+from scripts import graph as ec_graph
 
 from .protocol import text_result
 from .runtime import resolve_env_path, silenced_stdout
@@ -370,6 +371,38 @@ def tool_doctor(args: dict) -> dict:
     return text_result({"all_ok": all_ok, "checks": results})
 
 
+def tool_graph_query(args: dict) -> dict:
+    cypher = args.get("cypher")
+    if not isinstance(cypher, str) or not cypher.strip():
+        return text_result("cypher is required", is_error=True)
+    params = args.get("params") or {}
+    if not isinstance(params, dict):
+        return text_result("params must be an object", is_error=True)
+    limit = int(args.get("limit") or 50)
+    env_path = Path(resolve_env_path())
+    cfg = load_config(env_path) if env_path.exists() else load_config()
+    try:
+        with silenced_stdout():
+            gconn = ec_graph.open_graph(cfg)
+            result = ec_graph.run_query(gconn, cypher, params, limit=limit)
+    except Exception as exc:
+        return text_result(f"graph_query failed: {exc}", is_error=True)
+    return text_result(result)
+
+
+def tool_graph_rebuild(_args: dict) -> dict:
+    env_path = Path(resolve_env_path())
+    cfg = load_config(env_path) if env_path.exists() else load_config()
+    try:
+        with silenced_stdout():
+            with ec_storage.sqlite_session(cfg) as sconn:
+                gconn = ec_graph.open_graph(cfg)
+                counts = ec_graph.rebuild_from_sqlite(gconn, sconn)
+    except Exception as exc:
+        return text_result(f"graph_rebuild failed: {exc}", is_error=True)
+    return text_result({"status": "ok", **counts})
+
+
 # ---------------------------------------------------------------------------
 # Registry consumed by dispatch.handle_tools_call
 # ---------------------------------------------------------------------------
@@ -384,4 +417,6 @@ HANDLERS = {
     "index": tool_index,
     "ingest": tool_ingest,
     "doctor": tool_doctor,
+    "graph_query": tool_graph_query,
+    "graph_rebuild": tool_graph_rebuild,
 }

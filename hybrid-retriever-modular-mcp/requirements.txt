@@ -5,6 +5,10 @@ pypdf>=4.0.0
 python-docx>=1.1.0
 openpyxl>=3.1.0
 chardet>=5.2.0
+# Korean morpheme tokenization for FTS5 keyword search.
+kiwipiepy>=0.17.0
+# Embedded property-graph DB (Cypher) used by the graph_query tool.
+kuzu>=0.4.0
 # Used directly by scripts/embedding_client.py for InsecureRequestWarning.
 # Normally pulled transitively by `requests`; listed for explicitness.
 urllib3>=1.26.0
