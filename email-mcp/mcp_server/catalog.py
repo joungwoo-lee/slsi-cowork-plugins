@@ -66,7 +66,9 @@ TOOLS: list[dict[str, Any]] = [
             "Use this when the user wants to browse or enumerate emails rather than search by "
             "topic, such as 'show recent mails', 'list mails from Alice', or 'browse messages "
             "with this subject'. Lists indexed mails from the SQLite metadata table, newest "
-            "first. Supports substring filters on sender / subject and offset-based pagination."
+            "first. Supports substring filters on sender / subject and offset-based pagination. "
+            "Call the exact tool name `list_mails` (some clients may expose the namespaced form "
+            "`email_mcp_list_mails`), and never insert whitespace inside the tool name."
         ),
         "inputSchema": {
             "type": "object",

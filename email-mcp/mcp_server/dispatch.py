@@ -31,6 +31,22 @@ SUPPORTED_PROTOCOL_VERSIONS = ("2025-06-18", "2025-03-26", "2024-11-05")
 LATEST_PROTOCOL_VERSION = "2025-06-18"
 
 
+def canonical_tool_name(name: Any) -> str:
+    """Normalise client-side tool-name variants to the server's catalog names.
+
+    Some MCP clients expose tools as `<server>_<tool>` and LLMs occasionally
+    echo a wrapped name with stray whitespace, e.g. `email_mcp_list_ mails`.
+    Accept those forms by removing whitespace first, then stripping the known
+    namespace prefix.
+    """
+    if not isinstance(name, str):
+        return ""
+    canonical = "".join(name.split())
+    if canonical.startswith("email_mcp_"):
+        canonical = canonical[len("email_mcp_"):]
+    return canonical
+
+
 # ---------------------------------------------------------------------------
 # MCP method handlers
 # ---------------------------------------------------------------------------
@@ -190,7 +206,8 @@ def handle_tools_call(params: dict) -> dict:
         log(traceback.format_exc())
         return text_result(f"Failed to load tools: {e}\n{traceback.format_exc()}", is_error=True)
 
-    handler = HANDLERS.get(name)
+    canonical_name = canonical_tool_name(name)
+    handler = HANDLERS.get(canonical_name)
     if handler is None:
         return text_result(f"Unknown tool: {name}", is_error=True)
     try:
@@ -199,7 +216,7 @@ def handle_tools_call(params: dict) -> dict:
         # Don't swallow ??let bootstrap-style asserts terminate the server.
         raise
     except Exception as exc:
-        log(f"tool {name} failed: {exc}")
+        log(f"tool {canonical_name or name} failed: {exc}")
         log(traceback.format_exc())
         return text_result(f"{type(exc).__name__}: {exc}", is_error=True)
 
