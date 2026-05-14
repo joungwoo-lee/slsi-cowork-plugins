@@ -50,65 +50,100 @@ def handle_tools_list(params: dict) -> dict:
     return {"tools": TOOLS}
 
 
-def auto_install_check() -> Optional[dict]:
-    """Check if Python 3.9 is used and dependencies are installed.
-    Auto-installs dependencies or returns an error message if Python 3.9 is missing.
-    Returns a tool-result dict (error) if installation fails or Python is wrong,
-    otherwise None.
+# Required runtime dependencies (import-name as visible to Python).
+# Kept in sync with requirements.txt. find_spec checks existence without
+# importing, so a missing package here does not partially load anything.
+REQUIRED_DEPS = (
+    "pypff",
+    "markdownify",
+    "striprtf",
+    "fitz",
+    "docx",
+    "openpyxl",
+    "pptx",
+    "qdrant_client",
+    "requests",
+    "dotenv",
+)
+
+
+def boot_doctor() -> Optional[str]:
+    """Verify Python version and required dependencies at server startup.
+
+    Returns None when the environment is ready. Returns a human-readable
+    error string when something is wrong and cannot be auto-fixed.
+
+    Missing packages trigger one attempt at install.ps1 -SkipClaudeConfig,
+    followed by re-verification. importlib.util.find_spec is used instead
+    of `import` to avoid partial-module side effects during the probe.
     """
+    import importlib
+    import importlib.util
+
     if sys.version_info[:2] != (3, 9):
-        msg = (
-            "email-mcp requires Python 3.9 (64-bit).\n\n"
-            "Please download and install Python 3.9.13 from:\n"
-            "https://www.python.org/ftp/python/3.9.13/python-3.9.13-amd64.exe\n\n"
-            "Make sure to check 'Add Python 3.9 to PATH' during installation."
+        return (
+            f"email-mcp requires Python 3.9 (64-bit), got "
+            f"{sys.version.split()[0]} at {sys.executable}.\n"
+            "Install Python 3.9.13 from "
+            "https://www.python.org/ftp/python/3.9.13/python-3.9.13-amd64.exe"
         )
-        return text_result(msg, is_error=True)
-    
+
+    def find_missing() -> list[str]:
+        return [pkg for pkg in REQUIRED_DEPS if importlib.util.find_spec(pkg) is None]
+
+    pending = find_missing()
+    if not pending:
+        return None
+
+    log(f"boot doctor: missing dependencies {pending}; running install.ps1 ...")
+    import subprocess
+    from .bootstrap import ROOT_PATH
+
+    script_path = ROOT_PATH / "install.ps1"
+    if not script_path.exists():
+        return (
+            f"missing dependencies {pending} and install.ps1 not found at "
+            f"{script_path}. Install manually: py -3.9 -m pip install -r "
+            f"{ROOT_PATH / 'requirements.txt'}"
+        )
+
+    cmd = [
+        "powershell.exe", "-NoProfile",
+        "-ExecutionPolicy", "Bypass",
+        "-File", str(script_path),
+        "-SkipClaudeConfig",
+    ]
     try:
-        import pypff, qdrant_client, markdownify, dotenv
-        from scripts.config import load_config
-    except ImportError:
-        import subprocess
-        from .bootstrap import ROOT_PATH
-        
-        log("Dependencies missing. Auto-running install.ps1 ...")
-        script_path = ROOT_PATH / "install.ps1"
-        cmd = [
-            "powershell.exe",
-            "-NoProfile",
-            "-ExecutionPolicy", "Bypass",
-            "-File", str(script_path),
-            "-SkipClaudeConfig"
-        ]
-        
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            if result.returncode != 0:
-                msg = f"Auto-installation of dependencies failed.\n\nSTDOUT:\n{result.stdout}\n\nSTDERR:\n{result.stderr}"
-                return text_result(msg, is_error=True)
-        except Exception as e:
-            return text_result(f"Failed to execute installation script: {e}", is_error=True)
-            
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+    except Exception as exc:  # noqa: BLE001
+        return f"install.ps1 execution failed: {exc}"
+    if result.returncode != 0:
+        return (
+            f"install.ps1 exited with code {result.returncode}.\n"
+            f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+        )
+
+    importlib.invalidate_caches()
+    pending = find_missing()
+    if pending:
+        return (
+            f"install.ps1 reported success but these packages are still "
+            f"missing after invalidate_caches: {pending}"
+        )
+    log("boot doctor: dependencies installed and verified")
     return None
 
 
 def handle_tools_call(params: dict) -> dict:
     name = params.get("name", "")
     arguments = params.get("arguments") or {}
-    
-    # 1. Run automatic dependency check / install
-    err_resp = auto_install_check()
-    if err_resp:
-        return err_resp
 
-    # 2. Only import HANDLERS after dependencies are guaranteed
     try:
         from .handlers import HANDLERS
     except Exception as e:
         log(f"Failed to load tools: {e}")
         log(traceback.format_exc())
-        return text_result(f"Failed to load tools after installation: {e}\n{traceback.format_exc()}", is_error=True)
+        return text_result(f"Failed to load tools: {e}\n{traceback.format_exc()}", is_error=True)
 
     handler = HANDLERS.get(name)
     if handler is None:
@@ -165,6 +200,13 @@ def main() -> int:
     from .bootstrap import ROOT_PATH
 
     log(f"starting {SERVER_NAME} v{SERVER_VERSION} (email-mcp root at {ROOT_PATH})")
+
+    err = boot_doctor()
+    if err:
+        log(f"boot doctor failed: {err}")
+        print(f"[email-mcp boot error]\n{err}", file=sys.stderr, flush=True)
+        return 1
+
     for line in sys.stdin:
         line = line.strip()
         if not line:
