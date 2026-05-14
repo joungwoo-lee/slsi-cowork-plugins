@@ -67,6 +67,8 @@ REQUIRED_DEPS = (
     "urllib3",
 )
 
+_BOOT_DOCTOR_OK = False
+
 
 def boot_doctor() -> Optional[str]:
     """Verify Python version and required dependencies at server startup.
@@ -135,9 +137,25 @@ def boot_doctor() -> Optional[str]:
     return None
 
 
+def ensure_boot_ready() -> Optional[str]:
+    """Run dependency repair once, but only after MCP has initialized."""
+    global _BOOT_DOCTOR_OK
+    if _BOOT_DOCTOR_OK:
+        return None
+    err = boot_doctor()
+    if err is None:
+        _BOOT_DOCTOR_OK = True
+    return err
+
+
 def handle_tools_call(params: dict) -> dict:
     name = params.get("name", "")
     arguments = params.get("arguments") or {}
+
+    err = ensure_boot_ready()
+    if err:
+        log(f"boot doctor failed: {err}")
+        return text_result(f"Dependency setup failed:\n{err}", is_error=True)
 
     try:
         from .handlers import HANDLERS
@@ -201,12 +219,6 @@ def main() -> int:
     from .bootstrap import ROOT_PATH
 
     log(f"starting {SERVER_NAME} v{SERVER_VERSION} (email-mcp root at {ROOT_PATH})")
-
-    err = boot_doctor()
-    if err:
-        log(f"boot doctor failed: {err}")
-        print(f"[email-mcp boot error]\n{err}", file=sys.stderr, flush=True)
-        return 1
 
     for line in sys.stdin:
         line = line.strip()
