@@ -45,13 +45,15 @@ RETRIEVER_DEFAULT_DATASETS=my_docs
 
 semantic search가 필요하면 임베딩 API 설정도 채웁니다. 비워두면 SQLite FTS5 키워드 검색만 동작합니다.
 
+> **한국어 검색**: FTS5는 `trigram` 토크나이저를 사용합니다. 어절 중간 부분일치(`보고서` → `보고서를`)가 자동으로 매치됩니다. 검색어는 **3글자 이상**이어야 trigram이 만들어지므로 1~2글자 키워드는 매치되지 않을 수 있습니다. 기존 DB는 첫 실행 시 자동으로 재색인됩니다.
+
 ## 이식된 로컬 리트리버 기능
 
 `hybrid_retriever_windows_local`의 Windows-local 핵심 경로를 MCP 내부 구현으로 옮겼습니다.
 
 | 기능 | 상태 |
 |---|---|
-| SQLite FTS5 keyword backend | 지원 |
+| SQLite FTS5 keyword backend (trigram tokenizer, 한국어 부분일치) | 지원 |
 | Qdrant local vector backend | 임베딩 설정 시 지원 |
 | TXT/MD/PDF/DOCX/XLSX reader | 지원 |
 | default chunking | 지원 |

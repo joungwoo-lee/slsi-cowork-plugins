@@ -53,7 +53,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(
     dataset_id UNINDEXED,
     document_name,
     content,
-    tokenize='unicode61'
+    tokenize='trigram'
 );
 """
 
@@ -84,6 +84,38 @@ def _migrate(conn: sqlite3.Connection) -> None:
     }.items():
         if name not in existing:
             conn.execute(f"ALTER TABLE chunks ADD COLUMN {name} {ddl}")
+    _migrate_fts_tokenizer(conn)
+
+
+def _migrate_fts_tokenizer(conn: sqlite3.Connection) -> None:
+    # Rebuild chunk_fts with the trigram tokenizer so Korean substring queries
+    # match (unicode61 only splits on whitespace/punctuation, leaving Korean
+    # eojeol tokens like "보고서를" un-matchable by "보고서").
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='chunk_fts'"
+    ).fetchone()
+    if not row or "trigram" in (row[0] or "").lower():
+        return
+    conn.execute("DROP TABLE chunk_fts")
+    conn.executescript(
+        """
+        CREATE VIRTUAL TABLE chunk_fts USING fts5(
+            chunk_id UNINDEXED,
+            document_id UNINDEXED,
+            dataset_id UNINDEXED,
+            document_name,
+            content,
+            tokenize='trigram'
+        );
+        """
+    )
+    conn.execute(
+        """
+        INSERT INTO chunk_fts(chunk_id, document_id, dataset_id, document_name, content)
+        SELECT c.chunk_id, c.document_id, c.dataset_id, d.name, c.content
+        FROM chunks c JOIN documents d ON d.document_id = c.document_id
+        """
+    )
 
 
 @contextmanager

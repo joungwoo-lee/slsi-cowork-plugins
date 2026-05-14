@@ -29,7 +29,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS mail_fts USING fts5(
     subject,
     sender,
     content,
-    tokenize='unicode61'
+    tokenize='trigram'
 );
 """
 
@@ -38,8 +38,46 @@ def open_sqlite(cfg: Config) -> sqlite3.Connection:
     cfg.ensure_dirs()
     conn = sqlite3.connect(cfg.db_path)
     conn.executescript(SCHEMA)
+    _migrate_fts_tokenizer(conn)
     conn.commit()
     return conn
+
+
+def _migrate_fts_tokenizer(conn: sqlite3.Connection) -> None:
+    # Rebuild mail_fts with the trigram tokenizer so Korean substring queries
+    # match (unicode61 splits only on whitespace/punctuation, leaving Korean
+    # eojeol tokens un-matchable by their stem).
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='mail_fts'"
+    ).fetchone()
+    if not row or "trigram" in (row[0] or "").lower():
+        return
+    conn.execute("DROP TABLE mail_fts")
+    conn.executescript(
+        """
+        CREATE VIRTUAL TABLE mail_fts USING fts5(
+            mail_id UNINDEXED,
+            subject,
+            sender,
+            content,
+            tokenize='trigram'
+        );
+        """
+    )
+    rows = conn.execute(
+        "SELECT mail_id, subject, sender, body_path FROM mail_metadata"
+    ).fetchall()
+    for mail_id, subject, sender, body_path in rows:
+        content = ""
+        if body_path:
+            try:
+                content = Path(body_path).read_text(encoding="utf-8", errors="replace")
+            except Exception:
+                content = ""
+        conn.execute(
+            "INSERT INTO mail_fts(mail_id, subject, sender, content) VALUES (?, ?, ?, ?)",
+            (mail_id, subject or "", sender or "", content),
+        )
 
 
 @contextmanager

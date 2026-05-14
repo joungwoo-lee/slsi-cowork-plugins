@@ -16,7 +16,7 @@
 ### 검색 / 읽기
 | 이름 | 용도 | 핵심 인자 |
 |---|---|---|
-| `search` | 하이브리드 검색 (FTS5 + Qdrant) | `query`, `mode` (`hybrid`/`keyword`/`semantic`), `top` |
+| `search` | 하이브리드 검색 (FTS5 trigram 토크나이저 / 한국어 부분일치 + Qdrant) | `query`, `mode` (`hybrid`/`keyword`/`semantic`), `top` |
 | `list_mails` | 최신순 메일 목록 (sender/subject substring 필터, 페이지네이션) | `sender_like`, `subject_like`, `limit`, `offset` |
 | `read_mail` | 메일의 통합 마크다운(`body.md`) 본문 | `mail_id` |
 | `read_meta` | 메일 헤더(`meta.json`) — body.md 보다 가벼움 | `mail_id` |
