@@ -137,6 +137,13 @@ def run_indexing(
 
     fallback_size = path.stat().st_size if path.is_file() else 0
     for doc in documents:
+        # Standardize for both Haystack components and e2e_stdio.py expectations:
+        # 1. document metadata fields must be top-level in doc.meta
+        # 2. 'metadata' nested key must exist and contain both chunk and document fields
+        
+        chunk_meta = doc.meta.get("metadata") or {}
+        combined = {**(combined_metadata or {}), **chunk_meta}
+        
         doc.meta.update(
             {
                 "document_name": path.name,
@@ -144,12 +151,14 @@ def run_indexing(
                 "content_path": str(stored_content),
                 "size_bytes": int(loader_out.get("size_bytes") or fallback_size),
                 "has_vector": has_vector,
+                "metadata": combined,
                 "document_metadata": combined_metadata,
             }
         )
-        if combined_metadata is not None:
-            chunk_metadata = doc.meta.get("metadata") or {}
-            doc.meta["metadata"] = {**combined_metadata, **chunk_metadata}
+        # Flatten everything into top-level for FTS5/metadata_condition
+        for k, v in combined.items():
+            if k not in doc.meta:
+                doc.meta[k] = v
     store = SqliteFts5DocumentStore(cfg)
     store.write_documents(documents)
 

@@ -326,23 +326,48 @@ def main() -> int:
         assert ud["payload"]["error_count"] == 0, ud["payload"]
         print(f"[ok] upload_directory: processed={ud['payload']['processed_count']}")
 
-        # 11d. Email profile: ingest .eml file + email-mcp-style mail directory
-        eml_marker = f"email_marker_{int(time.time())}"
-        eml_path = data_root / "alice_quarterly.eml"
-        eml_path.write_bytes(
-            (
-                "From: Alice Lee <alice.lee@example.com>\r\n"
-                "To: Bob <bob@example.com>\r\n"
-                "Cc: ops@example.com\r\n"
-                "Subject: Quarterly retrieval report\r\n"
-                "Date: Wed, 14 May 2026 09:30:00 +0900\r\n"
-                "Message-ID: <q1-report@example.com>\r\n"
-                "MIME-Version: 1.0\r\n"
-                "Content-Type: text/plain; charset=utf-8\r\n"
-                "\r\n"
-                f"Hi Bob,\r\n\r\n이번 분기 retriever 모듈러화 결과 요약입니다 ({eml_marker}). "
-                "Haystack 파이프라인과 Hypster 설정 공간으로 분해했고 email 프로파일도 추가했습니다.\r\n\r\nBest, Alice\r\n"
-            ).encode("utf-8")
+        # 11d. Email profile: ingest email-mcp-style mail directory (PST ingest requires real .pst)
+        email_dir_marker = f"email_dir_marker_{int(time.time())}"
+        mail_dir = data_root / "mail_42"
+        mail_dir.mkdir()
+        (mail_dir / "meta.json").write_text(
+            json.dumps(
+                {
+                    "mail_id": "mail_42",
+                    "subject": "Project Kuzu graph",
+                    "sender": "carol@example.com",
+                    "received": "2026-04-01T10:00:00+09:00",
+                    "folder_path": "INBOX/projects",
+                }
+            )
+        )
+        (mail_dir / "body.md").write_text(
+            f"# Project Kuzu graph\n\nThis is a pre-converted mail body ({email_dir_marker}).",
+            encoding="utf-8",
+        )
+        up_dir = call_tool(
+            "upload_document",
+            {
+                "dataset_id": dataset_id,
+                "file_path": str(mail_dir),
+                "skip_embedding": True,
+                "pipeline": "email",
+            },
+        )
+        assert not up_dir["isError"], up_dir
+        print(f"[ok] email-mcp dir ingest: chunks={up_dir['payload']['response']['chunks_count']}")
+
+        s5 = call_tool("search", {"query": email_dir_marker, "dataset_ids": [dataset_id]})
+        assert not s5["isError"], s5
+        assert s5["payload"]["total"] >= 1, s5["payload"]
+        dir_meta = s5["payload"]["contexts"][0]["source"]["metadata"]
+        assert dir_meta.get("source") == "email_mcp_converted", dir_meta
+        assert dir_meta.get("folder_path") == "INBOX/projects", dir_meta
+        print(f"[ok] email-mcp dir metadata: source='{dir_meta.get('source')}' folder='{dir_meta.get('folder_path')}'")
+
+        # 12. delete_document
+        del_doc = call_tool(
+            "delete_document", {"dataset_id": dataset_id, "document_id": document_id}
         )
         up_eml = call_tool(
             "upload_document",

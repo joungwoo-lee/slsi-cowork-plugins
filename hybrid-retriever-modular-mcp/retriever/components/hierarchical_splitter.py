@@ -56,11 +56,22 @@ class HierarchicalSplitter:
             doc_name = input_doc.meta.get("document_name") or document_name
             doc_meta_base = input_doc.meta.get("metadata") or metadata or {}
             
+            # If metadata key is missing but doc has other meta fields, use them
+            if not doc_meta_base and input_doc.meta:
+                doc_meta_base = {k: v for k, v in input_doc.meta.items() if k != "metadata"}
+            
+            # Ensure doc_meta_base is ALWAYS a dict
+            if doc_meta_base is None:
+                doc_meta_base = {}
+
             records = _make_records(input_doc.content or "", self._cfg, use_hierarchical)
             if not records: continue
             
             for pos, rec in enumerate(records):
                 chunk_id = f"{doc_id}:{pos}"
+                # e2e_stdio.py specifically looks for the 'metadata' key in search result contexts.
+                # Document.meta is what gets returned as the context's source fields.
+                chunk_meta = doc_meta_base or {}
                 doc_meta = {
                     "dataset_id": dataset_id,
                     "document_id": doc_id,
@@ -72,8 +83,13 @@ class HierarchicalSplitter:
                     "child_id": rec["child_id"],
                     "is_hierarchical": rec["is_hierarchical"],
                     "is_contextual": rec["is_contextual"],
-                    "metadata": doc_meta_base,
+                    "metadata": chunk_meta, # Nested key for compatibility
                 }
+                # Flatten metadata fields into top-level as well
+                for k, v in chunk_meta.items():
+                    if k not in doc_meta:
+                        doc_meta[k] = v
+                
                 all_docs.append(Document(id=chunk_id, content=rec["child_content"], meta=doc_meta))
             
             total_chunks += len(records)

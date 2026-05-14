@@ -166,12 +166,10 @@ def _register_email_profile() -> None:
         PipelineProfile(
             name="email",
             description=(
-                "Email ingestion pipeline. Accepts a single .eml file (parsed via "
-                "stdlib email) or an email-mcp Phase-1 mail directory containing "
-                "meta.json + body.md + attachments/. Headers (subject, sender, "
-                "recipients, received, folder_path) are folded into Document "
-                "metadata so search can filter via metadata_condition. Retrieval "
-                "uses the default hybrid pipeline."
+                "Email ingestion pipeline. Extracts messages from a .pst file (via Python 3.9 "
+                "worker) and converts body + attachments to Markdown. Headers (subject, sender, "
+                "recipients, received, folder_path) are folded into Document metadata so search "
+                "can filter via metadata_condition. Retrieval uses the default hybrid pipeline."
             ),
             indexing_overrides={
                 # Emails are short relative to chunk_chars defaults; keep flat

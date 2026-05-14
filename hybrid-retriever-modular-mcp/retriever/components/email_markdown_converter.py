@@ -66,13 +66,7 @@ class EmailMarkdownConverter:
                 if k not in email_meta and k not in ("body_html", "body_plain", "attachments"):
                     email_meta[k] = v
 
-            doc = Document(
-                content=unified,
-                meta={
-                    "metadata": email_meta
-                }
-            )
-            docs.append(doc)
+            docs.append(Document(content=unified, meta=email_meta))
         return {"documents": docs}
 
     def _body_to_markdown(self, html: str, plain: str) -> str:

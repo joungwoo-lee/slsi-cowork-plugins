@@ -31,12 +31,10 @@ class EmailSourceLoader:
 
         if target.suffix.lower() == ".pst" and target.is_file():
             raw_emails = self._load_pst(target)
-        elif target.suffix.lower() == ".eml" and target.is_file():
-            raw_emails = [self._load_eml(target)]
         elif target.is_dir():
             raw_emails = [self._load_converted_dir(target)]
         else:
-            raise FileNotFoundError(f"Unsupported email source: {target}")
+            raise FileNotFoundError(f"Email source must be a .pst file or a converted directory; got: {target}")
 
         return {"raw_emails": raw_emails, "path": str(target)}
 
@@ -52,42 +50,6 @@ class EmailSourceLoader:
             return emails
         except subprocess.CalledProcessError as e:
             raise RuntimeError(f"PST worker failed: {e.stderr}") from e
-
-    def _load_eml(self, path: Path) -> dict[str, Any]:
-        from email.message import EmailMessage
-        msg: EmailMessage = email.message_from_bytes(path.read_bytes(), policy=email.policy.default)
-        
-        # Basic extraction matching pst_worker output shape
-        import base64
-        attachments = []
-        for part in msg.iter_attachments():
-            try:
-                name = part.get_filename() or "attachment"
-                data = part.get_payload(decode=True) or b""
-                attachments.append({
-                    "filename": name,
-                    "data_b64": base64.b64encode(data).decode("ascii"),
-                    "size_bytes": len(data)
-                })
-            except: continue
-
-        return {
-            "subject": str(msg.get("Subject", "")),
-            "sender": str(msg.get("From", "")),
-            "received": str(msg.get("Date", "")),
-            "folder_path": "EML_IMPORT",
-            "body_html": self._get_body(msg, "text/html"),
-            "body_plain": self._get_body(msg, "text/plain"),
-            "attachments": attachments,
-            "mail_id": (msg.get("Message-ID") or path.stem).strip("<>")
-        }
-
-    def _get_body(self, msg, content_type: str) -> str:
-        for part in msg.walk():
-            if part.get_content_type() == content_type:
-                try: return part.get_content()
-                except: pass
-        return ""
 
     def _load_converted_dir(self, path: Path) -> dict[str, Any]:
         """Backward compatibility for already converted email-mcp dirs."""
