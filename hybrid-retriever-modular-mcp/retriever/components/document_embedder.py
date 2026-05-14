@@ -12,6 +12,7 @@ Two thin wrappers preserve the exact retry/throttle/auth behavior of the legacy
 """
 from __future__ import annotations
 
+import dataclasses
 from typing import List
 
 from haystack import Document, component
@@ -41,9 +42,14 @@ class HttpDocumentEmbedder:
         if client is None or not documents:
             return {"documents": documents, "has_vector": False}
         vectors = client.embed([doc.content or "" for doc in documents])
-        for doc, vec in zip(documents, vectors):
-            doc.embedding = vec
-        return {"documents": documents, "has_vector": True}
+        # Replace each Document immutably -- mutating ``embedding`` in place
+        # works but Haystack flags it because the same instance may live in
+        # multiple pipeline frames at once.
+        embedded = [
+            dataclasses.replace(doc, embedding=list(vec))
+            for doc, vec in zip(documents, vectors)
+        ]
+        return {"documents": embedded, "has_vector": True}
 
 
 @component
