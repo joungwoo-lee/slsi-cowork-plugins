@@ -3,9 +3,8 @@
     "retriever_mcp": {
       "type": "local",
       "command": [
-        "py",
-        "-3",
-        "C:\\Users\\joungwoo.lee\\slsi-cowork-plugins\\hybrid-retriever-modular-mcp\\server.py"
+        "python",
+        "C:\\Users\\joung\\slsi-cowork-plugins\\hybrid-retriever-modular-mcp\\server.py"
       ],
       "enabled": true
     }
