@@ -29,19 +29,23 @@ class HybridJoiner:
         self,
         keyword_documents: List[Document],
         semantic_documents: List[Document],
+        graph_documents: List[Document] | None = None,
         fusion: str = "linear",
         vector_weight: float = 0.5,
         rrf_k: int = 60,
         metadata_condition: dict | None = None,
     ) -> dict:
+        graph_documents = graph_documents or []
         kw_rows = _docs_to_rows(keyword_documents, score_key="fts_score")
         sem_rows = _docs_to_rows(semantic_documents, score_key="vector_score")
+        graph_rows = _docs_to_rows(graph_documents, score_key="graph_score")
         kw_scores = _normalize_keyword(kw_rows)
         sem_scores = _normalize_semantic(sem_rows)
-        rrf_scores = _rrf_scores(kw_rows, sem_rows, rrf_k) if fusion == "rrf" else {}
+        graph_scores = _normalize_generic(graph_rows)
+        rrf_scores = _rrf_scores(kw_rows, sem_rows, graph_rows, rrf_k) if fusion == "rrf" else {}
 
         by_id: dict[str, Document] = {}
-        for doc in list(keyword_documents) + list(semantic_documents):
+        for doc in list(keyword_documents) + list(semantic_documents) + list(graph_documents):
             if doc.id not in by_id:
                 by_id[doc.id] = doc
 
@@ -55,14 +59,15 @@ class HybridJoiner:
                 continue
             kw = kw_scores.get(chunk_id, 0.0)
             sem = sem_scores.get(chunk_id, 0.0)
+            graph_score = graph_scores.get(chunk_id, 0.0)
             if fusion == "rrf":
                 score = rrf_scores.get(chunk_id, 0.0)
             else:
-                score = (1.0 - weight) * kw + weight * sem
+                score = (1.0 - weight) * kw + weight * sem + 0.2 * graph_score
             merged_doc = Document(
                 id=doc.id,
                 content=doc.content,
-                meta={**doc.meta, "term_similarity": round(kw, 6), "vector_similarity": round(sem, 6)},
+                meta={**doc.meta, "term_similarity": round(kw, 6), "vector_similarity": round(sem, 6), "graph_similarity": round(graph_score, 6)},
                 score=round(score, 6),
             )
             merged.append(merged_doc)
@@ -95,10 +100,16 @@ def _normalize_semantic(rows: list[dict]) -> dict[str, float]:
     return {r["chunk_id"]: max(0.0, min(1.0, (float(r["score"]) + 1.0) / 2.0)) for r in rows}
 
 
-def _rrf_scores(keyword_rows: list[dict], semantic_rows: list[dict], k: int) -> dict[str, float]:
+def _normalize_generic(rows: list[dict]) -> dict[str, float]:
+    return {r["chunk_id"]: max(0.0, min(1.0, float(r["score"]))) for r in rows}
+
+
+def _rrf_scores(keyword_rows: list[dict], semantic_rows: list[dict], graph_rows: list[dict], k: int) -> dict[str, float]:
     scores: dict[str, float] = {}
     for rank, row in enumerate(keyword_rows, 1):
         scores[row["chunk_id"]] = scores.get(row["chunk_id"], 0.0) + 1.0 / (k + rank)
     for rank, row in enumerate(semantic_rows, 1):
+        scores[row["chunk_id"]] = scores.get(row["chunk_id"], 0.0) + 1.0 / (k + rank)
+    for rank, row in enumerate(graph_rows, 1):
         scores[row["chunk_id"]] = scores.get(row["chunk_id"], 0.0) + 1.0 / (k + rank)
     return scores

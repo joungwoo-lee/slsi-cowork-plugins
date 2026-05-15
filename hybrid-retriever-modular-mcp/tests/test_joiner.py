@@ -24,6 +24,12 @@ def _sem_doc(chunk_id: str, score: float, meta: dict | None = None) -> Document:
     return Document(id=chunk_id, content="sem " + chunk_id, meta=base, score=score)
 
 
+def _graph_doc(chunk_id: str, score: float, meta: dict | None = None) -> Document:
+    base = {"graph_score": score}
+    base.update(meta or {})
+    return Document(id=chunk_id, content="graph " + chunk_id, meta=base, score=score)
+
+
 class HybridJoinerTest(unittest.TestCase):
     def setUp(self) -> None:
         self.j = HybridJoiner()
@@ -77,6 +83,17 @@ class HybridJoinerTest(unittest.TestCase):
             metadata_condition={"dataset_id": "ds2"},
         )
         self.assertEqual([d.id for d in out["documents"]], ["b"])
+
+    def test_rrf_accepts_graph_branch(self) -> None:
+        out = self.j.run(
+            keyword_documents=[_kw_doc("a", -5.0)],
+            semantic_documents=[],
+            graph_documents=[_graph_doc("b", 0.8)],
+            fusion="rrf",
+            rrf_k=60,
+        )
+        self.assertEqual([d.id for d in out["documents"]], ["a", "b"])
+        self.assertEqual(out["documents"][1].meta["graph_similarity"], 0.8)
 
 
 if __name__ == "__main__":

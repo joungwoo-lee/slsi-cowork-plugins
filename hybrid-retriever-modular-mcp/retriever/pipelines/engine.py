@@ -188,7 +188,7 @@ def _inject_retrieval_runtime(pipeline: Pipeline, cfg: Config) -> None:
                 inst.batch_size = emb.batch_size
                 inst.timeout_sec = emb.timeout_sec
                 inst.verify_ssl = emb.verify_ssl
-        if name in ("fts5", "vector") and hasattr(inst, "data_root"):
+        if name in ("fts5", "graph", "vector") and hasattr(inst, "data_root"):
             inst.data_root = str(cfg.data_root)
             if name == "vector" and hasattr(inst, "collection"):
                 inst.collection = cfg.qdrant.collection
@@ -288,7 +288,7 @@ def run_indexing(
     
     # Satisfy mandatory inputs for components NOT in the indexing path to bypass validation
     graph_inputs = pipeline.inputs()
-    for name in ["query_embedder", "fts5", "vector", "joiner", "reranker", "parent"]:
+    for name in ["query_embedder", "fts5", "graph", "vector", "joiner", "reranker", "parent"]:
         if name in graph_inputs:
             needed = graph_inputs[name]
             if name == "query_embedder":
@@ -297,6 +297,11 @@ def run_indexing(
                 if "query" in needed: run_inputs.setdefault(name, {})["query"] = ""
                 if "dataset_ids" in needed: run_inputs.setdefault(name, {})["dataset_ids"] = []
                 if "enabled" in needed: run_inputs.setdefault(name, {})["enabled"] = False
+            elif name == "graph":
+                if "query" in needed: run_inputs.setdefault(name, {})["query"] = ""
+                if "dataset_ids" in needed: run_inputs.setdefault(name, {})["dataset_ids"] = []
+                if "enabled" in needed: run_inputs.setdefault(name, {})["enabled"] = False
+                if "top_k" in needed: run_inputs.setdefault(name, {})["top_k"] = 1
             elif name == "vector":
                 if "embedding" in needed: run_inputs.setdefault(name, {})["embedding"] = []
                 if "dataset_ids" in needed: run_inputs.setdefault(name, {})["dataset_ids"] = []
@@ -304,6 +309,7 @@ def run_indexing(
             elif name == "joiner":
                 if "keyword_documents" in needed: run_inputs.setdefault(name, {})["keyword_documents"] = []
                 if "semantic_documents" in needed: run_inputs.setdefault(name, {})["semantic_documents"] = []
+                if "graph_documents" in needed: run_inputs.setdefault(name, {})["graph_documents"] = []
             elif name == "reranker":
                 if "documents" in needed: run_inputs.setdefault(name, {})["documents"] = []
                 if "query" in needed: run_inputs.setdefault(name, {})["query"] = ""
@@ -385,6 +391,12 @@ def run_retrieval(
             "dataset_ids": dataset_ids,
             "top_k": top_k,
             "enabled": keyword,
+        },
+        "graph": {
+            "query": query,
+            "dataset_ids": dataset_ids,
+            "top_k": top_k,
+            "enabled": True,
         },
         "vector": {"dataset_ids": dataset_ids, "top_k": top_k},
         "joiner": {

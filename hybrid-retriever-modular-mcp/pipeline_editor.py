@@ -200,6 +200,19 @@ CATALOG: list[dict] = [
         "outputs": [{"name": "documents", "type": "List[Document]"}],
     },
     {
+        "name": "GraphChunkRetriever",
+        "cls": "retriever.components.graph_retriever.GraphChunkRetriever",
+        "stage": "retrieve",
+        "params": [{"name": "data_root", "type": "str", "default": ""}],
+        "inputs": [
+            {"name": "query", "type": "str"},
+            {"name": "dataset_ids", "type": "List[str]"},
+            {"name": "top_k", "type": "int"},
+            {"name": "enabled", "type": "bool"},
+        ],
+        "outputs": [{"name": "documents", "type": "List[Document]"}],
+    },
+    {
         "name": "HybridJoiner",
         "cls": "retriever.components.hybrid_joiner.HybridJoiner",
         "stage": "fuse",
@@ -211,6 +224,7 @@ CATALOG: list[dict] = [
         "inputs": [
             {"name": "keyword_documents", "type": "List[Document]"},
             {"name": "semantic_documents", "type": "List[Document]"},
+            {"name": "graph_documents", "type": "List[Document]"},
             {"name": "fusion", "type": "str"},
             {"name": "vector_weight", "type": "float"},
             {"name": "rrf_k", "type": "int"},
@@ -642,6 +656,7 @@ function graphExternalSource(node, comp, portName) {
   if (!comp) return null;
   if (comp.stage === "load" && portName === "path") return "path";
   if (node.name === "fts5" && portName === "query") return "query";
+  if (node.name === "graph" && portName === "query") return "query";
   if (node.name === "query_embedder" && portName === "text") return "query";
   if (node.name === "reranker" && portName === "query") return "query";
   return null;

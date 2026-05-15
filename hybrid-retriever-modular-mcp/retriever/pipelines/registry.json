@@ -49,5 +49,19 @@
       "fusion": "rrf"
     },
     "unified_topology": "rrf_llm_rerank_unified.json"
+  },
+  "rrf_graph_rerank": {
+    "description": "Hybrid retrieval with an added graph-neighbor branch. Pipeline: FTS5 + GraphChunkRetriever + Qdrant -> HybridJoiner(rrf) -> BgeReranker -> ParentChunkReplacer.",
+    "indexing_overrides": {},
+    "retrieval_overrides": {
+      "fusion": "rrf",
+      "use_reranker": true,
+      "reranker_model": "BAAI/bge-reranker-v2-m3",
+      "rerank_top_n": 12
+    },
+    "search_kwargs": {
+      "fusion": "rrf"
+    },
+    "unified_topology": "rrf_graph_rerank_unified.json"
   }
 }
