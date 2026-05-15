@@ -14,6 +14,7 @@ from typing import Iterator
 
 from .config import Config
 from . import morph
+from . import graph
 
 # Bump when the FTS5 build strategy changes so existing DBs are rebuilt on
 # the next open. 0 = legacy unicode61 (no morph), 1 = trigram, 2 = unicode61
@@ -25,7 +26,8 @@ CREATE TABLE IF NOT EXISTS datasets (
     dataset_id  TEXT PRIMARY KEY,
     name        TEXT NOT NULL,
     description TEXT DEFAULT '',
-    created_at  TEXT DEFAULT (datetime('now'))
+    created_at  TEXT DEFAULT (datetime('now')),
+    kuzu_synced INTEGER DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS documents (
@@ -39,6 +41,7 @@ CREATE TABLE IF NOT EXISTS documents (
     has_vector  INTEGER DEFAULT 0,
     metadata_json TEXT DEFAULT '{}',
     created_at  TEXT DEFAULT (datetime('now')),
+    kuzu_synced INTEGER DEFAULT 0,
     FOREIGN KEY(dataset_id) REFERENCES datasets(dataset_id) ON DELETE CASCADE
 );
 
@@ -56,6 +59,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     is_contextual INTEGER DEFAULT 0,
     metadata_json TEXT DEFAULT '{}',
     has_vector  INTEGER DEFAULT 0,
+    kuzu_synced INTEGER DEFAULT 0,
     FOREIGN KEY(document_id) REFERENCES documents(document_id) ON DELETE CASCADE
 );
 
@@ -80,7 +84,8 @@ CREATE TABLE IF NOT EXISTS entities (
     surface     TEXT NOT NULL,
     type        TEXT DEFAULT '',
     mention_count INTEGER DEFAULT 0,
-    created_at  TEXT DEFAULT (datetime('now'))
+    created_at  TEXT DEFAULT (datetime('now')),
+    kuzu_synced INTEGER DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_entities_canonical ON entities(canonical);
 
@@ -102,6 +107,7 @@ CREATE TABLE IF NOT EXISTS triples (
     pred        TEXT NOT NULL,
     obj_id      TEXT NOT NULL,
     confidence  REAL DEFAULT 1.0,
+    kuzu_synced INTEGER DEFAULT 0,
     FOREIGN KEY(chunk_id) REFERENCES chunks(chunk_id) ON DELETE CASCADE,
     FOREIGN KEY(subj_id) REFERENCES entities(entity_id) ON DELETE CASCADE,
     FOREIGN KEY(obj_id) REFERENCES entities(entity_id) ON DELETE CASCADE
@@ -115,6 +121,7 @@ CREATE TABLE IF NOT EXISTS chunk_mentions (
     chunk_id    TEXT NOT NULL,
     entity_id   TEXT NOT NULL,
     count       INTEGER DEFAULT 1,
+    kuzu_synced INTEGER DEFAULT 0,
     PRIMARY KEY(chunk_id, entity_id),
     FOREIGN KEY(chunk_id) REFERENCES chunks(chunk_id) ON DELETE CASCADE,
     FOREIGN KEY(entity_id) REFERENCES entities(entity_id) ON DELETE CASCADE
@@ -125,6 +132,7 @@ CREATE TABLE IF NOT EXISTS entity_synonyms (
     a_id        TEXT NOT NULL,
     b_id        TEXT NOT NULL,
     score       REAL NOT NULL,
+    kuzu_synced INTEGER DEFAULT 0,
     PRIMARY KEY(a_id, b_id),
     FOREIGN KEY(a_id) REFERENCES entities(entity_id) ON DELETE CASCADE,
     FOREIGN KEY(b_id) REFERENCES entities(entity_id) ON DELETE CASCADE
@@ -146,7 +154,10 @@ CREATE TABLE IF NOT EXISTS graph_state (
 
 def open_sqlite(cfg: Config) -> sqlite3.Connection:
     cfg.ensure_dirs()
-    conn = sqlite3.connect(cfg.db_path)
+    # HippoRAG OpenIE uses a small thread pool and shares one connection while
+    # serializing cache writes with a lock, so the connection must be usable
+    # across threads.
+    conn = sqlite3.connect(cfg.db_path, check_same_thread=False)
     conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
     _migrate(conn)
@@ -170,7 +181,34 @@ def _migrate(conn: sqlite3.Connection) -> None:
     }.items():
         if name not in existing:
             conn.execute(f"ALTER TABLE chunks ADD COLUMN {name} {ddl}")
+    _migrate_kuzu_synced(conn)
     _migrate_fts_tokenizer(conn)
+
+
+def _migrate_kuzu_synced(conn: sqlite3.Connection) -> None:
+    """Add ``kuzu_synced`` flag to every source-of-truth table.
+
+    ``graph_sync`` reads rows where ``kuzu_synced=0``, projects them into the
+    Kùzu graph via bulk COPY, then flips them to ``1``. The flag lets us
+    push only the diff after each ingest instead of wiping and replaying
+    the whole graph (which scales linearly with the corpus).
+
+    For existing rows present before this migration, we assume they were
+    already projected by a prior ``graph_rebuild`` and set ``kuzu_synced=1``.
+    If the Kùzu state is actually empty/stale on upgrade, the user can
+    rerun ``graph_rebuild`` to re-establish the baseline.
+    """
+    for table in ("datasets", "documents", "chunks", "entities", "triples",
+                  "chunk_mentions", "entity_synonyms"):
+        try:
+            cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        except sqlite3.OperationalError:
+            # Table not yet created (e.g. fresh DB before HippoRAG bootstrap).
+            continue
+        if not cols or "kuzu_synced" in cols:
+            continue
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN kuzu_synced INTEGER DEFAULT 0")
+        conn.execute(f"UPDATE {table} SET kuzu_synced = 1")
 
 
 def _migrate_fts_tokenizer(conn: sqlite3.Connection) -> None:
@@ -251,9 +289,15 @@ def upsert_document(
     metadata: dict | None = None,
 ) -> None:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    existed = conn.execute(
+        "SELECT 1 FROM documents WHERE document_id = ? LIMIT 1",
+        [document_id],
+    ).fetchone() is not None
     # Delete existing chunks
     conn.execute("DELETE FROM chunk_fts WHERE chunk_id IN (SELECT chunk_id FROM chunks WHERE document_id = ?)", [document_id])
     conn.execute("DELETE FROM chunks WHERE document_id = ?", [document_id])
+    if existed:
+        graph.mark_dirty(conn)
 
     metadata_json = json.dumps(metadata or {}, ensure_ascii=False)
     conn.execute(
@@ -268,7 +312,8 @@ def upsert_document(
             size_bytes=excluded.size_bytes,
             has_vector=excluded.has_vector,
             created_at=excluded.created_at,
-            metadata_json=excluded.metadata_json
+            metadata_json=excluded.metadata_json,
+            kuzu_synced=0
         """,
         [document_id, dataset_id, name, source_path, content_path, size_bytes, int(has_vector), now, metadata_json],
     )

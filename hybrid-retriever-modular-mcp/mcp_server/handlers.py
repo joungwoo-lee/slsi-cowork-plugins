@@ -343,6 +343,7 @@ def tool_delete_dataset(args: dict) -> dict:
         return text_result("dataset_id is required", is_error=True)
     cfg = load_config()
     with storage.sqlite_session(cfg) as conn:
+        retriever_graph.mark_dirty(conn)
         conn.execute("DELETE FROM chunk_fts WHERE dataset_id = ?", (ds,))
         conn.execute("DELETE FROM chunks WHERE dataset_id = ?", (ds,))
         conn.execute("DELETE FROM documents WHERE dataset_id = ?", (ds,))
@@ -598,6 +599,7 @@ def tool_delete_document(args: dict) -> dict:
         return text_result("dataset_id and document_id are required", is_error=True)
     cfg = load_config()
     with storage.sqlite_session(cfg) as conn:
+        retriever_graph.mark_dirty(conn)
         # Delete chunk_fts rows by joining chunks first so we never widen the
         # delete to other documents that happen to share a chunk_id pattern.
         conn.execute(
@@ -720,8 +722,10 @@ def tool_graph_query(args: dict) -> dict:
     cfg = load_config()
     try:
         with silenced_stdout():
-            gconn = retriever_graph.open_graph(cfg)
-            result = retriever_graph.run_query(gconn, cypher, params, limit=limit)
+            with storage.sqlite_session(cfg) as sconn:
+                gconn = retriever_graph.open_graph(cfg)
+                retriever_graph.sync_graph(gconn, sconn)
+                result = retriever_graph.run_query(gconn, cypher, params, limit=limit)
     except Exception as exc:  # noqa: BLE001 — surface Kùzu/parser errors back to the caller
         return text_result(f"graph_query failed: {exc}", is_error=True)
     return text_result(result)

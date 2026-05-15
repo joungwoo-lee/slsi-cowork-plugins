@@ -26,7 +26,7 @@ from typing import Any, Iterable
 from haystack import Document
 from haystack.document_stores.types import DocumentStore, DuplicatePolicy
 
-from .. import storage
+from .. import graph, storage
 from ..config import Config
 
 
@@ -117,6 +117,7 @@ class SqliteFts5DocumentStore:
             return
         placeholders = ",".join("?" * len(document_ids))
         with storage.sqlite_session(self._cfg) as conn:
+            graph.mark_dirty(conn)
             conn.execute(f"DELETE FROM chunk_fts WHERE chunk_id IN ({placeholders})", document_ids)
             conn.execute(f"DELETE FROM chunks WHERE chunk_id IN ({placeholders})", document_ids)
 

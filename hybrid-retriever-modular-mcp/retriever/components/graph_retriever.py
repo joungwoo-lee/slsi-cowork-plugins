@@ -35,6 +35,7 @@ class GraphChunkRetriever:
                 return {"documents": []}
 
             gconn = graph.open_graph(cfg)
+            graph.sync_graph(gconn, conn)
             scored: dict[str, float] = {}
             for seed_rank, row in enumerate(seed_rows, 1):
                 seed_id = row["chunk_id"]

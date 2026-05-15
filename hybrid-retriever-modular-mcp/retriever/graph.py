@@ -113,6 +113,16 @@ def is_dirty(conn: sqlite3.Connection) -> bool:
     return get_state(conn, "dirty", "1") == "1"
 
 
+def has_pending_sync(conn: sqlite3.Connection) -> bool:
+    for table in _SYNCED_TABLES:
+        row = conn.execute(
+            f"SELECT 1 FROM {table} WHERE kuzu_synced = 0 LIMIT 1"
+        ).fetchone()
+        if row:
+            return True
+    return False
+
+
 def graph_checksum(conn: sqlite3.Connection) -> str:
     """Cheap content fingerprint used by the PPR cache to detect staleness."""
     h = hashlib.sha256()
@@ -292,6 +302,9 @@ def rebuild_from_sqlite(graph_conn, sqlite_conn: sqlite3.Connection) -> dict:
         _copy(graph_conn, "RELATION", rel_csv, counts["RELATION"] > 0)
         _copy(graph_conn, "SYNONYM", syn_csv, counts["SYNONYM"] > 0)
 
+    # Full rebuild: everything is now consistent with Kùzu. Flag for the
+    # incremental sync path so the next ``graph_sync`` only sees diffs.
+    _mark_all_synced(sqlite_conn)
     set_state(sqlite_conn, "dirty", "0")
     set_state(sqlite_conn, "last_rebuilt_at", datetime.utcnow().isoformat() + "Z")
     set_state(sqlite_conn, "checksum", graph_checksum(sqlite_conn))
@@ -318,6 +331,206 @@ def rebuild_from_sqlite(graph_conn, sqlite_conn: sqlite3.Connection) -> dict:
             "SYNONYM": counts["SYNONYM"],
         },
     }
+
+
+_SYNCED_TABLES = (
+    "datasets", "documents", "chunks", "entities", "triples",
+    "chunk_mentions", "entity_synonyms",
+)
+
+
+def _mark_all_synced(sqlite_conn: sqlite3.Connection) -> None:
+    for table in _SYNCED_TABLES:
+        sqlite_conn.execute(f"UPDATE {table} SET kuzu_synced = 1 WHERE kuzu_synced = 0")
+
+
+def _mark_synced(sqlite_conn: sqlite3.Connection, table: str, ids: list, pk_columns: list[str]) -> None:
+    """Flip ``kuzu_synced`` for specific rows. ``ids`` is a list of tuples
+    matching ``pk_columns`` (multi-column PK supported)."""
+    if not ids:
+        return
+    where = " AND ".join(f"{col} = ?" for col in pk_columns)
+    sql = f"UPDATE {table} SET kuzu_synced = 1 WHERE {where}"
+    sqlite_conn.executemany(sql, ids)
+
+
+def incremental_sync(graph_conn, sqlite_conn: sqlite3.Connection) -> dict:
+    """Push only un-synced SQLite rows into Kùzu via bulk COPY FROM CSVs.
+
+    Per-table ordering (nodes before their edges):
+        Dataset → Document → IN_DATASET → Chunk → HAS_CHUNK → NEXT →
+        Entity → MENTIONS → RELATION → SYNONYM (full-refresh)
+
+    SYNONYM is full-refreshed (wipe + reload) instead of incremental: it is
+    rebuilt as an all-pairs operation by ``rebuild_synonyms``, so a "diff"
+    isn't well-defined and the table is small enough that a wipe-and-COPY
+    costs less than the bookkeeping for incremental updates.
+
+    Returns per-table counts of rows newly projected.
+    """
+    counts: dict[str, int] = {}
+
+    with _staging_dir() as stage:
+        # --- datasets ---
+        ds_rows = sqlite_conn.execute(
+            "SELECT dataset_id, COALESCE(name, dataset_id) FROM datasets WHERE kuzu_synced = 0"
+        ).fetchall()
+        ds_csv = stage / "datasets.csv"
+        counts["Dataset"] = _dump_csv(ds_csv, ((r[0], r[1] or "") for r in ds_rows))
+        _copy(graph_conn, "Dataset", ds_csv, counts["Dataset"] > 0)
+
+        # --- documents + IN_DATASET ---
+        doc_rows = sqlite_conn.execute(
+            "SELECT document_id, dataset_id, name, source_path FROM documents WHERE kuzu_synced = 0"
+        ).fetchall()
+        doc_csv = stage / "documents.csv"
+        counts["Document"] = _dump_csv(
+            doc_csv,
+            ((r[0], r[2] or "", r[1], r[3] or "") for r in doc_rows),
+        )
+        _copy(graph_conn, "Document", doc_csv, counts["Document"] > 0)
+
+        in_ds_csv = stage / "in_dataset.csv"
+        counts["IN_DATASET"] = _dump_csv(in_ds_csv, ((r[0], r[1]) for r in doc_rows))
+        _copy(graph_conn, "IN_DATASET", in_ds_csv, counts["IN_DATASET"] > 0)
+
+        # --- chunks + HAS_CHUNK + NEXT ---
+        chunk_rows = sqlite_conn.execute(
+            "SELECT chunk_id, document_id, dataset_id, position FROM chunks "
+            "WHERE kuzu_synced = 0 ORDER BY document_id, position"
+        ).fetchall()
+        ch_csv = stage / "chunks.csv"
+        counts["Chunk"] = _dump_csv(
+            ch_csv,
+            ((cid, did, sid, int(pos or 0)) for cid, did, sid, pos in chunk_rows),
+        )
+        _copy(graph_conn, "Chunk", ch_csv, counts["Chunk"] > 0)
+
+        has_chunk_csv = stage / "has_chunk.csv"
+        counts["HAS_CHUNK"] = _dump_csv(
+            has_chunk_csv, ((did, cid) for cid, did, _sid, _pos in chunk_rows)
+        )
+        _copy(graph_conn, "HAS_CHUNK", has_chunk_csv, counts["HAS_CHUNK"] > 0)
+
+        # NEXT edges are intra-document; safe to derive only from the new
+        # chunks because re-uploads of an existing document delete its old
+        # chunks first, so every "previous" chunk for a new chunk is also
+        # new in this batch.
+        next_rows: list[tuple[str, str]] = []
+        prev: tuple[str, str] | None = None
+        for cid, did, _sid, _pos in chunk_rows:
+            if prev is not None and prev[1] == did:
+                next_rows.append((prev[0], cid))
+            prev = (cid, did)
+        next_csv = stage / "next.csv"
+        counts["NEXT"] = _dump_csv(next_csv, iter(next_rows))
+        _copy(graph_conn, "NEXT", next_csv, counts["NEXT"] > 0)
+
+        # --- entities (shared across documents — ON CONFLICT DO NOTHING in
+        # ``upsert_entity`` preserves an entity's existing kuzu_synced=1, so
+        # we never re-COPY an already-projected entity).
+        ent_rows = sqlite_conn.execute(
+            "SELECT entity_id, canonical, surface, type FROM entities WHERE kuzu_synced = 0"
+        ).fetchall()
+        ent_csv = stage / "entities.csv"
+        counts["Entity"] = _dump_csv(
+            ent_csv,
+            ((eid, canon or "", surface or "", etype or "") for eid, canon, surface, etype in ent_rows),
+        )
+        _copy(graph_conn, "Entity", ent_csv, counts["Entity"] > 0)
+
+        # --- MENTIONS ---
+        mention_rows = sqlite_conn.execute(
+            "SELECT chunk_id, entity_id, count FROM chunk_mentions WHERE kuzu_synced = 0"
+        ).fetchall()
+        mentions_csv = stage / "mentions.csv"
+        counts["MENTIONS"] = _dump_csv(
+            mentions_csv, ((cid, eid, int(cnt or 1)) for cid, eid, cnt in mention_rows)
+        )
+        _copy(graph_conn, "MENTIONS", mentions_csv, counts["MENTIONS"] > 0)
+
+        # --- RELATION ---
+        triple_rows = sqlite_conn.execute(
+            "SELECT triple_id, subj_id, obj_id, pred, confidence FROM triples WHERE kuzu_synced = 0"
+        ).fetchall()
+        rel_csv = stage / "relations.csv"
+        counts["RELATION"] = _dump_csv(
+            rel_csv,
+            ((subj, obj, pred or "", float(conf or 1.0)) for _tid, subj, obj, pred, conf in triple_rows),
+        )
+        _copy(graph_conn, "RELATION", rel_csv, counts["RELATION"] > 0)
+
+        # --- SYNONYM full refresh ---
+        # rebuild_synonyms() wipes and re-inserts entity_synonyms wholesale,
+        # so any synced=0 row in this table means the synonym graph has
+        # drifted. Cheaper to wipe Kùzu SYNONYM and replay than to compute
+        # an actual diff.
+        unsynced_syn = sqlite_conn.execute(
+            "SELECT COUNT(*) FROM entity_synonyms WHERE kuzu_synced = 0"
+        ).fetchone()[0]
+        if unsynced_syn > 0:
+            graph_conn.execute("MATCH ()-[r:SYNONYM]->() DELETE r")
+            syn_rows = sqlite_conn.execute(
+                "SELECT a_id, b_id, score FROM entity_synonyms"
+            ).fetchall()
+            syn_csv = stage / "synonyms.csv"
+            counts["SYNONYM"] = _dump_csv(
+                syn_csv, ((a, b, float(s)) for a, b, s in syn_rows)
+            )
+            _copy(graph_conn, "SYNONYM", syn_csv, counts["SYNONYM"] > 0)
+        else:
+            counts["SYNONYM"] = 0
+
+    # Flip kuzu_synced=1 for every row we just projected.
+    _mark_synced(sqlite_conn, "datasets", [(r[0],) for r in ds_rows], ["dataset_id"])
+    _mark_synced(sqlite_conn, "documents", [(r[0],) for r in doc_rows], ["document_id"])
+    _mark_synced(sqlite_conn, "chunks", [(r[0],) for r in chunk_rows], ["chunk_id"])
+    _mark_synced(sqlite_conn, "entities", [(r[0],) for r in ent_rows], ["entity_id"])
+    _mark_synced(sqlite_conn, "chunk_mentions",
+                 [(r[0], r[1]) for r in mention_rows], ["chunk_id", "entity_id"])
+    _mark_synced(sqlite_conn, "triples", [(r[0],) for r in triple_rows], ["triple_id"])
+    if unsynced_syn > 0:
+        sqlite_conn.execute("UPDATE entity_synonyms SET kuzu_synced = 1")
+
+    set_state(sqlite_conn, "dirty", "0")
+    set_state(sqlite_conn, "last_sync_at", datetime.utcnow().isoformat() + "Z")
+    set_state(sqlite_conn, "checksum", graph_checksum(sqlite_conn))
+
+    return {
+        "mode": "incremental",
+        "datasets": counts["Dataset"],
+        "documents": counts["Document"],
+        "chunks": counts["Chunk"],
+        "entities": counts["Entity"],
+        "edges": (
+            counts["IN_DATASET"] + counts["HAS_CHUNK"] + counts["NEXT"]
+            + counts["MENTIONS"] + counts["RELATION"] + counts["SYNONYM"]
+        ),
+        "edge_breakdown": {
+            "IN_DATASET": counts["IN_DATASET"],
+            "HAS_CHUNK": counts["HAS_CHUNK"],
+            "NEXT": counts["NEXT"],
+            "MENTIONS": counts["MENTIONS"],
+            "RELATION": counts["RELATION"],
+            "SYNONYM": counts["SYNONYM"],
+        },
+    }
+
+
+def sync_graph(graph_conn, sqlite_conn: sqlite3.Connection) -> dict:
+    """Bring Kuzu in sync with SQLite, incrementally when safe.
+
+    ``dirty=1`` means SQLite changes included deletes or replacements, so the
+    graph needs a full replay. Otherwise we can push only rows where
+    ``kuzu_synced=0``.
+    """
+    if is_dirty(sqlite_conn):
+        result = rebuild_from_sqlite(graph_conn, sqlite_conn)
+        result["mode"] = "rebuild"
+        return result
+    if has_pending_sync(sqlite_conn):
+        return incremental_sync(graph_conn, sqlite_conn)
+    return {"mode": "noop", "datasets": 0, "documents": 0, "chunks": 0, "entities": 0, "edges": 0, "edge_breakdown": {}}
 
 
 # ----- embedding blob helpers --------------------------------------------

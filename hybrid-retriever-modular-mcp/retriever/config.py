@@ -22,6 +22,9 @@ from dotenv import load_dotenv
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_ENV_PATH = SKILL_ROOT / ".env"
+OPENAI_EMBEDDINGS_URL = "https://api.openai.com/v1/embeddings"
+OPENAI_CHAT_COMPLETIONS_URL = "https://api.openai.com/v1/chat/completions"
+DEFAULT_OPENAI_LLM_MODEL = "gpt-4o-mini"
 
 
 def _default_data_root() -> Path:
@@ -202,11 +205,17 @@ def load_config(env_path: str | os.PathLike[str] | None = None) -> Config:
 
     llm_url = os.getenv("LLM_API_URL", "").strip()
     llm_model = os.getenv("LLM_MODEL", "").strip()
+    llm_key = os.getenv("LLM_API_KEY", "").strip()
+    if not llm_key:
+        llm_key = os.getenv("EMBEDDING_API_KEY", "").strip()
+    if not llm_url and not llm_model and api_url == OPENAI_EMBEDDINGS_URL and llm_key:
+        llm_url = OPENAI_CHAT_COMPLETIONS_URL
+        llm_model = os.getenv("OPENAI_LLM_MODEL", "").strip() or DEFAULT_OPENAI_LLM_MODEL
     llm: Optional[LLMConfig] = None
     if llm_url and llm_model:
         llm = LLMConfig(
             api_url=llm_url,
-            api_key=os.getenv("LLM_API_KEY", "").strip(),
+            api_key=llm_key,
             model=llm_model,
             x_dep_ticket=os.getenv("LLM_API_X_DEP_TICKET", "").strip(),
             x_system_name=os.getenv("LLM_API_X_SYSTEM_NAME", "hybrid-retriever-modular-mcp").strip(),
