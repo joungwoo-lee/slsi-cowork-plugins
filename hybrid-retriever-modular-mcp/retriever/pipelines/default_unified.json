@@ -1,27 +1,37 @@
 {
   "metadata": {},
   "max_runs_per_component": 100,
-  "components": {
-    "loader": {
-      "type": "retriever.components.file_loader.LocalFileLoader",
-      "init_parameters": {
+  "connection_type_validation": true,
+  "nodes": [
+    {
+      "name": "loader",
+      "module": "retriever.components.file_loader.LocalFileLoader",
+      "params": {
         "max_chars": 2000000
       }
     },
-    "splitter": {
-      "type": "retriever.components.hierarchical_splitter.HierarchicalSplitter",
-      "init_parameters": {
+    {
+      "name": "splitter",
+      "module": "retriever.components.hierarchical_splitter.HierarchicalSplitter",
+      "params": {
         "chunk_chars": 512,
         "chunk_overlap": 50,
         "parent_chunk_chars": 1024,
         "parent_chunk_overlap": 100,
         "child_chunk_chars": 256,
         "child_chunk_overlap": 50
-      }
+      },
+      "inputs": [
+        {
+          "port": "text",
+          "from": "loader.text"
+        }
+      ]
     },
-    "embedder": {
-      "type": "retriever.components.document_embedder.HttpDocumentEmbedder",
-      "init_parameters": {
+    {
+      "name": "embedder",
+      "module": "retriever.components.document_embedder.HttpDocumentEmbedder",
+      "params": {
         "api_url": "",
         "api_key": "",
         "model": "",
@@ -31,18 +41,36 @@
         "batch_size": 16,
         "timeout_sec": 60,
         "verify_ssl": false
-      }
+      },
+      "inputs": [
+        {
+          "port": "documents",
+          "from": "splitter.documents"
+        }
+      ]
     },
-    "qdrant_writer": {
-      "type": "retriever.components.vector_retriever.LocalQdrantWriter",
-      "init_parameters": {
+    {
+      "name": "qdrant_writer",
+      "module": "retriever.components.vector_retriever.LocalQdrantWriter",
+      "params": {
         "data_root": "",
         "collection": "retriever_chunks"
-      }
+      },
+      "inputs": [
+        {
+          "port": "documents",
+          "from": "embedder.documents"
+        },
+        {
+          "port": "has_vector",
+          "from": "embedder.has_vector"
+        }
+      ]
     },
-    "query_embedder": {
-      "type": "retriever.components.document_embedder.HttpTextEmbedder",
-      "init_parameters": {
+    {
+      "name": "query_embedder",
+      "module": "retriever.components.document_embedder.HttpTextEmbedder",
+      "params": {
         "api_url": "",
         "api_key": "",
         "model": "",
@@ -54,61 +82,52 @@
         "verify_ssl": false
       }
     },
-    "fts5": {
-      "type": "retriever.components.fts5_retriever.Fts5Retriever",
-      "init_parameters": {
+    {
+      "name": "fts5",
+      "module": "retriever.components.fts5_retriever.Fts5Retriever",
+      "params": {
         "data_root": ""
       }
     },
-    "vector": {
-      "type": "retriever.components.vector_retriever.LocalQdrantRetriever",
-      "init_parameters": {
+    {
+      "name": "vector",
+      "module": "retriever.components.vector_retriever.LocalQdrantRetriever",
+      "params": {
         "data_root": "",
         "collection": "retriever_chunks"
-      }
+      },
+      "inputs": [
+        {
+          "port": "embedding",
+          "from": "query_embedder.embedding"
+        }
+      ]
     },
-    "joiner": {
-      "type": "retriever.components.hybrid_joiner.HybridJoiner",
-      "init_parameters": {}
+    {
+      "name": "joiner",
+      "module": "retriever.components.hybrid_joiner.HybridJoiner",
+      "params": {},
+      "inputs": [
+        {
+          "port": "keyword_documents",
+          "from": "fts5.documents"
+        },
+        {
+          "port": "semantic_documents",
+          "from": "vector.documents"
+        }
+      ]
     },
-    "parent": {
-      "type": "retriever.components.parent_replace.ParentChunkReplacer",
-      "init_parameters": {}
+    {
+      "name": "parent",
+      "module": "retriever.components.parent_replace.ParentChunkReplacer",
+      "params": {},
+      "inputs": [
+        {
+          "port": "documents",
+          "from": "joiner.documents"
+        }
+      ]
     }
-  },
-  "connections": [
-    {
-      "sender": "loader.text",
-      "receiver": "splitter.text"
-    },
-    {
-      "sender": "splitter.documents",
-      "receiver": "embedder.documents"
-    },
-    {
-      "sender": "embedder.documents",
-      "receiver": "qdrant_writer.documents"
-    },
-    {
-      "sender": "embedder.has_vector",
-      "receiver": "qdrant_writer.has_vector"
-    },
-    {
-      "sender": "query_embedder.embedding",
-      "receiver": "vector.embedding"
-    },
-    {
-      "sender": "fts5.documents",
-      "receiver": "joiner.keyword_documents"
-    },
-    {
-      "sender": "vector.documents",
-      "receiver": "joiner.semantic_documents"
-    },
-    {
-      "sender": "joiner.documents",
-      "receiver": "parent.documents"
-    }
-  ],
-  "connection_type_validation": true
+  ]
 }

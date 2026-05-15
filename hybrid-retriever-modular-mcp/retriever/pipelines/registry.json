@@ -37,5 +37,17 @@
       "fusion": "rrf"
     },
     "unified_topology": "rrf_rerank_unified.json"
+  },
+  "rrf_llm_rerank": {
+    "description": "Hybrid retrieval with RRF fusion and LLM-based reranking. Pipeline: FTS5 + Qdrant -> HybridJoiner(rrf) -> LLMRanker(OpenAIChatGenerator) -> ParentChunkReplacer. Requires OPENAI_API_KEY at runtime.",
+    "indexing_overrides": {},
+    "retrieval_overrides": {
+      "fusion": "rrf",
+      "top_n": 12
+    },
+    "search_kwargs": {
+      "fusion": "rrf"
+    },
+    "unified_topology": "rrf_llm_rerank_unified.json"
   }
 }

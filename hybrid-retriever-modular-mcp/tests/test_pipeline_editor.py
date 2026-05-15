@@ -63,6 +63,10 @@ class PipelineEditorPersistenceTest(unittest.TestCase):
         retrieval_path = pipeline_editor.PIPELINES_DIR / "custom_flow_retrieval.json"
         self.assertTrue(indexing_path.exists())
         self.assertTrue(retrieval_path.exists())
+        indexing = pipeline_editor._read_json(indexing_path)
+        retrieval = pipeline_editor._read_json(retrieval_path)
+        self.assertIn("nodes", indexing)
+        self.assertIn("nodes", retrieval)
 
     def test_load_pipeline_detail_returns_saved_topologies(self) -> None:
         pipeline_editor._atomic_write_json(
@@ -86,8 +90,8 @@ class PipelineEditorPersistenceTest(unittest.TestCase):
 
         detail = pipeline_editor.load_pipeline_detail("saved")
         self.assertEqual(detail["name"], "saved")
-        self.assertIn("loader", detail["indexing"]["components"])
-        self.assertIn("joiner", detail["retrieval"]["components"])
+        self.assertEqual(detail["indexing"]["nodes"][0]["name"], "loader")
+        self.assertEqual(detail["retrieval"]["nodes"][0]["name"], "joiner")
 
     def test_main_writes_and_clears_state_file(self) -> None:
         state_path = self.tmpdir / "editor-state.json"

@@ -91,9 +91,10 @@ def topology_for_storage(raw: dict[str, Any]) -> dict[str, Any]:
 
 
 def topology_for_ui(raw: dict[str, Any]) -> dict[str, Any]:
-    """Convert any topology blob into the standard ``{components, connections}``
-    form the visual editor frontend renders."""
-    return normalise_topology(raw)
+    """Convert any topology blob into the node-centric form the editor renders."""
+    if is_node_centric(raw):
+        return raw
+    return from_haystack_dict(normalise_topology(raw))
 
 
 def save_pipeline_payload(

@@ -1,0 +1,112 @@
+{
+  "metadata": {},
+  "max_runs_per_component": 100,
+  "connection_type_validation": true,
+  "nodes": [
+    {
+      "name": "query_embedder",
+      "module": "retriever.components.document_embedder.HttpTextEmbedder",
+      "params": {
+        "api_url": "",
+        "api_key": "",
+        "model": "",
+        "dim": 0,
+        "x_dep_ticket": "",
+        "x_system_name": "hybrid-retriever-modular-mcp",
+        "batch_size": 16,
+        "timeout_sec": 60,
+        "verify_ssl": false
+      },
+      "inputs": []
+    },
+    {
+      "name": "fts5",
+      "module": "retriever.components.fts5_retriever.Fts5Retriever",
+      "params": {
+        "data_root": ""
+      },
+      "inputs": []
+    },
+    {
+      "name": "vector",
+      "module": "retriever.components.vector_retriever.LocalQdrantRetriever",
+      "params": {
+        "data_root": "",
+        "collection": "retriever_chunks"
+      },
+      "inputs": [
+        {
+          "port": "embedding",
+          "from": "query_embedder.embedding"
+        }
+      ]
+    },
+    {
+      "name": "joiner",
+      "module": "retriever.components.hybrid_joiner.HybridJoiner",
+      "params": {},
+      "inputs": [
+        {
+          "port": "keyword_documents",
+          "from": "fts5.documents"
+        },
+        {
+          "port": "semantic_documents",
+          "from": "vector.documents"
+        }
+      ]
+    },
+    {
+      "name": "reranker",
+      "module": "haystack.components.rankers.llm_ranker.LLMRanker",
+      "params": {
+        "chat_generator": {
+          "type": "haystack.components.generators.chat.openai.OpenAIChatGenerator",
+          "init_parameters": {
+            "model": "gpt-5-mini",
+            "streaming_callback": null,
+            "api_base_url": null,
+            "organization": null,
+            "generation_kwargs": {
+              "temperature": 0,
+              "response_format": {
+                "type": "json_object"
+              }
+            },
+            "api_key": {
+              "type": "env_var",
+              "env_vars": [
+                "OPENAI_API_KEY"
+              ],
+              "strict": true
+            },
+            "timeout": 30,
+            "max_retries": 2,
+            "tools": null,
+            "tools_strict": false,
+            "http_client_kwargs": null
+          }
+        },
+        "top_k": 12,
+        "raise_on_failure": false
+      },
+      "inputs": [
+        {
+          "port": "documents",
+          "from": "joiner.documents"
+        }
+      ]
+    },
+    {
+      "name": "parent",
+      "module": "retriever.components.parent_replace.ParentChunkReplacer",
+      "params": {},
+      "inputs": [
+        {
+          "port": "documents",
+          "from": "reranker.documents"
+        }
+      ]
+    }
+  ]
+}

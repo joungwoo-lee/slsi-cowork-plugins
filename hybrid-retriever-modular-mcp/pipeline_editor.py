@@ -8,8 +8,8 @@ configure each component's constructor parameters, define connections
 between them, and shows the resulting DAG as an SVG graph on the right.
 
 Saving writes:
-  * pipelines/<name>_indexing.json (or _retrieval.json) ??Haystack topology
-  * $RETRIEVER_DATA_ROOT/pipelines.json ??profile entry that points to it,
+  * pipelines/<name>_indexing.json (or _retrieval.json) - node-centric topology
+  * $RETRIEVER_DATA_ROOT/pipelines.json - profile entry that points to it,
     matching the format used by the MCP ``save_pipeline`` tool.
 
 Dependencies: stdlib only on the server. The browser pulls dagre from
@@ -282,9 +282,9 @@ def load_pipeline_list() -> list[dict]:
 def load_pipeline_detail(name: str) -> dict:
     """Return profile metadata + the two topology JSON blobs (if any).
 
-    Topology blobs are coerced into the standard ``{components, connections}``
-    shape the editor's frontend renders, regardless of whether the on-disk
-    file uses node-centric or standard format.
+    Topology blobs are coerced into the node-centric shape the editor renders,
+    regardless of whether the on-disk file uses node-centric or standard
+    format.
     """
     profile: dict | None = None
     for entry in load_pipeline_list():
@@ -616,14 +616,86 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
 <script src="https://cdn.jsdelivr.net/npm/dagre@0.8.5/dist/dagre.min.js"></script>
 <script>
 // ---------- state ----------
+// The editor's in-memory topology is node-centric:
+//   topo = { nodes: [{ name, module, params, inputs:[{port, from}], outputs:[{port, to}] }, ...] }
+// Connections live inside each node (receiver side: inputs; sender side: outputs).
 let CATALOG = [];
 let STAGES = [];
-let topo = { components: {}, connections: [] };
+let topo = { nodes: [] };
 let selectedNode = null;
-let counter = 0;
 
 function currentTopo() { return topo; }
 function findComp(cls) { return CATALOG.find(c => c.cls === cls); }
+
+// ---------- topology helpers (node-centric model) ----------
+function nodesArr() { return topo.nodes || (topo.nodes = []); }
+function findNode(name) { return nodesArr().find(n => n.name === name); }
+function nodeNames() { return nodesArr().map(n => n.name); }
+
+// Flatten every node's inputs/outputs into {sender, receiver} pairs, deduped.
+function allConnections() {
+  const out = [];
+  const seen = new Set();
+  function push(sender, receiver) {
+    if (!sender || !receiver) return;
+    const key = sender + "->" + receiver;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ sender, receiver });
+  }
+  for (const n of nodesArr()) {
+    for (const e of n.inputs || []) {
+      if (e.port && e.from) push(e.from, n.name + "." + e.port);
+    }
+    for (const e of n.outputs || []) {
+      if (e.port && e.to) push(n.name + "." + e.port, e.to);
+    }
+  }
+  return out;
+}
+
+function addConnection(sender, receiver) {
+  if (!sender || !receiver || !sender.includes(".") || !receiver.includes(".")) return;
+  const recvName = receiver.split(".")[0];
+  const recvPort = receiver.slice(recvName.length + 1);
+  const recv = findNode(recvName);
+  if (!recv) return;
+  recv.inputs = recv.inputs || [];
+  if (recv.inputs.some(e => e.port === recvPort && e.from === sender)) return;
+  recv.inputs.push({ port: recvPort, from: sender });
+}
+
+function removeConnection(sender, receiver) {
+  if (!sender || !receiver) return;
+  const recvName = receiver.split(".")[0];
+  const recvPort = receiver.slice(recvName.length + 1);
+  const recv = findNode(recvName);
+  if (recv && recv.inputs) {
+    recv.inputs = recv.inputs.filter(e => !(e.port === recvPort && e.from === sender));
+  }
+  const sendName = sender.split(".")[0];
+  const sendPort = sender.slice(sendName.length + 1);
+  const send = findNode(sendName);
+  if (send && send.outputs) {
+    send.outputs = send.outputs.filter(e => !(e.port === sendPort && e.to === receiver));
+  }
+}
+
+function renameNode(oldName, newName) {
+  if (!oldName || !newName || oldName === newName) return;
+  if (findNode(newName)) return;
+  const n = findNode(oldName);
+  if (!n) return;
+  n.name = newName;
+  for (const m of nodesArr()) {
+    for (const e of m.inputs || []) {
+      if (e.from && e.from.startsWith(oldName + ".")) e.from = newName + e.from.slice(oldName.length);
+    }
+    for (const e of m.outputs || []) {
+      if (e.to && e.to.startsWith(oldName + ".")) e.to = newName + e.to.slice(oldName.length);
+    }
+  }
+}
 
 // ---------- bootstrap ----------
 async function boot() {
@@ -638,7 +710,7 @@ async function boot() {
     const sel = document.getElementById("existing");
     sel.addEventListener("change", onLoadPipeline);
     document.getElementById("save").addEventListener("click", onSave);
-    document.getElementById("reset-btn").addEventListener("click", () => { topo = { components: {}, connections: [] }; selectedNode = null; document.getElementById("pname").value=""; document.getElementById("pdesc").value=""; sel.value=""; setStatus(""); redraw(); });
+    document.getElementById("reset-btn").addEventListener("click", () => { topo = { nodes: [] }; selectedNode = null; document.getElementById("pname").value=""; document.getElementById("pdesc").value=""; sel.value=""; setStatus(""); redraw(); });
     document.getElementById("auto-wire").addEventListener("click", autoWire);
     document.getElementById("view-graph-btn").addEventListener("click", () => { document.getElementById("right").classList.add("open"); redraw(); });
     document.getElementById("close-graph-btn").addEventListener("click", () => { document.getElementById("right").classList.remove("open"); });
@@ -684,17 +756,16 @@ const STAGE_DEFAULTS = {
 function renderStageEditor() {
   const container = document.getElementById("dynamic-steps");
   container.innerHTML = "";
-  const t = currentTopo();
 
-  const activeStages = ["load", "convert", "split", "embed", "write", "retrieve", "fuse", "post"];
+  const activeStages = STAGES.map(s => s[0]);
 
   activeStages.forEach((sid, idx) => {
     const stageLabel = STAGES.find(s => s[0] === sid)?.[1] || sid;
     const section = document.createElement("div");
     section.className = "section";
-    const pathLabel = sid === "load" || sid === "convert" || sid === "split" || sid === "write" ? " (Indexing Path)" : 
-                     (sid === "retrieve" || sid === "fuse" || sid === "post" ? " (Retrieval Path)" : " (Shared Path)");
-    
+    const pathLabel = (sid === "load" || sid === "convert" || sid === "split" || sid === "write") ? " (Indexing Path)" :
+                     (sid === "retrieve" || sid === "fuse" || sid === "rerank" || sid === "post") ? " (Retrieval Path)" : " (Shared Path)";
+
     section.innerHTML = `
       <div class="head">Step ${idx + 2}: ${stageLabel}${pathLabel}</div>
       <div class="body" id="stage-body-${sid}"></div>
@@ -703,9 +774,10 @@ function renderStageEditor() {
     const body = section.querySelector(".body");
 
     // 1. Existing modules in this stage
-    const nodes = Object.entries(t.components).filter(([_, def]) => findComp(def.type)?.stage === sid);
-    nodes.forEach(([name, def]) => {
-      const comp = findComp(def.type);
+    const stageNodes = nodesArr().filter(n => findComp(n.module)?.stage === sid);
+    stageNodes.forEach(node => {
+      const comp = findComp(node.module);
+      const name = node.name;
       const entry = document.createElement("div");
       entry.className = "module-entry" + (selectedNode === name ? " selected" : "");
       entry.innerHTML = `
@@ -713,8 +785,8 @@ function renderStageEditor() {
           <div class="nm">${name}</div>
           <div class="del" title="Remove">&times;</div>
         </div>
-        <div class="cls">${comp ? comp.name : def.type}</div>
-        
+        <div class="cls">${comp ? comp.name : node.module}</div>
+
         <div class="p-row" style="margin: 8px 0;">
           <label style="font-size:9px">node name</label>
           <input type="text" value="${name}" class="node-rename-input" style="font-size:11px; padding:2px 6px; height:22px;">
@@ -727,13 +799,8 @@ function renderStageEditor() {
       const renameInp = entry.querySelector(".node-rename-input");
       renameInp.addEventListener("change", () => {
         const newName = renameInp.value.trim();
-        if (!newName || newName === name || t.components[newName]) { renameInp.value = name; return; }
-        t.components[newName] = t.components[name];
-        delete t.components[name];
-        t.connections = t.connections.map(e => ({
-          sender: e.sender.startsWith(name + ".") ? newName + e.sender.slice(name.length) : e.sender,
-          receiver: e.receiver.startsWith(name + ".") ? newName + e.receiver.slice(name.length) : e.receiver,
-        }));
+        if (!newName || newName === name || findNode(newName)) { renameInp.value = name; return; }
+        renameNode(name, newName);
         selectedNode = newName;
         redraw();
       });
@@ -743,6 +810,7 @@ function renderStageEditor() {
 
       // Parameters
       const pgrid = entry.querySelector(".params-grid");
+      const params = node.params || (node.params = {});
       if (comp && comp.params.length) {
         comp.params.forEach(p => {
           const prow = document.createElement("div");
@@ -752,16 +820,16 @@ function renderStageEditor() {
           if (p.type === "bool") {
             inp = document.createElement("select");
             inp.innerHTML = `<option value="false">false</option><option value="true">true</option>`;
-            inp.value = String(def.init_parameters[p.name] ?? p.default);
-            inp.addEventListener("change", () => { def.init_parameters[p.name] = inp.value === "true"; redraw(); });
+            inp.value = String(params[p.name] ?? p.default);
+            inp.addEventListener("change", () => { params[p.name] = inp.value === "true"; redraw(); });
           } else {
             inp = document.createElement("input");
-            inp.value = def.init_parameters[p.name] ?? p.default ?? "";
+            inp.value = params[p.name] ?? p.default ?? "";
             inp.addEventListener("change", () => {
               let v = inp.value;
               if (p.type === "int") v = parseInt(v, 10) || 0;
               else if (p.type === "float") v = parseFloat(v) || 0;
-              def.init_parameters[p.name] = v;
+              params[p.name] = v;
               redraw();
             });
           }
@@ -780,23 +848,21 @@ function renderStageEditor() {
       const addCtrl = document.createElement("div");
       addCtrl.className = "add-ctrl";
       const sel = document.createElement("select");
-      sel.innerHTML = `<option value="">+ Add module to ${stageLabel}...</option>` + 
+      sel.innerHTML = `<option value="">+ Add module to ${stageLabel}...</option>` +
         available.map(c => `<option value="${c.cls}">${c.name}</option>`).join("");
       sel.addEventListener("change", () => {
         if (!sel.value) return;
         const comp = available.find(c => c.cls === sel.value);
-        
-        // Suggest standard name
+
         let bname = STAGE_DEFAULTS[sid] || sid;
-        if (sid === "embed") {
-            bname = comp.name.toLowerCase().includes("text") ? "query_embedder" : "embedder";
-        }
+        if (sid === "embed") bname = comp.name.toLowerCase().includes("text") ? "query_embedder" : "embedder";
         if (sid === "retrieve") bname = comp.name.toLowerCase().includes("fts5") ? "fts5" : "vector";
-        
+        if (sid === "rerank") bname = "reranker";
+
         const name = uniqueName(bname);
         const initParams = {};
         for (const p of comp.params) initParams[p.name] = p.default;
-        t.components[name] = { type: comp.cls, init_parameters: initParams };
+        nodesArr().push({ name, module: comp.cls, params: initParams, inputs: [], outputs: [] });
         selectedNode = name;
         redraw();
       });
@@ -809,47 +875,43 @@ function renderStageEditor() {
 function uniqueName(base) {
   let n = base;
   let i = 2;
-  while (currentTopo().components[n]) n = base + "_" + i++;
+  while (findNode(n)) n = base + "_" + i++;
   return n;
 }
 
-function addNode(comp) {
-  const t = currentTopo();
-  const base = comp.name.replace(/^Http|Local/g, "").replace(/^[A-Z]/, c => c.toLowerCase()).replace(/[A-Z]/g, m => "_" + m.toLowerCase());
-  const name = uniqueName(base.replace(/^_/, ""));
-  const initParams = {};
-  for (const p of comp.params) initParams[p.name] = p.default;
-  t.components[name] = { type: comp.cls, init_parameters: initParams };
-  selectedNode = name;
-  redraw();
-}
-
 function removeNode(name) {
-  const t = currentTopo();
-  delete t.components[name];
-  t.connections = t.connections.filter(e => !e.sender.startsWith(name + ".") && !e.receiver.startsWith(name + "."));
+  topo.nodes = nodesArr().filter(n => n.name !== name);
+  for (const m of nodesArr()) {
+    m.inputs  = (m.inputs  || []).filter(e => !((e.from || "").split(".")[0] === name));
+    m.outputs = (m.outputs || []).filter(e => !((e.to   || "").split(".")[0] === name));
+  }
   if (selectedNode === name) selectedNode = null;
   redraw();
 }
 
 // ---------- load / save ----------
 function topoFromJson(j) {
-  if (!j || typeof j !== "object") return { components: {}, connections: [] };
+  if (!j || typeof j !== "object") return { nodes: [] };
   return {
-    components: j.components || {},
-    connections: (j.connections || []).map(e => ({ sender: e.sender, receiver: e.receiver })),
+    nodes: (j.nodes || []).map(n => ({
+      name: n.name,
+      module: n.module || n.type || n.cls,
+      params: { ...(n.params || n.init_parameters || {}) },
+      inputs: (n.inputs || []).map(e => ({ port: e.port, from: e.from || e.sender })),
+      outputs: (n.outputs || []).map(e => ({ port: e.port, to: e.to || e.receiver })),
+    })),
   };
 }
 
 async function onLoadPipeline(e) {
   const name = e.target.value;
-  if (!name) {
-    document.getElementById("pname").value = "";
-    document.getElementById("pdesc").value = "";
-    topo = { components: {}, connections: [] };
-    selectedNode = null;
-    setStatus("");
-    redraw();
+    if (!name) {
+      document.getElementById("pname").value = "";
+      document.getElementById("pdesc").value = "";
+      topo = { nodes: [] };
+      selectedNode = null;
+      setStatus("");
+      redraw();
     return;
   }
   try {
@@ -873,7 +935,7 @@ async function onLoadPipeline(e) {
 async function onSave() {
   const name = document.getElementById("pname").value.trim();
   if (!name) { setStatus("Name is required", "bad"); return; }
-  const hasComponents = Object.keys(topo.components).length > 0;
+  const hasComponents = nodesArr().length > 0;
   const payload = {
     name,
     description: document.getElementById("pdesc").value,
@@ -906,33 +968,33 @@ async function onSave() {
 function autoWire() {
   const t = currentTopo();
   const stageOrder = STAGES.map(s => s[0]);
-  const nodes = Object.entries(t.components).map(([name, def]) => {
-    const comp = findComp(def.type);
-    return { name, def, comp, stageIdx: comp ? stageOrder.indexOf(comp.stage) : -1 };
+  const nodes = nodesArr().map(node => {
+    const comp = findComp(node.module);
+    return { node, comp, stageIdx: comp ? stageOrder.indexOf(comp.stage) : -1 };
   }).filter(n => n.comp);
 
-  const existing = new Set(t.connections.map(e => e.receiver));
+  const existing = new Set(allConnections().map(e => e.receiver));
   for (const recv of nodes) {
     for (const inp of recv.comp.inputs || []) {
-      const target = `${recv.name}.${inp.name}`;
+      const target = `${recv.node.name}.${inp.name}`;
       if (existing.has(target)) continue;
       let match = null;
       for (const send of nodes) {
-        if (send.name === recv.name) continue;
+        if (send.node.name === recv.node.name) continue;
         if (send.stageIdx > recv.stageIdx) continue;
         const outByName = (send.comp.outputs || []).find(o => o.name === inp.name);
-        if (outByName) { match = `${send.name}.${outByName.name}`; break; }
+        if (outByName) { match = `${send.node.name}.${outByName.name}`; break; }
       }
       if (!match) {
         for (const send of nodes) {
-          if (send.name === recv.name) continue;
+          if (send.node.name === recv.node.name) continue;
           if (send.stageIdx > recv.stageIdx) continue;
           const outByType = (send.comp.outputs || []).find(o => o.type === inp.type);
-          if (outByType) { match = `${send.name}.${outByType.name}`; break; }
+          if (outByType) { match = `${send.node.name}.${outByType.name}`; break; }
         }
       }
       if (match) {
-        t.connections.push({ sender: match, receiver: target });
+        addConnection(match, target);
         existing.add(target);
       }
     }
@@ -944,12 +1006,11 @@ function autoWire() {
 function renderOverview() {
   const box = document.getElementById("overview");
   if (!box) return;
-  const t = currentTopo();
-  const compCount = Object.keys(t.components).length;
-  const connCount = t.connections.length;
+  const compCount = nodesArr().length;
+  const connCount = allConnections().length;
   const byStage = {};
-  for (const [, def] of Object.entries(t.components)) {
-    const s = findComp(def.type)?.stage || "?";
+  for (const node of nodesArr()) {
+    const s = findComp(node.module)?.stage || "?";
     byStage[s] = (byStage[s] || 0) + 1;
   }
   const stageSummary = Object.entries(byStage).map(([s, n]) => `${s}: ${n}`).join(", ") || "no modules";
@@ -960,19 +1021,19 @@ function renderOverview() {
 function renderConnections() {
   const box = document.getElementById("conn-body");
   if (!box) return;
-  const t = currentTopo();
-  if (!t.connections.length) {
+  const connections = allConnections();
+  if (!connections.length) {
     box.innerHTML = '<div style="color:var(--muted)">No connections. Add modules and click <b>Auto-wire all ports</b>.</div>';
     return;
   }
   box.innerHTML = "";
-  t.connections.forEach((e, i) => {
+  connections.forEach((e) => {
     const row = document.createElement("div");
     row.style.cssText = "display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px;";
     row.innerHTML = `<span><b>${e.sender}</b> &rarr; <b>${e.receiver}</b></span>
-                     <span class="del" data-i="${i}" style="cursor:pointer;color:var(--bad);">&times;</span>`;
+                     <span class="del" style="cursor:pointer;color:var(--bad);">&times;</span>`;
     row.querySelector(".del").addEventListener("click", () => {
-      t.connections.splice(i, 1);
+      removeConnection(e.sender, e.receiver);
       redraw();
     });
     box.appendChild(row);
@@ -984,8 +1045,7 @@ function renderGraph() {
   const empty = document.getElementById("graph-empty");
   if (!svg) return;
   while (svg.firstChild) svg.removeChild(svg.firstChild);
-  const t = currentTopo();
-  const names = Object.keys(t.components);
+  const names = nodeNames();
   if (!names.length) { if (empty) empty.style.display = "block"; return; }
   if (empty) empty.style.display = "none";
 
@@ -994,7 +1054,7 @@ function renderGraph() {
   g.setGraph({ rankdir: "LR", marginx: 20, marginy: 20, nodesep: 30, ranksep: 60 });
   g.setDefaultEdgeLabel(() => ({}));
   for (const n of names) g.setNode(n, { label: n, width: 160, height: 50 });
-  for (const e of t.connections) {
+  for (const e of allConnections()) {
     const s = e.sender.split(".")[0];
     const r = e.receiver.split(".")[0];
     if (g.hasNode(s) && g.hasNode(r)) g.setEdge(s, r);
@@ -1019,8 +1079,8 @@ function renderGraph() {
 
   g.nodes().forEach(n => {
     const node = g.node(n);
-    const def = t.components[n];
-    const comp = def ? findComp(def.type) : null;
+    const def = findNode(n);
+    const comp = def ? findComp(def.module) : null;
     const grp = document.createElementNS(ns, "g");
     grp.setAttribute("transform", `translate(${node.x - node.width / 2}, ${node.y - node.height / 2})`);
     const rect = document.createElementNS(ns, "rect");
@@ -1036,7 +1096,7 @@ function renderGraph() {
     const cls = document.createElementNS(ns, "text");
     cls.setAttribute("class", "node-cls");
     cls.setAttribute("x", 10); cls.setAttribute("y", 38);
-    cls.textContent = comp ? comp.name : (def?.type || "");
+    cls.textContent = comp ? comp.name : (def?.module || "");
     grp.appendChild(cls);
     grp.addEventListener("click", () => { selectedNode = n; redraw(); });
     svg.appendChild(grp);

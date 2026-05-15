@@ -5,24 +5,10 @@
   "nodes": [
     {
       "name": "loader",
-      "module": "retriever.components.email_loader.EmailSourceLoader",
+      "module": "retriever.components.file_loader.LocalFileLoader",
       "params": {
-        "worker_path": ""
+        "max_chars": 2000000
       }
-    },
-    {
-      "name": "converter",
-      "module": "retriever.components.email_markdown_converter.EmailMarkdownConverter",
-      "params": {
-        "max_body_chars": 1000000,
-        "max_attachment_chars": 500000
-      },
-      "inputs": [
-        {
-          "port": "raw_emails",
-          "from": "loader.raw_emails"
-        }
-      ]
     },
     {
       "name": "splitter",
@@ -37,8 +23,8 @@
       },
       "inputs": [
         {
-          "port": "documents",
-          "from": "converter.documents"
+          "port": "text",
+          "from": "loader.text"
         }
       ]
     },
@@ -133,13 +119,54 @@
       ]
     },
     {
+      "name": "reranker",
+      "module": "haystack.components.rankers.llm_ranker.LLMRanker",
+      "params": {
+        "chat_generator": {
+          "type": "haystack.components.generators.chat.openai.OpenAIChatGenerator",
+          "init_parameters": {
+            "model": "gpt-5-mini",
+            "streaming_callback": null,
+            "api_base_url": null,
+            "organization": null,
+            "generation_kwargs": {
+              "temperature": 0,
+              "response_format": {
+                "type": "json_object"
+              }
+            },
+            "api_key": {
+              "type": "env_var",
+              "env_vars": [
+                "OPENAI_API_KEY"
+              ],
+              "strict": true
+            },
+            "timeout": 30,
+            "max_retries": 2,
+            "tools": null,
+            "tools_strict": false,
+            "http_client_kwargs": null
+          }
+        },
+        "top_k": 12,
+        "raise_on_failure": false
+      },
+      "inputs": [
+        {
+          "port": "documents",
+          "from": "joiner.documents"
+        }
+      ]
+    },
+    {
       "name": "parent",
       "module": "retriever.components.parent_replace.ParentChunkReplacer",
       "params": {},
       "inputs": [
         {
           "port": "documents",
-          "from": "joiner.documents"
+          "from": "reranker.documents"
         }
       ]
     }

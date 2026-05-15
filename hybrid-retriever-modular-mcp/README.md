@@ -73,7 +73,7 @@ FTS5는 `unicode61` 토크나이저를 쓰지만, 색인·쿼리 양쪽에서 `k
 
 ## 파이프라인 프로파일
 
-기본 프로파일은 `retriever/pipelines/registry.json`. 사용자 프로파일은 `$RETRIEVER_DATA_ROOT/pipelines.json` 또는 `save_pipeline` MCP 도구로 추가합니다. 토폴로지(컴포넌트 그래프) 자체는 `default_indexing.json` / `default_retrieval.json` / `email_indexing.json`.
+기본 프로파일은 `retriever/pipelines/registry.json`. 사용자 프로파일은 `$RETRIEVER_DATA_ROOT/pipelines.json` 또는 `save_pipeline` MCP 도구로 추가합니다. 파이프라인 폴더의 토폴로지 JSON은 모두 node-centric 형식으로 저장되고, 실행 시점에만 Haystack 형식으로 어댑터 변환됩니다.
 
 ### 비주얼 파이프라인 편집기
 
@@ -92,11 +92,15 @@ MCP tool 호출:
   - `retriever/pipelines/<name>_retrieval.json`
   - `$RETRIEVER_DATA_ROOT/pipelines.json`
 
+에디터도 저장 파일을 그대로 node-centric으로 읽어 시각화합니다.
+
 | profile | 용도 |
 |---|---|
 | `default` | 하이브리드 (FTS5 + Qdrant, linear fusion, parent-replace) |
 | `keyword_only` | FTS5 + RRF만, 임베딩 API 완전 우회 |
 | `email` | `.pst` / 변환된 이메일 디렉토리 인덱싱 |
+| `rrf_rerank` | RRF + BGE cross-encoder rerank |
+| `rrf_llm_rerank` | RRF + LLM rerank |
 
 ## 테스트
 
