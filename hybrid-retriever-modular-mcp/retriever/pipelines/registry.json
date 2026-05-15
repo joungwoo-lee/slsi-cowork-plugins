@@ -1,13 +1,11 @@
 {
   "default": {
-    "description": "Legacy hybrid retriever: SQLite FTS5 + optional local Qdrant, linear fusion, parent-chunk replacement, kiwipiepy tokenisation. Every call that does not pass a 'pipeline' argument uses this.",
     "indexing_overrides": {},
     "retrieval_overrides": {},
     "search_kwargs": {},
     "unified_topology": "default_unified.json"
   },
   "keyword_only": {
-    "description": "Pure SQLite FTS5 keyword retrieval with RRF fusion. Skips the embedding API entirely; useful when the embedding endpoint is down or for benchmarking keyword recall against the default hybrid pipeline.",
     "indexing_overrides": {
       "skip_embedding": true
     },
@@ -15,17 +13,15 @@
       "vector_similarity_weight": 0.0,
       "fusion": "rrf"
     },
-    "unified_topology": "default_unified.json"
+    "unified_topology": "keyword_only_unified.json"
   },
   "email": {
-    "description": "Email ingestion pipeline. Extracts messages from a .pst file (via Python 3.9 worker) and converts body + attachments to Markdown. Headers (subject, sender, recipients, received, folder_path) are folded into Document metadata so search can filter via metadata_condition. Retrieval uses the default hybrid pipeline.",
     "indexing_overrides": {
       "use_hierarchical": "false"
     },
     "unified_topology": "email_unified.json"
   },
   "rrf_rerank": {
-    "description": "Hybrid retrieval with RRF fusion and BGE cross-encoder reranking (BAAI/bge-reranker-v2-m3). Pipeline: FTS5 + Qdrant -> HybridJoiner(rrf) -> BgeReranker -> ParentChunkReplacer. Requires FlagEmbedding (torch); model is downloaded on first use.",
     "indexing_overrides": {},
     "retrieval_overrides": {
       "fusion": "rrf",
@@ -39,7 +35,6 @@
     "unified_topology": "rrf_rerank_unified.json"
   },
   "rrf_llm_rerank": {
-    "description": "Hybrid retrieval with RRF fusion and LLM-based reranking. Pipeline: FTS5 + Qdrant -> HybridJoiner(rrf) -> LLMRanker(OpenAIChatGenerator) -> ParentChunkReplacer. Requires OPENAI_API_KEY at runtime.",
     "indexing_overrides": {},
     "retrieval_overrides": {
       "fusion": "rrf",
@@ -51,7 +46,6 @@
     "unified_topology": "rrf_llm_rerank_unified.json"
   },
   "rrf_graph_rerank": {
-    "description": "Hybrid retrieval with an added graph-neighbor branch. Pipeline: FTS5 + GraphChunkRetriever + Qdrant -> HybridJoiner(rrf) -> BgeReranker -> ParentChunkReplacer.",
     "indexing_overrides": {},
     "retrieval_overrides": {
       "fusion": "rrf",

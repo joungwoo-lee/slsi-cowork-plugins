@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "description": "Use when: maximum ranking quality and you accept extra latency + OpenAI cost. RRF fusion of FTS5+Qdrant, then an LLM ranker (OpenAIChatGenerator) reorders the top candidates. Requires OPENAI_API_KEY at runtime."
+    "description": "Use when: queries are exact-string / keyword / code-token / identifier lookups, or the embedding endpoint is down, or you want a fast pure-FTS5 baseline. Skips embedding entirely; vector_similarity_weight is forced to 0; fusion is RRF."
   },
   "max_runs_per_component": 100,
   "connection_type_validation": true,
@@ -134,54 +134,13 @@
       ]
     },
     {
-      "name": "reranker",
-      "module": "haystack.components.rankers.llm_ranker.LLMRanker",
-      "params": {
-        "chat_generator": {
-          "type": "haystack.components.generators.chat.openai.OpenAIChatGenerator",
-          "init_parameters": {
-            "model": "gpt-5-mini",
-            "streaming_callback": null,
-            "api_base_url": null,
-            "organization": null,
-            "generation_kwargs": {
-              "temperature": 0,
-              "response_format": {
-                "type": "json_object"
-              }
-            },
-            "api_key": {
-              "type": "env_var",
-              "env_vars": [
-                "OPENAI_API_KEY"
-              ],
-              "strict": true
-            },
-            "timeout": 30,
-            "max_retries": 2,
-            "tools": null,
-            "tools_strict": false,
-            "http_client_kwargs": null
-          }
-        },
-        "top_k": 12,
-        "raise_on_failure": false
-      },
-      "inputs": [
-        {
-          "port": "documents",
-          "from": "joiner.documents"
-        }
-      ]
-    },
-    {
       "name": "parent",
       "module": "retriever.components.parent_replace.ParentChunkReplacer",
       "params": {},
       "inputs": [
         {
           "port": "documents",
-          "from": "reranker.documents"
+          "from": "joiner.documents"
         }
       ]
     }

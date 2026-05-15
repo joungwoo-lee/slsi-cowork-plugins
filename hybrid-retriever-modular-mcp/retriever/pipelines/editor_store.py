@@ -97,6 +97,17 @@ def topology_for_ui(raw: dict[str, Any]) -> dict[str, Any]:
     return from_haystack_dict(normalise_topology(raw))
 
 
+def _with_topology_description(blob: dict[str, Any], description: str) -> dict[str, Any]:
+    """Return ``blob`` with ``metadata.description`` set (when description is non-empty)."""
+    if not description:
+        return blob
+    out = dict(blob)
+    metadata = dict(out.get("metadata") or {})
+    metadata["description"] = description
+    out["metadata"] = metadata
+    return out
+
+
 def save_pipeline_payload(
     payload: dict[str, Any],
     *,
@@ -108,8 +119,8 @@ def save_pipeline_payload(
     if not name or not name.replace("_", "").replace("-", "").isalnum():
         return {"error": "name must be alphanumeric (underscore/hyphen allowed)"}
 
+    description = str(payload.get("description") or "")
     profile: dict[str, Any] = {
-        "description": payload.get("description", ""),
         "indexing_overrides": payload.get("indexing_overrides") or {},
         "retrieval_overrides": payload.get("retrieval_overrides") or {},
         "search_kwargs": payload.get("search_kwargs") or {},
@@ -120,10 +131,13 @@ def save_pipeline_payload(
     def _has_topology(blob: Any) -> bool:
         return isinstance(blob, dict) and (blob.get("components") or blob.get("nodes"))
 
+    def _store(blob: dict[str, Any]) -> dict[str, Any]:
+        return _with_topology_description(topology_for_storage(blob), description)
+
     unified_topology = payload.get("unified_topology")
     if _has_topology(unified_topology):
         topology_file = f"{name}_unified.json"
-        atomic_write_json(target_pipelines_dir / topology_file, topology_for_storage(unified_topology))
+        atomic_write_json(target_pipelines_dir / topology_file, _store(unified_topology))
         profile["unified_topology"] = topology_file
         # Also keep indexing/retrieval pointing to the same file for compatibility
         profile["indexing_topology"] = topology_file
@@ -132,14 +146,24 @@ def save_pipeline_payload(
     indexing_topology = payload.get("indexing_topology")
     if _has_topology(indexing_topology):
         topology_file = f"{name}_indexing.json"
-        atomic_write_json(target_pipelines_dir / topology_file, topology_for_storage(indexing_topology))
+        atomic_write_json(target_pipelines_dir / topology_file, _store(indexing_topology))
         profile["indexing_topology"] = topology_file
 
     retrieval_topology = payload.get("retrieval_topology")
     if _has_topology(retrieval_topology):
         topology_file = f"{name}_retrieval.json"
-        atomic_write_json(target_pipelines_dir / topology_file, topology_for_storage(retrieval_topology))
+        atomic_write_json(target_pipelines_dir / topology_file, _store(retrieval_topology))
         profile["retrieval_topology"] = topology_file
+
+    # If no topology was supplied, keep the description on the profile so it
+    # is still discoverable by ``list_pipelines`` / the search-tool schema.
+    if (
+        description
+        and not profile.get("unified_topology")
+        and not profile.get("indexing_topology")
+        and not profile.get("retrieval_topology")
+    ):
+        profile["description"] = description
 
     profiles_path = profiles_path or user_profiles_path(cfg)
     profiles = read_json(profiles_path)

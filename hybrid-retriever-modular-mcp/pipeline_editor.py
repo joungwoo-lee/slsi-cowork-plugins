@@ -289,15 +289,40 @@ def _atomic_write_json(path: Path, data: dict) -> None:
     editor_store.atomic_write_json(path, data)
 
 
+def _topology_metadata_description(topology_file: str | None) -> str:
+    """Pull ``metadata.description`` out of a topology JSON next to PIPELINES_DIR."""
+    if not topology_file:
+        return ""
+    raw = _read_json(PIPELINES_DIR / topology_file)
+    meta = raw.get("metadata") if isinstance(raw, dict) else None
+    desc = meta.get("description") if isinstance(meta, dict) else None
+    return desc if isinstance(desc, str) else ""
+
+
+def _hydrate_description(entry: dict) -> dict:
+    """Fill in ``description`` from the referenced topology if the profile omits it."""
+    if entry.get("description"):
+        return entry
+    topo = (
+        entry.get("unified_topology")
+        or entry.get("retrieval_topology")
+        or entry.get("indexing_topology")
+    )
+    desc = _topology_metadata_description(topo)
+    if desc:
+        return {**entry, "description": desc}
+    return entry
+
+
 def load_pipeline_list() -> list[dict]:
     """Return one entry per known pipeline (registry.json + user pipelines.json)."""
     out: dict[str, dict] = {}
     for name, item in _read_json(REGISTRY_PATH).items():
         if isinstance(item, dict):
-            out[name] = {**item, "name": name, "source": "builtin"}
+            out[name] = _hydrate_description({**item, "name": name, "source": "builtin"})
     for name, item in _read_json(USER_PROFILES_PATH).items():
         if isinstance(item, dict):
-            out[name] = {**item, "name": name, "source": "user"}
+            out[name] = _hydrate_description({**item, "name": name, "source": "user"})
     return list(out.values())
 
 

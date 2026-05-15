@@ -1,5 +1,7 @@
 {
-  "metadata": {},
+  "metadata": {
+    "description": "Use when: the answer likely spans linked chunks — e.g. follow-up sections, neighbouring slides, or graph-connected passages — and a plain hybrid query misses them. Adds a GraphChunkRetriever branch alongside FTS5+Qdrant, then BGE rerank. Requires graph_rebuild to have run."
+  },
   "max_runs_per_component": 100,
   "connection_type_validation": true,
   "nodes": [

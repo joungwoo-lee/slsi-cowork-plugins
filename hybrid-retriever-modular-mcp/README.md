@@ -73,7 +73,9 @@ FTS5는 `unicode61` 토크나이저를 쓰지만, 색인·쿼리 양쪽에서 `k
 
 ## 파이프라인 프로파일
 
-기본 프로파일은 `retriever/pipelines/registry.json`. 사용자 프로파일은 `$RETRIEVER_DATA_ROOT/pipelines.json` 또는 `save_pipeline` MCP 도구로 추가합니다. 파이프라인 폴더의 토폴로지 JSON은 모두 node-centric 형식으로 저장되고, 실행 시점에만 Haystack 형식으로 어댑터 변환됩니다.
+기본 프로파일은 `retriever/pipelines/registry.json`(컴포넌트 그래프 참조 + 오버라이드만 보관). 각 파이프라인의 "언제 사용해야 하는지" 설명은 **해당 토폴로지 JSON의 `metadata.description`** 에 들어 있어 — 사용자 프로파일은 `$RETRIEVER_DATA_ROOT/pipelines.json` 또는 `save_pipeline` MCP 도구로 추가합니다 (이 경우에도 description은 새로 생성되는 토폴로지 JSON의 metadata에 함께 기록됩니다). 파이프라인 폴더의 토폴로지 JSON은 모두 node-centric 형식으로 저장되고, 실행 시점에만 Haystack 형식으로 어댑터 변환됩니다.
+
+`tools/list` 응답에서는 `search` / `upload_document` / `upload_directory`의 `pipeline` 파라미터 description에 현재 등록된 모든 프로파일의 description 목록이 합성되어 노출됩니다. 즉 에이전트가 별도로 `list_pipelines`를 호출하지 않아도 도구 스키마만 보고 "쿼리에 맞는 파이프라인"을 고를 수 있습니다.
 
 ### 비주얼 파이프라인 편집기
 
@@ -101,6 +103,9 @@ MCP tool 호출:
 | `email` | `.pst` / 변환된 이메일 디렉토리 인덱싱 |
 | `rrf_rerank` | RRF + BGE cross-encoder rerank |
 | `rrf_llm_rerank` | RRF + LLM rerank |
+| `rrf_graph_rerank` | RRF + 그래프 이웃 분기 + BGE rerank |
+
+각 파이프라인의 자세한 "use when" 설명은 대응되는 `retriever/pipelines/<name>_unified.json`의 `metadata.description`에서 직접 확인하거나 `list_pipelines`로 조회하세요.
 
 ## 테스트
 

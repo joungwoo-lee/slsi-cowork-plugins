@@ -1,5 +1,7 @@
 {
-  "metadata": {},
+  "metadata": {
+    "description": "Use when: general-purpose RAG over text/PDF/Office documents and you have no reason to pick a specialised pipeline. Default for both ingest and search. Implementation: SQLite FTS5 + optional local Qdrant, linear fusion, parent-chunk replacement, kiwipiepy tokenisation."
+  },
   "max_runs_per_component": 100,
   "connection_type_validation": true,
   "nodes": [

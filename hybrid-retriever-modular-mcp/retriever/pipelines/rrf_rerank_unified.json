@@ -1,5 +1,7 @@
 {
-  "metadata": {},
+  "metadata": {
+    "description": "Use when: precision matters more than latency — e.g. small set of top results to feed to an LLM, or when default ranking misses obvious matches. Adds a BGE cross-encoder reranker (BAAI/bge-reranker-v2-m3) on top of hybrid FTS5+Qdrant with RRF fusion. First call downloads the model (~600MB)."
+  },
   "max_runs_per_component": 100,
   "connection_type_validation": true,
   "nodes": [

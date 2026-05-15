@@ -82,11 +82,42 @@ def describe_profiles() -> list[dict[str, Any]]:
     ]
 
 
+def _read_topology_description(topology_file: str | None) -> str:
+    """Read ``metadata.description`` from a topology JSON file.
+
+    Returns an empty string if the file or field is missing — callers fall
+    back to the profile-level description in that case.
+    """
+    if not topology_file:
+        return ""
+    path = PIPELINES_DIR / topology_file
+    if not path.is_file():
+        return ""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return ""
+    meta = raw.get("metadata") if isinstance(raw, dict) else None
+    desc = meta.get("description") if isinstance(meta, dict) else None
+    return desc if isinstance(desc, str) else ""
+
+
 def _load_profile_dict(data: dict[str, Any]) -> None:
     for name, item in data.items():
         if not isinstance(item, dict):
             logger.warning("skipping malformed pipeline profile %r", name)
             continue
+        item = dict(item)
+        if not item.get("description"):
+            # Description lives in each topology's metadata; the profile entry
+            # only carries it in-memory.
+            topology_file = (
+                item.get("unified_topology")
+                or item.get("retrieval_topology")
+                or item.get("indexing_topology")
+            )
+            item["description"] = _read_topology_description(topology_file)
         try:
             register(PipelineProfile(name=name, **item))
         except TypeError as exc:

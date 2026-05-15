@@ -16,7 +16,7 @@ import traceback
 from typing import Any, Callable, Optional
 
 from . import bootstrap
-from .catalog import TOOLS
+from .catalog import build_tools
 from .protocol import (
     INTERNAL_ERROR,
     METHOD_NOT_FOUND,
@@ -47,7 +47,7 @@ def handle_initialize(params: dict) -> dict:
 
 
 def handle_tools_list(_params: dict) -> dict:
-    return {"tools": TOOLS}
+    return {"tools": build_tools()}
 
 
 # Required runtime dependencies (import-name as visible to Python).

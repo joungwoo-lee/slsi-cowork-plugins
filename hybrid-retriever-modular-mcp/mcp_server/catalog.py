@@ -1,16 +1,28 @@
 """MCP tool catalog: name, description, inputSchema for every exposed tool.
 
-Kept as data (not code) so a `tools/list` request stays cheap and so adding
-a new tool is just: add an entry here + a function in handlers.py + a row
-in handlers.HANDLERS.
+The static ``_BASE_TOOLS`` list owns one entry per exposed tool. ``build_tools()``
+returns a deep copy of that list with the ``pipeline`` parameter on
+``search`` / ``upload_document`` / ``upload_directory`` enriched at call time
+with each registered pipeline's name + description, so an agent reading
+``tools/list`` can pick the right pipeline without first calling
+``list_pipelines``. Adding a new tool is still just: add an entry here + a
+function in handlers.py + a row in handlers.HANDLERS.
 
 All tools run in-process against local SQLite FTS5 and optional Qdrant storage.
 """
 from __future__ import annotations
 
+import copy
+import logging
 from typing import Any
 
-TOOLS: list[dict[str, Any]] = [
+logger = logging.getLogger(__name__)
+
+# Tools whose `pipeline` parameter description should be enriched with the
+# list of registered pipelines at tools/list time.
+_PIPELINE_AWARE_TOOLS = {"search", "upload_document", "upload_directory"}
+
+_BASE_TOOLS: list[dict[str, Any]] = [
     # --- Search / retrieval ---------------------------------------------
     {
         "name": "search",
@@ -398,3 +410,87 @@ TOOLS: list[dict[str, Any]] = [
         "inputSchema": {"type": "object", "properties": {}},
     },
 ]
+
+
+def _pipeline_param_description() -> str:
+    """Build the ``pipeline`` schema description from the live pipeline registry.
+
+    The retriever package is imported lazily so this module stays importable
+    even when its heavyweight optional deps (haystack et al) are still being
+    installed by ``boot_doctor``.
+    """
+    try:
+        from retriever.config import load_config
+        from retriever.pipelines import profiles as pipeline_profiles
+    except Exception as exc:  # noqa: BLE001 — boot-time deps not ready yet
+        logger.debug("pipeline registry unavailable: %s", exc)
+        return (
+            "Named pipeline profile. Call list_pipelines to see available "
+            "profiles and their use-cases."
+        )
+
+    try:
+        cfg = load_config()
+        pipeline_profiles.sync_with_disk(cfg)
+        entries = pipeline_profiles.describe()
+    except Exception as exc:  # noqa: BLE001 — never break tools/list
+        logger.debug("pipeline registry sync failed: %s", exc)
+        return (
+            "Named pipeline profile. Call list_pipelines to see available "
+            "profiles and their use-cases."
+        )
+
+    lines = [
+        "Named pipeline profile. Pick the one whose 'Use when' clause best "
+        "matches the query (default = general-purpose hybrid)."
+    ]
+    for entry in entries:
+        name = entry.get("name") or ""
+        desc = (entry.get("description") or "").strip()
+        if not name:
+            continue
+        lines.append(f"- '{name}': {desc}" if desc else f"- '{name}'")
+    return "\n".join(lines)
+
+
+def _pipeline_enum() -> list[str] | None:
+    try:
+        from retriever.config import load_config
+        from retriever.pipelines import profiles as pipeline_profiles
+    except Exception:
+        return None
+    try:
+        cfg = load_config()
+        pipeline_profiles.sync_with_disk(cfg)
+        names = pipeline_profiles.names()
+    except Exception:
+        return None
+    return names or None
+
+
+def build_tools() -> list[dict[str, Any]]:
+    """Return the tool catalog with the pipeline parameter enriched.
+
+    Called every time the server handles ``tools/list``, so newly-saved
+    profiles show up immediately without restarting the MCP server.
+    """
+    description = _pipeline_param_description()
+    enum = _pipeline_enum()
+    tools = copy.deepcopy(_BASE_TOOLS)
+    for tool in tools:
+        if tool.get("name") not in _PIPELINE_AWARE_TOOLS:
+            continue
+        props = tool.get("inputSchema", {}).get("properties", {})
+        param = props.get("pipeline")
+        if not isinstance(param, dict):
+            continue
+        param["description"] = description
+        if enum:
+            param["enum"] = enum
+    return tools
+
+
+# Kept for backwards-compatibility: import sites that grabbed ``TOOLS`` at
+# import time still work, but ``handle_tools_list`` should call
+# ``build_tools()`` so descriptions reflect runtime-added profiles.
+TOOLS = _BASE_TOOLS
