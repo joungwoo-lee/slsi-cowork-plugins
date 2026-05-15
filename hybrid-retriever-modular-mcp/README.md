@@ -39,6 +39,32 @@ Claude / 다른 MCP 클라이언트
 | `open_pipeline_editor`, `get_pipeline_editor`, `close_pipeline_editor` | 비주얼 파이프라인 편집기 실행/상태 조회/종료 |
 | `health` | DB, 데이터 루트, 임베딩 설정, 인덱스 카운트 확인 |
 | `graph_query`, `graph_rebuild` | Kùzu 그래프 위 Cypher 질의 (read-only) / 재빌드 |
+| `hipporag_index`, `hipporag_index_document`, `hipporag_refresh_synonyms` | HippoRAG 지식 그래프 (전체 / 증분 / synonym 갱신) |
+| `hipporag_search` | LLM 쿼리 엔티티 추출 → 임베딩 링크 → Personalized PageRank → 청크 스코어링 |
+| `hipporag_stats` | 엔티티/트리플/멘션/시노님 카운트 + PPR 매트릭스 상태 |
+
+## HippoRAG 지식 그래프 (선택)
+
+**관계 기반 / 멀티홉 질문**에 강한 retrieval. SQLite를 source of truth로 쓰고 Kùzu에는 투영만 합니다.
+
+```
+upload_document(file, auto_hipporag=true)
+   │  ├ 청크 → SQLite/Qdrant (기존 경로)
+   │  └ LLM OpenIE → triples → entities → mentions → SQLite
+   ▼
+hipporag_refresh_synonyms        (배치 끝에 1회)
+   │  └ 엔티티 임베딩 cosine all-pairs → SYNONYM 엣지
+   ▼
+hipporag_search(query)
+   ├ 쿼리 LLM → 핵심 엔티티 추출
+   ├ 임베딩 cosine linker → 시드 엔티티
+   ├ scipy.sparse PPR (`data_root/ppr_matrix.npz` 디스크 캐시, 그래프 변경 시 자동 무효화)
+   └ Σ PPR(e) · log(1+mention_count) → 청크 랭킹
+```
+
+전제: `LLM_API_URL` + `LLM_MODEL` + `EMBEDDING_API_*` 설정. 엔드포인트는 OpenAI `/v1/chat/completions` 호환이면 됨 (사내 게이트웨이/vLLM 가능).
+
+`graph_rebuild`는 이제 **Kùzu COPY FROM 벌크 로더**로 동작 — 청크 1만 + 엔티티 5천 규모도 수 초 안에 재구축. 기존의 청크 1개당 3 Cypher round-trip 방식과 비교하면 약 1-2 orders of magnitude 빠름.
 
 ## 설치
 
