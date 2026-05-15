@@ -438,9 +438,18 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
 label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
 
-#app { display: grid; grid-template-columns: 500px 1fr; height: 100vh; }
-#left { background: var(--panel); border-right: 1px solid var(--border); overflow-y: auto; padding: 12px; }
-#right { display: flex; flex-direction: column; }
+#app { display: flex; justify-content: center; height: 100vh; background: var(--bg); }
+#left { width: 100%; max-width: 600px; overflow-y: auto; padding: 20px; }
+#right { 
+  display: none; 
+  position: fixed; 
+  inset: 0; 
+  background: var(--bg); 
+  z-index: 1000; 
+  flex-direction: column; 
+}
+#right.open { display: flex; }
+
 #topbar {
   display: flex; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border);
   background: var(--panel); align-items: center;
@@ -450,6 +459,10 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
 #status { font-size: 11px; color: var(--muted); margin-left: 8px; }
 #status.ok { color: var(--ok); }
 #status.bad { color: var(--bad); }
+
+#graph-topbar {
+  display: flex; align-items: center; padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--border);
+}
 
 #graph { flex: 1; position: relative; overflow: auto; background: #0b0d12; }
 #graph svg { display: block; }
@@ -495,6 +508,14 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
 <body>
 <div id="app">
   <div id="left">
+    <div id="topbar" style="margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px;">
+      <h1>Retriever Editor</h1>
+      <span id="status"></span>
+      <div class="spacer"></div>
+      <button id="view-graph-btn" class="primary">View Graph</button>
+      <button id="reset-btn">Reset</button>
+    </div>
+
     <div class="section">
       <div class="head">Step 1: Pipeline Basics</div>
       <div class="body">
@@ -551,13 +572,10 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
   </div>
 
   <div id="right">
-    <div id="topbar">
-      <h1>Retriever Pipeline Editor</h1>
-      <span id="status"></span>
+    <div id="graph-topbar">
+      <h1>Pipeline Graph</h1>
       <div class="spacer"></div>
-      <button id="auto-wire">Auto-wire</button>
-      <button id="reset">Reset</button>
-      <button class="primary" id="save">Save pipeline</button>
+      <button id="close-graph-btn">Close Graph</button>
     </div>
     <div id="graph"><div class="graph-empty" id="graph-empty">Add modules on the left to start building the pipeline graph.</div><svg id="canvas" width="100%" height="100%"></svg></div>
   </div>
@@ -592,8 +610,10 @@ async function boot() {
   }
   sel.addEventListener("change", onLoadPipeline);
   document.getElementById("save").addEventListener("click", onSave);
-  document.getElementById("reset").addEventListener("click", () => { topo = { components: {}, connections: [] }; selectedNode = null; redraw(); });
+  document.getElementById("reset-btn").addEventListener("click", () => { topo = { components: {}, connections: [] }; selectedNode = null; redraw(); });
   document.getElementById("auto-wire").addEventListener("click", autoWire);
+  document.getElementById("view-graph-btn").addEventListener("click", () => { document.getElementById("right").classList.add("open"); redraw(); });
+  document.getElementById("close-graph-btn").addEventListener("click", () => { document.getElementById("right").classList.remove("open"); });
   redraw();
 }
 
