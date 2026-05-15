@@ -1,3 +1,3 @@
 $ErrorActionPreference = 'Stop'
 
-claude mcp add retriever_mcp "py -3 C:\Users\joungwoo.lee\slsi-cowork-plugins\hybrid-retriever-modular-mcp\server.py"
+claude mcp add retriever_mcp "py -3.11 C:\Users\joungwoo.lee\slsi-cowork-plugins\hybrid-retriever-modular-mcp\server.py"
