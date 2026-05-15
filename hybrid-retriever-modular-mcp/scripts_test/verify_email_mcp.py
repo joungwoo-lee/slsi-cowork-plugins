@@ -48,7 +48,7 @@ def test_email_mcp_e2e():
     data_root.mkdir(parents=True)
     
     # Start MCP server
-    env = {**dict(subprocess.os.environ), "DATA_ROOT": str(data_root)}
+    env = {**dict(subprocess.os.environ), "RETRIEVER_DATA_ROOT": str(data_root)}
     proc = subprocess.Popen(
         ["py", "-3.12", str(server_py)],
         stdin=subprocess.PIPE,

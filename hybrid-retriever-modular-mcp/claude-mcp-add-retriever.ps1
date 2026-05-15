@@ -1,3 +1,5 @@
 $ErrorActionPreference = 'Stop'
 
-claude mcp add retriever_mcp "py -3.12 C:\Users\joungwoo.lee\slsi-cowork-plugins\hybrid-retriever-modular-mcp\server.py"
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
+claude mcp add retriever_mcp "py -3.12 $ScriptDir\server.py"
+

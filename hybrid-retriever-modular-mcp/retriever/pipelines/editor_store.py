@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from ..config import Config
+from ..config import Config, DEFAULT_ENV_PATH, load_config
 
 PIPELINES_DIR = Path(__file__).resolve().parent
 REGISTRY_PATH = PIPELINES_DIR / "registry.json"
@@ -19,8 +19,15 @@ REGISTRY_PATH = PIPELINES_DIR / "registry.json"
 def user_profiles_path(cfg: Config | None = None) -> Path:
     if cfg is not None:
         return cfg.data_root / "pipelines.json"
-    data_root = Path(os.environ.get("RETRIEVER_DATA_ROOT") or r"C:\Retriever_Data")
-    return data_root / "pipelines.json"
+    
+    # Load config to get the correct data_root (respecting .env)
+    try:
+        cfg = load_config()
+        return cfg.data_root / "pipelines.json"
+    except Exception:
+        # Fallback to simple env check if config load fails
+        data_root = Path(os.environ.get("RETRIEVER_DATA_ROOT") or r"C:\Retriever_Data")
+        return data_root / "pipelines.json"
 
 
 def read_json(path: Path) -> dict[str, Any]:

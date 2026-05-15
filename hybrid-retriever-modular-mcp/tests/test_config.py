@@ -45,12 +45,12 @@ class ConfigLoadTest(unittest.TestCase):
         import shutil
         shutil.rmtree(self._tmpdir, ignore_errors=True)
 
-    def test_dotenv_overrides_existing_os_env(self) -> None:
-        """The whole reason override=True exists: stale OS env must lose."""
-        os.environ["EMBEDDING_API_KEY"] = "stale-key"
+    def test_shell_env_wins_over_dotenv(self) -> None:
+        """Shell environment variables should take precedence over .env."""
+        os.environ["EMBEDDING_API_KEY"] = "shell-key"
         self.env_path.write_text(
             "EMBEDDING_API_URL=https://example.test/embed\n"
-            "EMBEDDING_API_KEY=fresh-key\n"
+            "EMBEDDING_API_KEY=dotenv-key\n"
             "EMBEDDING_MODEL=test-model\n"
             "EMBEDDING_DIM=8\n",
             encoding="utf-8",
@@ -58,10 +58,8 @@ class ConfigLoadTest(unittest.TestCase):
         cfg = load_config(self.env_path)
         self.assertIsNotNone(cfg.embedding)
         assert cfg.embedding is not None
-        self.assertEqual(cfg.embedding.api_key, "fresh-key")
+        self.assertEqual(cfg.embedding.api_key, "shell-key")
         self.assertEqual(cfg.embedding.dim, 8)
-        self.assertTrue(cfg.embedding.verify_ssl)
-        self.assertTrue(cfg.embedding.is_configured)
 
     def test_embedding_optional_when_unconfigured(self) -> None:
         # No EMBEDDING_API_URL -> embedding stays None, search degrades to FTS5

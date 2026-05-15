@@ -148,7 +148,7 @@ def _float(value: str | None, default: float) -> float:
 def load_config(env_path: str | os.PathLike[str] | None = None) -> Config:
     target = Path(env_path) if env_path else DEFAULT_ENV_PATH
     if target.exists():
-        load_dotenv(target, override=True)
+        load_dotenv(target, override=False)
 
     api_url = os.getenv("EMBEDDING_API_URL", "").strip()
     dim = _int(os.getenv("EMBEDDING_DIM"), 0)
