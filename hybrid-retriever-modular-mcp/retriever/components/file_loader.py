@@ -22,6 +22,8 @@ class LocalFileLoader:
 
     @component.output_types(text=str, path=str, size_bytes=int)
     def run(self, path: str) -> dict:
+        if not path:
+            return {"text": "", "path": "", "size_bytes": 0}
         target = Path(path).expanduser()
         if not target.is_file():
             raise FileNotFoundError(f"file not found: {target}")

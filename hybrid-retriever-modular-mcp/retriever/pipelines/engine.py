@@ -283,10 +283,34 @@ def run_indexing(
             "metadata": metadata,
         },
     }
-    if skip_embedding and "embedder" in pipeline.graph.nodes:
-        run_inputs["embedder"] = {"documents": []}
+    
+    # Satisfy mandatory inputs for components NOT in the indexing path to bypass validation
+    graph_inputs = pipeline.inputs()
+    for name in ["query_embedder", "fts5", "vector", "joiner", "parent"]:
+        if name in graph_inputs:
+            needed = graph_inputs[name]
+            if name == "query_embedder":
+                if "text" in needed: run_inputs.setdefault(name, {})["text"] = ""
+            elif name == "fts5":
+                if "query" in needed: run_inputs.setdefault(name, {})["query"] = ""
+                if "dataset_ids" in needed: run_inputs.setdefault(name, {})["dataset_ids"] = []
+                if "enabled" in needed: run_inputs.setdefault(name, {})["enabled"] = False
+            elif name == "vector":
+                if "embedding" in needed: run_inputs.setdefault(name, {})["embedding"] = []
+                if "dataset_ids" in needed: run_inputs.setdefault(name, {})["dataset_ids"] = []
+                if "top_k" in needed: run_inputs.setdefault(name, {})["top_k"] = 1
+            elif name == "joiner":
+                if "keyword_documents" in needed: run_inputs.setdefault(name, {})["keyword_documents"] = []
+                if "semantic_documents" in needed: run_inputs.setdefault(name, {})["semantic_documents"] = []
+            elif name == "parent":
+                if "documents" in needed: run_inputs.setdefault(name, {})["documents"] = []
+                if "enabled" in needed: run_inputs.setdefault(name, {})["enabled"] = False
+
+    if skip_embedding and "embedder" in pipeline.graph.nodes and "documents" in graph_inputs.get("embedder", {}):
+        run_inputs.setdefault("embedder", {})["documents"] = []
 
     result = pipeline.run(run_inputs, include_outputs_from={"loader", "splitter", "embedder"})
+
 
     loader_out = result.get("loader", {})
     splitter_out = result.get("splitter", {})
@@ -349,26 +373,50 @@ def run_retrieval(
     rrf_k = int(retrieval_opts.get("rrf_k", 60))
     keyword = bool(retrieval_opts.get("keyword", True))
 
-    result = pipeline.run(
-        {
-            "query_embedder": {"text": query if weight > 0.0 else ""},
-            "fts5": {
-                "query": query,
-                "dataset_ids": dataset_ids,
-                "top_k": top_k,
-                "enabled": keyword,
-            },
-            "vector": {"dataset_ids": dataset_ids, "top_k": top_k},
-            "joiner": {
-                "fusion": effective_fusion,
-                "vector_weight": weight,
-                "rrf_k": rrf_k,
-                "metadata_condition": metadata_condition,
-            },
-            "parent": {"enabled": effective_parent},
+    run_inputs: dict[str, dict] = {
+        "query_embedder": {"text": query if weight > 0.0 else ""},
+        "fts5": {
+            "query": query,
+            "dataset_ids": dataset_ids,
+            "top_k": top_k,
+            "enabled": keyword,
         },
-        include_outputs_from={"parent"},
-    )
+        "vector": {"dataset_ids": dataset_ids, "top_k": top_k},
+        "joiner": {
+            "fusion": effective_fusion,
+            "vector_weight": weight,
+            "rrf_k": rrf_k,
+            "metadata_condition": metadata_condition,
+        },
+        "parent": {"enabled": effective_parent},
+    }
+
+    # Satisfy mandatory inputs for components NOT in the retrieval path to bypass validation
+    graph_inputs = pipeline.inputs()
+    for name in ["loader", "splitter", "embedder", "writer"]:
+        if name in graph_inputs:
+            needed = graph_inputs[name]
+            if name == "loader":
+                if "path" in needed: run_inputs.setdefault(name, {})["path"] = ""
+            elif name == "splitter":
+                if "text" in needed: run_inputs.setdefault(name, {})["text"] = ""
+                if "documents" in needed: run_inputs.setdefault(name, {})["documents"] = []
+                if "dataset_id" in needed: run_inputs.setdefault(name, {})["dataset_id"] = ""
+                if "document_id" in needed: run_inputs.setdefault(name, {})["document_id"] = ""
+                if "document_name" in needed: run_inputs.setdefault(name, {})["document_name"] = ""
+            elif name == "embedder":
+                if "documents" in needed: run_inputs.setdefault(name, {})["documents"] = []
+            elif name == "writer":
+                if "documents" in needed: run_inputs.setdefault(name, {})["documents"] = []
+
+    # Final inputs should only contain entries the graph actually expects
+    final_inputs = {}
+    for name, inputs in run_inputs.items():
+        if name in graph_inputs:
+            # Filter keys to only what's needed for this component
+            final_inputs[name] = {k: v for k, v in inputs.items() if k in graph_inputs[name]}
+
+    result = pipeline.run(final_inputs, include_outputs_from={"parent"})
 
     docs = result["parent"]["documents"]
     items = [_doc_to_item(d, effective_parent) for d in docs[:top_n]]

@@ -33,6 +33,9 @@ class HierarchicalSplitter:
         use_hierarchical: Any = None,
         metadata: dict | None = None,
     ) -> dict:
+        if text is None and documents is None:
+             return {"documents": [], "chunks_count": 0, "parent_chunks_count": 0}
+        
         all_docs: list[Document] = []
         total_chunks = 0
         total_parents = 0
