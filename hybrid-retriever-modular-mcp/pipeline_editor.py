@@ -488,12 +488,12 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
 
 #app { display: flex; flex-direction: column; height: 100vh; background: var(--bg); }
-#main-container { flex: 1; min-height: 0; display: flex; gap: 20px; padding: 20px; overflow: hidden; }
-#settings-panel { flex: 1 1 0; min-width: 0; max-width: 760px; overflow-y: auto; }
+#main-container { flex: 1; min-height: 0; display: flex; gap: 20px; padding: 20px; overflow: hidden; flex-direction: row; align-items: stretch; }
+#settings-panel { flex: 0 0 760px; min-width: 760px; max-width: 760px; overflow-y: auto; }
 
 #right {
-  flex: 1 1 0;
-  min-width: 420px;
+  flex: 1 1 auto;
+  min-width: 520px;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
@@ -554,12 +554,6 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
 
 .tabs { margin: 12px 0; }
 .tab { flex: 1; text-align: center; font-weight: 600; }
-
-@media (max-width: 1200px) {
-  #main-container { flex-direction: column; overflow-y: auto; }
-  #settings-panel { max-width: none; overflow: visible; }
-  #right { min-width: 0; min-height: 480px; }
-}
 </style>
 
 </head>

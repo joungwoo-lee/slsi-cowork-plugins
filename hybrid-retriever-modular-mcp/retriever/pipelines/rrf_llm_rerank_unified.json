@@ -58,7 +58,7 @@
       "inputs": [
         {
           "port": "documents",
-          "from": "embedder.documents"
+          "from": "splitter.documents"
         }
       ]
     },
