@@ -67,6 +67,80 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(
     content,
     tokenize='unicode61'
 );
+
+-- HippoRAG knowledge-graph tables. These mirror what's projected into the
+-- Kùzu property graph but SQLite is the source of truth: rebuild_from_sqlite
+-- drops the graph and replays from here. Embeddings are stored as raw little-
+-- endian float32 BLOBs so we can stream into a numpy/scipy matrix without
+-- per-row JSON parsing.
+
+CREATE TABLE IF NOT EXISTS entities (
+    entity_id   TEXT PRIMARY KEY,
+    canonical   TEXT NOT NULL,
+    surface     TEXT NOT NULL,
+    type        TEXT DEFAULT '',
+    mention_count INTEGER DEFAULT 0,
+    created_at  TEXT DEFAULT (datetime('now'))
+);
+CREATE INDEX IF NOT EXISTS idx_entities_canonical ON entities(canonical);
+
+CREATE TABLE IF NOT EXISTS entity_embeddings (
+    entity_id   TEXT PRIMARY KEY,
+    model       TEXT NOT NULL,
+    dim         INTEGER NOT NULL,
+    vector      BLOB NOT NULL,
+    updated_at  TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY(entity_id) REFERENCES entities(entity_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS triples (
+    triple_id   TEXT PRIMARY KEY,
+    chunk_id    TEXT NOT NULL,
+    document_id TEXT NOT NULL,
+    dataset_id  TEXT NOT NULL,
+    subj_id     TEXT NOT NULL,
+    pred        TEXT NOT NULL,
+    obj_id      TEXT NOT NULL,
+    confidence  REAL DEFAULT 1.0,
+    FOREIGN KEY(chunk_id) REFERENCES chunks(chunk_id) ON DELETE CASCADE,
+    FOREIGN KEY(subj_id) REFERENCES entities(entity_id) ON DELETE CASCADE,
+    FOREIGN KEY(obj_id) REFERENCES entities(entity_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_triples_chunk ON triples(chunk_id);
+CREATE INDEX IF NOT EXISTS idx_triples_subj ON triples(subj_id);
+CREATE INDEX IF NOT EXISTS idx_triples_obj ON triples(obj_id);
+CREATE INDEX IF NOT EXISTS idx_triples_dataset ON triples(dataset_id);
+
+CREATE TABLE IF NOT EXISTS chunk_mentions (
+    chunk_id    TEXT NOT NULL,
+    entity_id   TEXT NOT NULL,
+    count       INTEGER DEFAULT 1,
+    PRIMARY KEY(chunk_id, entity_id),
+    FOREIGN KEY(chunk_id) REFERENCES chunks(chunk_id) ON DELETE CASCADE,
+    FOREIGN KEY(entity_id) REFERENCES entities(entity_id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_chunk_mentions_entity ON chunk_mentions(entity_id);
+
+CREATE TABLE IF NOT EXISTS entity_synonyms (
+    a_id        TEXT NOT NULL,
+    b_id        TEXT NOT NULL,
+    score       REAL NOT NULL,
+    PRIMARY KEY(a_id, b_id),
+    FOREIGN KEY(a_id) REFERENCES entities(entity_id) ON DELETE CASCADE,
+    FOREIGN KEY(b_id) REFERENCES entities(entity_id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS extraction_cache (
+    chunk_hash   TEXT PRIMARY KEY,
+    model        TEXT NOT NULL,
+    triples_json TEXT NOT NULL,
+    created_at   TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS graph_state (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
 """
 
 

@@ -59,6 +59,38 @@ class EmbeddingConfig:
 
 
 @dataclass
+class LLMConfig:
+    """Chat-completions LLM endpoint used by HippoRAG OpenIE and query-entity steps."""
+
+    api_url: str
+    api_key: str
+    model: str
+    x_dep_ticket: str = ""
+    x_system_name: str = "hybrid-retriever-modular-mcp"
+    batch_size: int = 8
+    timeout_sec: int = 60
+    verify_ssl: bool = True
+    temperature: float = 0.0
+    max_tokens: int = 1024
+
+    @property
+    def is_configured(self) -> bool:
+        return bool(self.api_url) and bool(self.model)
+
+
+@dataclass
+class HippoRAGConfig:
+    synonym_threshold: float = 0.85
+    synonym_top_k: int = 8
+    ppr_alpha: float = 0.85
+    ppr_max_iter: int = 50
+    ppr_tol: float = 1e-6
+    query_top_entities: int = 5
+    top_chunks: int = 12
+    extraction_max_triples: int = 32
+
+
+@dataclass
 class QdrantConfig:
     collection: str = "retriever_chunks"
     distance: str = "Cosine"
@@ -87,9 +119,11 @@ class SearchConfig:
 class Config:
     data_root: Path
     embedding: Optional[EmbeddingConfig] = None
+    llm: Optional[LLMConfig] = None
     qdrant: QdrantConfig = field(default_factory=QdrantConfig)
     ingest: IngestConfig = field(default_factory=IngestConfig)
     search: SearchConfig = field(default_factory=SearchConfig)
+    hipporag: HippoRAGConfig = field(default_factory=HippoRAGConfig)
 
     @property
     def files_root(self) -> Path:
@@ -166,9 +200,27 @@ def load_config(env_path: str | os.PathLike[str] | None = None) -> Config:
             verify_ssl=_bool(os.getenv("EMBEDDING_VERIFY_SSL"), True),
         )
 
+    llm_url = os.getenv("LLM_API_URL", "").strip()
+    llm_model = os.getenv("LLM_MODEL", "").strip()
+    llm: Optional[LLMConfig] = None
+    if llm_url and llm_model:
+        llm = LLMConfig(
+            api_url=llm_url,
+            api_key=os.getenv("LLM_API_KEY", "").strip(),
+            model=llm_model,
+            x_dep_ticket=os.getenv("LLM_API_X_DEP_TICKET", "").strip(),
+            x_system_name=os.getenv("LLM_API_X_SYSTEM_NAME", "hybrid-retriever-modular-mcp").strip(),
+            batch_size=_int(os.getenv("LLM_BATCH_SIZE"), 8),
+            timeout_sec=_int(os.getenv("LLM_TIMEOUT_SEC"), 60),
+            verify_ssl=_bool(os.getenv("LLM_VERIFY_SSL"), True),
+            temperature=_float(os.getenv("LLM_TEMPERATURE"), 0.0),
+            max_tokens=_int(os.getenv("LLM_MAX_TOKENS"), 1024),
+        )
+
     return Config(
         data_root=_default_data_root(),
         embedding=embedding,
+        llm=llm,
         qdrant=QdrantConfig(
             collection=os.getenv("QDRANT_COLLECTION", "retriever_chunks"),
             distance=os.getenv("QDRANT_DISTANCE", "Cosine"),
@@ -187,5 +239,15 @@ def load_config(env_path: str | os.PathLike[str] | None = None) -> Config:
             fusion=os.getenv("RETRIEVER_FUSION", "linear").strip().lower(),
             rrf_k=_int(os.getenv("RRF_K"), 60),
             parent_chunk_replace=_bool(os.getenv("ENABLE_PARENT_CHILD_CHUNKING"), True),
+        ),
+        hipporag=HippoRAGConfig(
+            synonym_threshold=_float(os.getenv("HIPPORAG_SYNONYM_THRESHOLD"), 0.85),
+            synonym_top_k=_int(os.getenv("HIPPORAG_SYNONYM_TOP_K"), 8),
+            ppr_alpha=_float(os.getenv("HIPPORAG_PPR_ALPHA"), 0.85),
+            ppr_max_iter=_int(os.getenv("HIPPORAG_PPR_MAX_ITER"), 50),
+            ppr_tol=_float(os.getenv("HIPPORAG_PPR_TOL"), 1e-6),
+            query_top_entities=_int(os.getenv("HIPPORAG_QUERY_TOP_ENTITIES"), 5),
+            top_chunks=_int(os.getenv("HIPPORAG_TOP_CHUNKS"), 12),
+            extraction_max_triples=_int(os.getenv("HIPPORAG_EXTRACTION_MAX_TRIPLES"), 32),
         ),
     )
