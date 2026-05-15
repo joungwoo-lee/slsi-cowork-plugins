@@ -632,8 +632,15 @@ function findComp(cls) { return CATALOG.find(c => c.cls === cls); }
 function nodesArr() { return topo.nodes || (topo.nodes = []); }
 function findNode(name) { return nodesArr().find(n => n.name === name); }
 function nodeNames() { return nodesArr().map(n => n.name); }
-const GRAPH_EXTERNAL_NODE = "input";
-const GRAPH_VISIBLE_INPUT_PORTS = new Set(["path", "text", "query", "dataset_ids", "raw_emails"]);
+
+function graphExternalSource(node, comp, portName) {
+  if (!comp) return null;
+  if (comp.stage === "load" && portName === "path") return "path";
+  if (node.name === "fts5" && portName === "query") return "query";
+  if (node.name === "query_embedder" && portName === "text") return "query";
+  if (node.name === "reranker" && portName === "query") return "query";
+  return null;
+}
 
 // Flatten every node's inputs/outputs into {sender, receiver} pairs, deduped.
 function allConnections() {
@@ -665,10 +672,11 @@ function graphConnections() {
     const comp = findComp(node.module);
     if (!comp) continue;
     for (const inp of comp.inputs || []) {
-      if (!GRAPH_VISIBLE_INPUT_PORTS.has(inp.name)) continue;
+      const sourceNode = graphExternalSource(node, comp, inp.name);
+      if (!sourceNode) continue;
       const receiver = `${node.name}.${inp.name}`;
       if (connectedReceivers.has(receiver)) continue;
-      const sender = `${GRAPH_EXTERNAL_NODE}.${inp.name}`;
+      const sender = `${sourceNode}.${inp.name}`;
       const key = sender + "->" + receiver;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -1071,8 +1079,8 @@ function renderGraph() {
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   const connections = graphConnections();
   const names = nodeNames();
-  const hasExternalInput = connections.some(e => (e.sender || "").split(".")[0] === GRAPH_EXTERNAL_NODE);
-  const graphNodes = hasExternalInput ? [GRAPH_EXTERNAL_NODE, ...names] : names;
+  const externalNodes = [...new Set(connections.map(e => (e.sender || "").split(".")[0]).filter(n => !findNode(n)))];
+  const graphNodes = [...externalNodes, ...names];
   if (!graphNodes.length) { if (empty) empty.style.display = "block"; return; }
   if (empty) empty.style.display = "none";
 
@@ -1108,7 +1116,7 @@ function renderGraph() {
     const node = g.node(n);
     const def = findNode(n);
     const comp = def ? findComp(def.module) : null;
-    const isExternal = n === GRAPH_EXTERNAL_NODE;
+    const isExternal = !def;
     const grp = document.createElementNS(ns, "g");
     grp.setAttribute("transform", `translate(${node.x - node.width / 2}, ${node.y - node.height / 2})`);
     const rect = document.createElementNS(ns, "rect");
@@ -1119,7 +1127,7 @@ function renderGraph() {
     const title = document.createElementNS(ns, "text");
     title.setAttribute("class", "node-title");
     title.setAttribute("x", 10); title.setAttribute("y", 20);
-    title.textContent = isExternal ? "input" : n;
+    title.textContent = n;
     grp.appendChild(title);
     const cls = document.createElementNS(ns, "text");
     cls.setAttribute("class", "node-cls");
