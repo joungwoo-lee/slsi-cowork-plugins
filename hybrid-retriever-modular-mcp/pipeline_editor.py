@@ -610,13 +610,12 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
         <div class="body overview-grid" id="overview"></div>
       </div>
     </div>
-  </div>
-
-  <div id="right">
-    <div id="graph-topbar">
-      <h1>Pipeline Graph</h1>
+    <div id="right">
+      <div id="graph-topbar">
+        <h1>Pipeline Graph</h1>
+      </div>
+      <div id="graph"><div class="graph-empty" id="graph-empty">Add modules on the left to start building the pipeline graph.</div><svg id="canvas" width="100%" height="100%"></svg></div>
     </div>
-    <div id="graph"><div class="graph-empty" id="graph-empty">Add modules on the left to start building the pipeline graph.</div><svg id="canvas" width="100%" height="100%"></svg></div>
   </div>
 </div>
 
