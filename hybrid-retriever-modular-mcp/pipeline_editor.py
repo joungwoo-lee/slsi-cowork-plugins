@@ -438,7 +438,7 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
 label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
 
-#app { display: grid; grid-template-columns: 380px 1fr; height: 100vh; }
+#app { display: grid; grid-template-columns: 500px 1fr; height: 100vh; }
 #left { background: var(--panel); border-right: 1px solid var(--border); overflow-y: auto; padding: 12px; }
 #right { display: flex; flex-direction: column; }
 #topbar {
