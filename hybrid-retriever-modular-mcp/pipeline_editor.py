@@ -211,6 +211,25 @@ CATALOG: list[dict] = [
         "outputs": [{"name": "documents", "type": "List[Document]"}],
     },
     {
+        "name": "BgeReranker",
+        "cls": "retriever.components.bge_reranker.BgeReranker",
+        "stage": "rerank",
+        "params": [
+            {"name": "model", "type": "str", "default": "BAAI/bge-reranker-v2-m3"},
+            {"name": "use_fp16", "type": "bool", "default": True},
+            {"name": "batch_size", "type": "int", "default": 32},
+            {"name": "max_length", "type": "int", "default": 512},
+            {"name": "device", "type": "str", "default": ""},
+        ],
+        "inputs": [
+            {"name": "documents", "type": "List[Document]"},
+            {"name": "query", "type": "str"},
+            {"name": "top_n", "type": "int"},
+            {"name": "enabled", "type": "bool"},
+        ],
+        "outputs": [{"name": "documents", "type": "List[Document]"}],
+    },
+    {
         "name": "ParentChunkReplacer",
         "cls": "retriever.components.parent_replace.ParentChunkReplacer",
         "stage": "post",
@@ -233,6 +252,7 @@ STAGES = [
     ("write", "Write"),
     ("retrieve", "Retrieve"),
     ("fuse", "Fuse"),
+    ("rerank", "Rerank"),
     ("post", "Post-process"),
 ]
 
@@ -260,7 +280,12 @@ def load_pipeline_list() -> list[dict]:
 
 
 def load_pipeline_detail(name: str) -> dict:
-    """Return profile metadata + the two topology JSON blobs (if any)."""
+    """Return profile metadata + the two topology JSON blobs (if any).
+
+    Topology blobs are coerced into the standard ``{components, connections}``
+    shape the editor's frontend renders, regardless of whether the on-disk
+    file uses node-centric or standard format.
+    """
     profile: dict | None = None
     for entry in load_pipeline_list():
         if entry["name"] == name:
@@ -269,13 +294,21 @@ def load_pipeline_detail(name: str) -> dict:
     if profile is None:
         return {"error": f"pipeline not found: {name}"}
 
+    def _load(topo_name: str | None) -> dict | None:
+        if not topo_name:
+            return None
+        raw = _read_json(PIPELINES_DIR / topo_name)
+        if not raw:
+            return None
+        return editor_store.topology_for_ui(raw)
+
     topo_indexing = profile.get("indexing_topology")
     topo_retrieval = profile.get("retrieval_topology")
     topo_unified = profile.get("unified_topology")
     out = dict(profile)
-    out["indexing"] = _read_json(PIPELINES_DIR / topo_indexing) if topo_indexing else None
-    out["retrieval"] = _read_json(PIPELINES_DIR / topo_retrieval) if topo_retrieval else None
-    out["unified"] = _read_json(PIPELINES_DIR / topo_unified) if topo_unified else None
+    out["indexing"] = _load(topo_indexing)
+    out["retrieval"] = _load(topo_retrieval)
+    out["unified"] = _load(topo_unified)
     return out
 
 

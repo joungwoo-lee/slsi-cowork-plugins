@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config import Config, DEFAULT_ENV_PATH, load_config
+from .node_topology import from_haystack_dict, is_node_centric, to_haystack_dict
 
 PIPELINES_DIR = Path(__file__).resolve().parent
 REGISTRY_PATH = PIPELINES_DIR / "registry.json"
@@ -50,6 +51,14 @@ def atomic_write_json(path: Path, data: dict[str, Any]) -> None:
 
 
 def normalise_topology(raw: dict[str, Any]) -> dict[str, Any]:
+    """Coerce a UI/MCP topology blob into the haystack standard dict.
+
+    Accepts either node-centric (``{nodes: [...]}``) or standard
+    (``{components, connections}``). Always returns the standard shape so the
+    haystack ``Pipeline`` loader can consume it.
+    """
+    if is_node_centric(raw):
+        return to_haystack_dict(raw)
     components = {}
     for cname, cdef in (raw.get("components") or {}).items():
         if not isinstance(cdef, dict):
@@ -75,6 +84,18 @@ def normalise_topology(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def topology_for_storage(raw: dict[str, Any]) -> dict[str, Any]:
+    """Convert any incoming topology blob into the node-centric on-disk form."""
+    standard = normalise_topology(raw)
+    return from_haystack_dict(standard)
+
+
+def topology_for_ui(raw: dict[str, Any]) -> dict[str, Any]:
+    """Convert any topology blob into the standard ``{components, connections}``
+    form the visual editor frontend renders."""
+    return normalise_topology(raw)
+
+
 def save_pipeline_payload(
     payload: dict[str, Any],
     *,
@@ -94,26 +115,29 @@ def save_pipeline_payload(
     }
 
     target_pipelines_dir = pipelines_dir or PIPELINES_DIR
-    
+
+    def _has_topology(blob: Any) -> bool:
+        return isinstance(blob, dict) and (blob.get("components") or blob.get("nodes"))
+
     unified_topology = payload.get("unified_topology")
-    if isinstance(unified_topology, dict) and unified_topology.get("components"):
+    if _has_topology(unified_topology):
         topology_file = f"{name}_unified.json"
-        atomic_write_json(target_pipelines_dir / topology_file, normalise_topology(unified_topology))
+        atomic_write_json(target_pipelines_dir / topology_file, topology_for_storage(unified_topology))
         profile["unified_topology"] = topology_file
         # Also keep indexing/retrieval pointing to the same file for compatibility
         profile["indexing_topology"] = topology_file
         profile["retrieval_topology"] = topology_file
 
     indexing_topology = payload.get("indexing_topology")
-    if isinstance(indexing_topology, dict) and indexing_topology.get("components"):
+    if _has_topology(indexing_topology):
         topology_file = f"{name}_indexing.json"
-        atomic_write_json(target_pipelines_dir / topology_file, normalise_topology(indexing_topology))
+        atomic_write_json(target_pipelines_dir / topology_file, topology_for_storage(indexing_topology))
         profile["indexing_topology"] = topology_file
 
     retrieval_topology = payload.get("retrieval_topology")
-    if isinstance(retrieval_topology, dict) and retrieval_topology.get("components"):
+    if _has_topology(retrieval_topology):
         topology_file = f"{name}_retrieval.json"
-        atomic_write_json(target_pipelines_dir / topology_file, normalise_topology(retrieval_topology))
+        atomic_write_json(target_pipelines_dir / topology_file, topology_for_storage(retrieval_topology))
         profile["retrieval_topology"] = topology_file
 
     profiles_path = profiles_path or user_profiles_path(cfg)
