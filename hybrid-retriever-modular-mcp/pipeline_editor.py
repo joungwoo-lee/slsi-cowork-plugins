@@ -1102,9 +1102,10 @@ function renderGraph() {
   const ns = "http://www.w3.org/2000/svg";
   const w = g.graph().width || 400;
   const h = g.graph().height || 200;
-  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-  svg.setAttribute("width", w);
-  svg.setAttribute("height", h);
+  const pad = 40;
+  svg.setAttribute("viewBox", `${-pad} ${-pad} ${w + pad * 2} ${h + pad * 2}`);
+  svg.setAttribute("width", w + pad * 2);
+  svg.setAttribute("height", h + pad * 2);
 
   g.edges().forEach(edge => {
     const points = g.edge(edge).points;
