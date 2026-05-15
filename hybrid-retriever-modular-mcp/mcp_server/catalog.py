@@ -164,6 +164,11 @@ _BASE_TOOLS: list[dict[str, Any]] = [
                     "default": "default",
                     "description": "Named pipeline profile (see list_pipelines.profiles).",
                 },
+                "auto_hipporag": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Run HippoRAG OpenIE on the uploaded chunks immediately after ingest. Requires LLM_API_URL and EMBEDDING_API_URL. Skips synonym rebuild (run hipporag_refresh_synonyms at the end of a batch).",
+                },
             },
             "required": ["dataset_id", "file_path"],
         },
@@ -202,6 +207,11 @@ _BASE_TOOLS: list[dict[str, Any]] = [
                     "type": "string",
                     "default": "default",
                     "description": "Named pipeline profile (see list_pipelines.profiles).",
+                },
+                "auto_hipporag": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Run HippoRAG OpenIE + synonym rebuild after the bulk ingest. Requires LLM_API_URL and EMBEDDING_API_URL. Skips per-document synonym work and consolidates it once at the end of the batch.",
                 },
             },
             "required": ["dataset_id", "dir_path"],
@@ -405,7 +415,91 @@ _BASE_TOOLS: list[dict[str, Any]] = [
         "name": "graph_rebuild",
         "description": (
             "[Graph] Rebuild the embedded graph from the canonical SQLite state. Safe "
-            "to call after ingesting new documents."
+            "to call after ingesting new documents. Uses Kùzu COPY FROM staged CSVs "
+            "so the cost is roughly linear in corpus size, not in chunk count × constant."
+        ),
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    # --- HippoRAG knowledge layer ---------------------------------------
+    {
+        "name": "hipporag_index",
+        "description": (
+            "[HippoRAG] Build (or refresh) the entity knowledge graph for a dataset. "
+            "Runs LLM-driven OpenIE on every chunk, canonicalises entities, embeds "
+            "them, and rebuilds the synonym edges. Idempotent — re-running on an "
+            "unchanged corpus hits the per-chunk extraction cache. Required before "
+            "hipporag_search returns useful results."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "dataset_id": {"type": "string"},
+                "rebuild_synonyms": {"type": "boolean", "default": True},
+                "max_workers": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 16,
+                    "default": 4,
+                    "description": "Concurrent LLM extraction workers; respects the LLM client throttle/backoff.",
+                },
+            },
+            "required": ["dataset_id"],
+        },
+    },
+    {
+        "name": "hipporag_index_document",
+        "description": (
+            "[HippoRAG] Incremental: re-extract triples for one document's chunks. "
+            "Skips synonym rebuild by default so it's safe to call in a tight loop. "
+            "Run hipporag_refresh_synonyms once at the end of a batch."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "document_id": {"type": "string"},
+                "rebuild_synonyms": {"type": "boolean", "default": False},
+            },
+            "required": ["document_id"],
+        },
+    },
+    {
+        "name": "hipporag_refresh_synonyms",
+        "description": (
+            "[HippoRAG] Rebuild the SYNONYM edges from current entity embeddings. "
+            "All-pairs operation — call once after a batch index rather than per "
+            "document. Threshold is HIPPORAG_SYNONYM_THRESHOLD."
+        ),
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "hipporag_search",
+        "description": (
+            "[HippoRAG] Graph-primary retrieval. Extracts query entities via LLM, "
+            "links them to graph entities by embedding similarity, runs Personalized "
+            "PageRank from those seeds, and aggregates the rank back to chunks. Use "
+            "when the question is about relationships, multi-hop facts, or when "
+            "plain hybrid search misses passages that share linked entities. "
+            "Requires hipporag_index to have run."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "dataset_ids": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "top_n": {"type": "integer", "minimum": 1, "maximum": 100, "default": 12},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "hipporag_stats",
+        "description": (
+            "[HippoRAG] Report entity/triple/mention/synonym counts and PPR engine "
+            "warmth (cached matrix size + checksum). Run before/after indexing to "
+            "verify state."
         ),
         "inputSchema": {"type": "object", "properties": {}},
     },

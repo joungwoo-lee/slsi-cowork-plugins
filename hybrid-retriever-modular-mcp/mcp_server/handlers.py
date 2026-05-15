@@ -16,12 +16,27 @@ from retriever import api as retriever_api
 from retriever import graph as retriever_graph
 from retriever import storage
 from retriever.config import load_config
+from retriever.hipporag import index as hipporag_index
+from retriever.hipporag import query as hipporag_query
+from retriever.hipporag import ppr as hipporag_ppr
+from retriever.hipporag import synonyms as hipporag_synonyms
 from retriever.pipelines import editor_store
 from retriever.pipelines import profiles as pipeline_profiles
 
 from . import bootstrap
 from .protocol import text_result
 from .runtime import silenced_stdout
+
+# Process-wide PPR engine. ``warm()`` is lazy and re-checks the SQLite
+# checksum on every call, so reloading after ingest happens automatically.
+_PPR_ENGINE: hipporag_ppr.PPREngine | None = None
+
+
+def _ppr_engine(cfg) -> hipporag_ppr.PPREngine:
+    global _PPR_ENGINE
+    if _PPR_ENGINE is None:
+        _PPR_ENGINE = hipporag_ppr.PPREngine(cfg, cfg.hipporag)
+    return _PPR_ENGINE
 
 # Supported document extensions for upload_directory bulk ingest.
 _SUPPORTED_EXTS = frozenset({".txt", ".md", ".pdf", ".docx", ".xlsx", ".csv"})
@@ -359,6 +374,7 @@ def tool_upload_directory(args: dict) -> dict:
     metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
     skip_embedding = bool(args.get("skip_embedding", False))
     use_hierarchical = args.get("use_hierarchical")
+    auto_hipporag = bool(args.get("auto_hipporag", False))
 
     results: list[dict] = []
     errors: list[dict] = []
@@ -386,6 +402,17 @@ def tool_upload_directory(args: dict) -> dict:
             except Exception as exc:  # noqa: BLE001 — report per-file failures, keep going
                 errors.append({"file": str(file_path), "error": str(exc)})
 
+    hipporag_summary: dict | None = None
+    if auto_hipporag and results:
+        try:
+            with silenced_stdout():
+                with storage.sqlite_session(cfg) as sconn:
+                    hipporag_summary = hipporag_index.index_dataset(
+                        cfg, sconn, ds, rebuild_synonyms_after=True
+                    )
+        except Exception as exc:  # noqa: BLE001
+            hipporag_summary = {"error": str(exc)}
+
     return text_result({
         "dataset_id": ds,
         "directory": dp,
@@ -393,6 +420,7 @@ def tool_upload_directory(args: dict) -> dict:
         "error_count": len(errors),
         "results": results,
         "errors": errors,
+        **({"hipporag": hipporag_summary} if hipporag_summary is not None else {}),
     })
 
 
@@ -406,6 +434,7 @@ def tool_upload_document(args: dict) -> dict:
     cfg = load_config()
     pipeline_name = _pipeline_name(args)
     metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
+    auto_hipporag = bool(args.get("auto_hipporag", False))
     with silenced_stdout():
         out = retriever_api.upload_document(
             cfg,
@@ -416,7 +445,24 @@ def tool_upload_document(args: dict) -> dict:
             use_hierarchical=args.get("use_hierarchical"),
             metadata=metadata,
         )
-    return text_result({"dataset_id": ds, "file": fp, "response": out})
+    hipporag_summary: dict | None = None
+    if auto_hipporag:
+        doc_id = isinstance(out, dict) and out.get("document_id") or ""
+        if doc_id:
+            try:
+                with silenced_stdout():
+                    with storage.sqlite_session(cfg) as sconn:
+                        hipporag_summary = hipporag_index.index_document(
+                            cfg, sconn, doc_id, rebuild_synonyms_after=False
+                        )
+            except Exception as exc:  # noqa: BLE001 — report but don't fail the upload
+                hipporag_summary = {"error": str(exc)}
+    return text_result({
+        "dataset_id": ds,
+        "file": fp,
+        "response": out,
+        **({"hipporag": hipporag_summary} if hipporag_summary is not None else {}),
+    })
 
 
 def tool_list_documents(args: dict) -> dict:
@@ -693,6 +739,119 @@ def tool_graph_rebuild(_args: dict) -> dict:
     return text_result({"status": "ok", **counts})
 
 
+# ----- HippoRAG ----------------------------------------------------------
+
+def tool_hipporag_index(args: dict) -> dict:
+    cfg = load_config()
+    ds = _require_str(args, "dataset_id")
+    if not ds:
+        return text_result("dataset_id is required", is_error=True)
+    rebuild_syn = bool(args.get("rebuild_synonyms", True))
+    max_workers = _safe_int(args, "max_workers", 4, lo=1, hi=16)
+    try:
+        with silenced_stdout():
+            with storage.sqlite_session(cfg) as sconn:
+                result = hipporag_index.index_dataset(
+                    cfg, sconn, ds,
+                    rebuild_synonyms_after=rebuild_syn,
+                    max_workers=max_workers,
+                )
+        _ppr_engine(cfg).invalidate()
+    except Exception as exc:  # noqa: BLE001
+        return text_result(f"hipporag_index failed: {exc}", is_error=True)
+    return text_result({"status": "ok", "dataset_id": ds, **result})
+
+
+def tool_hipporag_index_document(args: dict) -> dict:
+    cfg = load_config()
+    doc_id = _require_str(args, "document_id")
+    if not doc_id:
+        return text_result("document_id is required", is_error=True)
+    rebuild_syn = bool(args.get("rebuild_synonyms", False))
+    try:
+        with silenced_stdout():
+            with storage.sqlite_session(cfg) as sconn:
+                result = hipporag_index.index_document(
+                    cfg, sconn, doc_id, rebuild_synonyms_after=rebuild_syn,
+                )
+        _ppr_engine(cfg).invalidate()
+    except Exception as exc:  # noqa: BLE001
+        return text_result(f"hipporag_index_document failed: {exc}", is_error=True)
+    return text_result({"status": "ok", "document_id": doc_id, **result})
+
+
+def tool_hipporag_refresh_synonyms(_args: dict) -> dict:
+    cfg = load_config()
+    try:
+        with silenced_stdout():
+            with storage.sqlite_session(cfg) as sconn:
+                result = hipporag_synonyms.rebuild_synonyms(sconn, cfg.hipporag)
+                retriever_graph.mark_dirty(sconn)
+        _ppr_engine(cfg).invalidate()
+    except Exception as exc:  # noqa: BLE001
+        return text_result(f"hipporag_refresh_synonyms failed: {exc}", is_error=True)
+    return text_result({"status": "ok", **result})
+
+
+def tool_hipporag_search(args: dict) -> dict:
+    cfg = load_config()
+    q = _require_str(args, "query")
+    if not q:
+        return text_result("query is required", is_error=True)
+    dataset_ids = _resolve_datasets(args.get("dataset_ids"))
+    top = _safe_int(args, "top_n", cfg.hipporag.top_chunks, lo=1, hi=100)
+    try:
+        with silenced_stdout():
+            with storage.sqlite_session(cfg) as sconn:
+                engine = _ppr_engine(cfg)
+                result = hipporag_query.search(
+                    cfg, sconn, engine, q, dataset_ids, top_chunks=top,
+                )
+    except Exception as exc:  # noqa: BLE001
+        return text_result(f"hipporag_search failed: {exc}", is_error=True)
+    return text_result({
+        "query": q,
+        "dataset_ids": dataset_ids,
+        "query_entities": result.query_entities,
+        "seed_entities": result.seed_entities,
+        "top_ppr_entities": [
+            {"entity_id": eid, "score": round(score, 6)}
+            for eid, score in result.ppr_entities_top
+        ],
+        "chunks": result.chunks,
+    })
+
+
+def tool_hipporag_stats(_args: dict) -> dict:
+    cfg = load_config()
+    try:
+        with silenced_stdout():
+            with storage.sqlite_session(cfg) as sconn:
+                counts = {
+                    "entities": sconn.execute("SELECT COUNT(*) FROM entities").fetchone()[0],
+                    "triples": sconn.execute("SELECT COUNT(*) FROM triples").fetchone()[0],
+                    "mentions": sconn.execute("SELECT COUNT(*) FROM chunk_mentions").fetchone()[0],
+                    "synonyms": sconn.execute("SELECT COUNT(*) FROM entity_synonyms").fetchone()[0],
+                    "embeddings": sconn.execute("SELECT COUNT(*) FROM entity_embeddings").fetchone()[0],
+                    "cached_extractions": sconn.execute("SELECT COUNT(*) FROM extraction_cache").fetchone()[0],
+                }
+                dirty = retriever_graph.is_dirty(sconn)
+                last_index = retriever_graph.get_state(sconn, "last_index_at", "")
+                last_rebuild = retriever_graph.get_state(sconn, "last_rebuilt_at", "")
+                checksum = retriever_graph.graph_checksum(sconn)
+                warm = _ppr_engine(cfg).warm(sconn)
+    except Exception as exc:  # noqa: BLE001
+        return text_result(f"hipporag_stats failed: {exc}", is_error=True)
+    return text_result({
+        "counts": counts,
+        "graph_dirty": dirty,
+        "last_index_at": last_index,
+        "last_rebuilt_at": last_rebuild,
+        "checksum": checksum,
+        "ppr": warm,
+    })
+
+
 HANDLERS = {
     "search": tool_search,
     "list_datasets": tool_list_datasets,
@@ -714,4 +873,9 @@ HANDLERS = {
     "health": tool_health,
     "graph_query": tool_graph_query,
     "graph_rebuild": tool_graph_rebuild,
+    "hipporag_index": tool_hipporag_index,
+    "hipporag_index_document": tool_hipporag_index_document,
+    "hipporag_refresh_synonyms": tool_hipporag_refresh_synonyms,
+    "hipporag_search": tool_hipporag_search,
+    "hipporag_stats": tool_hipporag_stats,
 }
