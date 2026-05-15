@@ -150,6 +150,14 @@ CATALOG: list[dict] = [
         "outputs": [{"name": "embedding", "type": "List[float]"}],
     },
     {
+        "name": "SqliteFts5Writer",
+        "cls": "retriever.components.fts5_writer.SqliteFts5Writer",
+        "stage": "write",
+        "params": [{"name": "data_root", "type": "str", "default": ""}],
+        "inputs": [{"name": "documents", "type": "List[Document]"}],
+        "outputs": [{"name": "written", "type": "int"}],
+    },
+    {
         "name": "LocalQdrantWriter",
         "cls": "retriever.components.vector_retriever.LocalQdrantWriter",
         "stage": "write",
@@ -480,18 +488,19 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
 
 #app { display: flex; flex-direction: column; height: 100vh; background: var(--bg); }
-#main-container { flex: 1; overflow-y: auto; display: flex; justify-content: center; padding: 20px; }
-#settings-panel { width: 100%; max-width: 700px; }
+#main-container { flex: 1; min-height: 0; display: flex; gap: 20px; padding: 20px; overflow: hidden; }
+#settings-panel { flex: 1 1 0; min-width: 0; max-width: 760px; overflow-y: auto; }
 
-#right { 
-  display: none; 
-  position: fixed; 
-  inset: 0; 
-  background: var(--bg); 
-  z-index: 2000; 
-  flex-direction: column; 
+#right {
+  flex: 1 1 0;
+  min-width: 420px;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  overflow: hidden;
 }
-#right.open { display: flex; }
 
 #topbar {
   display: flex; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--border);
@@ -545,6 +554,12 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
 
 .tabs { margin: 12px 0; }
 .tab { flex: 1; text-align: center; font-weight: 600; }
+
+@media (max-width: 1200px) {
+  #main-container { flex-direction: column; overflow-y: auto; }
+  #settings-panel { max-width: none; overflow: visible; }
+  #right { min-width: 0; min-height: 480px; }
+}
 </style>
 
 </head>
@@ -554,7 +569,6 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
     <h1>Retriever Editor</h1>
     <span id="status"></span>
     <div class="spacer"></div>
-    <button id="view-graph-btn" class="primary">View Graph</button>
     <button id="reset-btn">Reset</button>
     <button class="primary" id="save">Save Pipeline</button>
   </div>
@@ -607,8 +621,6 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
   <div id="right">
     <div id="graph-topbar">
       <h1>Pipeline Graph</h1>
-      <div class="spacer"></div>
-      <button id="close-graph-btn">Close Graph</button>
     </div>
     <div id="graph"><div class="graph-empty" id="graph-empty">Add modules on the left to start building the pipeline graph.</div><svg id="canvas" width="100%" height="100%"></svg></div>
   </div>
@@ -744,8 +756,6 @@ async function boot() {
     document.getElementById("save").addEventListener("click", onSave);
     document.getElementById("reset-btn").addEventListener("click", () => { topo = { nodes: [] }; selectedNode = null; document.getElementById("pname").value=""; document.getElementById("pdesc").value=""; sel.value=""; setStatus(""); redraw(); });
     document.getElementById("auto-wire").addEventListener("click", autoWire);
-    document.getElementById("view-graph-btn").addEventListener("click", () => { document.getElementById("right").classList.add("open"); redraw(); });
-    document.getElementById("close-graph-btn").addEventListener("click", () => { document.getElementById("right").classList.remove("open"); });
     redraw();
   } catch (err) {
     setStatus("boot failed: " + err.message, "bad");
@@ -1086,7 +1096,7 @@ function renderGraph() {
 
   if (typeof dagre === "undefined") return;
   const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: "LR", marginx: 20, marginy: 20, nodesep: 30, ranksep: 60 });
+  g.setGraph({ rankdir: "TB", marginx: 20, marginy: 20, nodesep: 30, ranksep: 60 });
   g.setDefaultEdgeLabel(() => ({}));
   for (const n of graphNodes) g.setNode(n, { label: n, width: 160, height: 50 });
   for (const e of connections) {

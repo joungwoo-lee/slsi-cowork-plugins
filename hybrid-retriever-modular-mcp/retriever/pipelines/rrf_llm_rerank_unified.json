@@ -50,6 +50,19 @@
       ]
     },
     {
+      "name": "writer",
+      "module": "retriever.components.fts5_writer.SqliteFts5Writer",
+      "params": {
+        "data_root": ""
+      },
+      "inputs": [
+        {
+          "port": "documents",
+          "from": "embedder.documents"
+        }
+      ]
+    },
+    {
       "name": "qdrant_writer",
       "module": "retriever.components.vector_retriever.LocalQdrantWriter",
       "params": {

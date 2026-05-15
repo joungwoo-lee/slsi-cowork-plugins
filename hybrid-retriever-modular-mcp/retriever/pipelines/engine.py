@@ -25,7 +25,6 @@ from haystack import Pipeline
 
 from .. import storage  # noqa: F401  (importing for side-effects? keep explicit below)
 from ..config import Config
-from ..stores import SqliteFts5DocumentStore
 from .node_topology import is_node_centric, to_haystack_dict
 
 logger = logging.getLogger(__name__)
@@ -169,7 +168,7 @@ def _inject_indexing_runtime(pipeline: Pipeline, cfg: Config, opts: dict[str, An
                 inst.batch_size = emb.batch_size
                 inst.timeout_sec = emb.timeout_sec
                 inst.verify_ssl = emb.verify_ssl
-        if name in ("qdrant_writer", "vector") and hasattr(inst, "data_root"):
+        if name in ("writer", "qdrant_writer", "vector") and hasattr(inst, "data_root"):
             inst.data_root = str(cfg.data_root)
             if hasattr(inst, "collection"):
                 inst.collection = cfg.qdrant.collection
@@ -316,7 +315,7 @@ def run_indexing(
     if skip_embedding and "embedder" in pipeline.graph.nodes and "documents" in graph_inputs.get("embedder", {}):
         run_inputs.setdefault("embedder", {})["documents"] = []
 
-    result = pipeline.run(run_inputs, include_outputs_from={"loader", "splitter", "embedder"})
+    result = pipeline.run(run_inputs, include_outputs_from={"loader", "splitter", "embedder", "writer", "qdrant_writer"})
 
 
     loader_out = result.get("loader", {})
@@ -329,9 +328,6 @@ def run_indexing(
     combined_metadata = _combined_metadata(loader_out, metadata)
     _decorate_documents(documents, stored_source, stored_content, path, loader_out,
                         has_vector, combined_metadata)
-
-    store = SqliteFts5DocumentStore(cfg)
-    store.write_documents(documents)
 
     return {
         "dataset_id": dataset_id,

@@ -9,6 +9,7 @@ from .file_loader import LocalFileLoader
 from .hierarchical_splitter import HierarchicalSplitter
 from .document_embedder import HttpDocumentEmbedder, HttpTextEmbedder
 from .fts5_retriever import Fts5Retriever
+from .fts5_writer import SqliteFts5Writer
 from .vector_retriever import LocalQdrantRetriever, LocalQdrantWriter
 from .hybrid_joiner import HybridJoiner
 from .parent_replace import ParentChunkReplacer
@@ -22,6 +23,7 @@ __all__ = [
     "HttpDocumentEmbedder",
     "HttpTextEmbedder",
     "Fts5Retriever",
+    "SqliteFts5Writer",
     "LocalQdrantRetriever",
     "LocalQdrantWriter",
     "HybridJoiner",
