@@ -2,6 +2,8 @@
 
 자체 완결형 로컬 RAG MCP 서버. `py server.py`가 stdio MCP 서버를 띄우고, 도구 호출 시 로컬 SQLite FTS5 (kiwipiepy 한국어 형태소) + 선택적 Qdrant 벡터 + 임베디드 Kùzu 그래프를 in-process로 사용합니다. FastAPI 백엔드가 따로 필요하지 않습니다.
 
+파이프라인 편집 UI는 `py -3 server.py --editor`로 실행합니다. 브라우저가 열리며, 좌측에서 단계별 모듈 추가/설정/연결을 편집하고 우측에서 DAG 그래프를 바로 확인할 수 있습니다.
+
 ## 구조
 
 ```
@@ -71,6 +73,25 @@ FTS5는 `unicode61` 토크나이저를 쓰지만, 색인·쿼리 양쪽에서 `k
 ## 파이프라인 프로파일
 
 기본 프로파일은 `retriever/pipelines/registry.json`. 사용자 프로파일은 `$RETRIEVER_DATA_ROOT/pipelines.json` 또는 `save_pipeline` MCP 도구로 추가합니다. 토폴로지(컴포넌트 그래프) 자체는 `default_indexing.json` / `default_retrieval.json` / `email_indexing.json`.
+
+### 비주얼 파이프라인 편집기
+
+```powershell
+py -3 server.py --editor
+```
+
+- 좌측: 단계별 모듈 카탈로그, 모듈별 init parameter 편집, connection 편집
+- 우측: 현재 indexing/retrieval 파이프라인의 연결 그래프(SVG DAG)
+- 저장 결과:
+  - `retriever/pipelines/<name>_indexing.json`
+  - `retriever/pipelines/<name>_retrieval.json`
+  - `$RETRIEVER_DATA_ROOT/pipelines.json`
+
+옵션:
+
+```powershell
+py -3 server.py --editor --editor-port 8877 --no-browser
+```
 
 | profile | 용도 |
 |---|---|
