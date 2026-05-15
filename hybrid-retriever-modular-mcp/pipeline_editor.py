@@ -510,6 +510,7 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
 #graph svg { display: block; }
 .node-rect { fill: var(--panel); stroke: var(--border); stroke-width: 1.2; rx: 8; ry: 8; cursor: pointer; }
 .node-rect.selected { stroke: var(--accent); stroke-width: 2; }
+.node-rect.external { fill: #111827; stroke: #4a5470; stroke-dasharray: 5 3; }
 .node-title { fill: var(--text); font-size: 12px; font-weight: 600; }
 .node-cls { fill: var(--muted); font-size: 10px; }
 .port-text { fill: var(--muted); font-size: 10px; }
@@ -631,6 +632,8 @@ function findComp(cls) { return CATALOG.find(c => c.cls === cls); }
 function nodesArr() { return topo.nodes || (topo.nodes = []); }
 function findNode(name) { return nodesArr().find(n => n.name === name); }
 function nodeNames() { return nodesArr().map(n => n.name); }
+const GRAPH_EXTERNAL_NODE = "input";
+const GRAPH_VISIBLE_INPUT_PORTS = new Set(["path", "text", "query", "dataset_ids", "raw_emails"]);
 
 // Flatten every node's inputs/outputs into {sender, receiver} pairs, deduped.
 function allConnections() {
@@ -649,6 +652,27 @@ function allConnections() {
     }
     for (const e of n.outputs || []) {
       if (e.port && e.to) push(n.name + "." + e.port, e.to);
+    }
+  }
+  return out;
+}
+
+function graphConnections() {
+  const out = allConnections().slice();
+  const seen = new Set(out.map(e => e.sender + "->" + e.receiver));
+  const connectedReceivers = new Set(out.map(e => e.receiver));
+  for (const node of nodesArr()) {
+    const comp = findComp(node.module);
+    if (!comp) continue;
+    for (const inp of comp.inputs || []) {
+      if (!GRAPH_VISIBLE_INPUT_PORTS.has(inp.name)) continue;
+      const receiver = `${node.name}.${inp.name}`;
+      if (connectedReceivers.has(receiver)) continue;
+      const sender = `${GRAPH_EXTERNAL_NODE}.${inp.name}`;
+      const key = sender + "->" + receiver;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ sender, receiver, synthetic: true });
     }
   }
   return out;
@@ -1045,16 +1069,19 @@ function renderGraph() {
   const empty = document.getElementById("graph-empty");
   if (!svg) return;
   while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const connections = graphConnections();
   const names = nodeNames();
-  if (!names.length) { if (empty) empty.style.display = "block"; return; }
+  const hasExternalInput = connections.some(e => (e.sender || "").split(".")[0] === GRAPH_EXTERNAL_NODE);
+  const graphNodes = hasExternalInput ? [GRAPH_EXTERNAL_NODE, ...names] : names;
+  if (!graphNodes.length) { if (empty) empty.style.display = "block"; return; }
   if (empty) empty.style.display = "none";
 
   if (typeof dagre === "undefined") return;
   const g = new dagre.graphlib.Graph();
   g.setGraph({ rankdir: "LR", marginx: 20, marginy: 20, nodesep: 30, ranksep: 60 });
   g.setDefaultEdgeLabel(() => ({}));
-  for (const n of names) g.setNode(n, { label: n, width: 160, height: 50 });
-  for (const e of allConnections()) {
+  for (const n of graphNodes) g.setNode(n, { label: n, width: 160, height: 50 });
+  for (const e of connections) {
     const s = e.sender.split(".")[0];
     const r = e.receiver.split(".")[0];
     if (g.hasNode(s) && g.hasNode(r)) g.setEdge(s, r);
@@ -1081,24 +1108,25 @@ function renderGraph() {
     const node = g.node(n);
     const def = findNode(n);
     const comp = def ? findComp(def.module) : null;
+    const isExternal = n === GRAPH_EXTERNAL_NODE;
     const grp = document.createElementNS(ns, "g");
     grp.setAttribute("transform", `translate(${node.x - node.width / 2}, ${node.y - node.height / 2})`);
     const rect = document.createElementNS(ns, "rect");
-    rect.setAttribute("class", "node-rect" + (selectedNode === n ? " selected" : ""));
+    rect.setAttribute("class", "node-rect" + (isExternal ? " external" : "") + (selectedNode === n ? " selected" : ""));
     rect.setAttribute("width", node.width);
     rect.setAttribute("height", node.height);
     grp.appendChild(rect);
     const title = document.createElementNS(ns, "text");
     title.setAttribute("class", "node-title");
     title.setAttribute("x", 10); title.setAttribute("y", 20);
-    title.textContent = n;
+    title.textContent = isExternal ? "input" : n;
     grp.appendChild(title);
     const cls = document.createElementNS(ns, "text");
     cls.setAttribute("class", "node-cls");
     cls.setAttribute("x", 10); cls.setAttribute("y", 38);
-    cls.textContent = comp ? comp.name : (def?.module || "");
+    cls.textContent = isExternal ? "runtime entrypoint" : (comp ? comp.name : (def?.module || ""));
     grp.appendChild(cls);
-    grp.addEventListener("click", () => { selectedNode = n; redraw(); });
+    if (!isExternal) grp.addEventListener("click", () => { selectedNode = n; redraw(); });
     svg.appendChild(grp);
   });
 }
