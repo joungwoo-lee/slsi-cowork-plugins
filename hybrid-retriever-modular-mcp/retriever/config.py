@@ -208,6 +208,19 @@ def load_config(env_path: str | os.PathLike[str] | None = None) -> Config:
     llm_key = os.getenv("LLM_API_KEY", "").strip()
     if not llm_key:
         llm_key = os.getenv("EMBEDDING_API_KEY", "").strip()
+    llm_x_dep_ticket = os.getenv("LLM_API_X_DEP_TICKET", "").strip()
+    if not llm_x_dep_ticket:
+        llm_x_dep_ticket = os.getenv("EMBEDDING_API_X_DEP_TICKET", "").strip()
+    llm_x_system_name = os.getenv("LLM_API_X_SYSTEM_NAME", "").strip()
+    if not llm_x_system_name:
+        llm_x_system_name = os.getenv(
+            "EMBEDDING_API_X_SYSTEM_NAME", "hybrid-retriever-modular-mcp"
+        ).strip()
+    llm_timeout_sec = _int(os.getenv("LLM_TIMEOUT_SEC"), 0) or _int(os.getenv("EMBEDDING_TIMEOUT_SEC"), 60)
+    llm_verify_ssl = _bool(
+        os.getenv("LLM_VERIFY_SSL") if os.getenv("LLM_VERIFY_SSL") is not None else os.getenv("EMBEDDING_VERIFY_SSL"),
+        True,
+    )
     if not llm_url and not llm_model and api_url == OPENAI_EMBEDDINGS_URL and llm_key:
         llm_url = OPENAI_CHAT_COMPLETIONS_URL
         llm_model = os.getenv("OPENAI_LLM_MODEL", "").strip() or DEFAULT_OPENAI_LLM_MODEL
@@ -217,11 +230,11 @@ def load_config(env_path: str | os.PathLike[str] | None = None) -> Config:
             api_url=llm_url,
             api_key=llm_key,
             model=llm_model,
-            x_dep_ticket=os.getenv("LLM_API_X_DEP_TICKET", "").strip(),
-            x_system_name=os.getenv("LLM_API_X_SYSTEM_NAME", "hybrid-retriever-modular-mcp").strip(),
+            x_dep_ticket=llm_x_dep_ticket,
+            x_system_name=llm_x_system_name,
             batch_size=_int(os.getenv("LLM_BATCH_SIZE"), 8),
-            timeout_sec=_int(os.getenv("LLM_TIMEOUT_SEC"), 60),
-            verify_ssl=_bool(os.getenv("LLM_VERIFY_SSL"), True),
+            timeout_sec=llm_timeout_sec,
+            verify_ssl=llm_verify_ssl,
             temperature=_float(os.getenv("LLM_TEMPERATURE"), 0.0),
             max_tokens=_int(os.getenv("LLM_MAX_TOKENS"), 1024),
         )

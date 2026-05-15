@@ -24,6 +24,7 @@ from retriever.pipelines import editor_store
 from retriever.pipelines import profiles as pipeline_profiles
 
 from . import bootstrap
+from . import job_manager
 from .protocol import text_result
 from .runtime import silenced_stdout
 
@@ -81,6 +82,166 @@ def _under_data_root(path: Path, data_root: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _job_progress(cfg, job_id: str, progress: int, message: str) -> None:
+    job_manager.update_job(cfg, job_id, progress=progress, message=message)
+
+
+def _run_upload_document(cfg, args: dict, *, job_id: str | None = None) -> dict:
+    ds = _require_str(args, "dataset_id")
+    fp = _require_str(args, "file_path")
+    if not ds:
+        raise ValueError("dataset_id is required")
+    if not fp:
+        raise ValueError("file_path is required")
+    pipeline_name = _pipeline_name(args)
+    metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
+    auto_hipporag = bool(args.get("auto_hipporag", False))
+    if job_id:
+        _job_progress(cfg, job_id, 5, "indexing document")
+    with silenced_stdout():
+        out = retriever_api.upload_document(
+            cfg,
+            ds,
+            fp,
+            pipeline=pipeline_name,
+            skip_embedding=bool(args.get("skip_embedding", False)),
+            use_hierarchical=args.get("use_hierarchical"),
+            metadata=metadata,
+        )
+    hipporag_summary: dict | None = None
+    if auto_hipporag:
+        doc_id = isinstance(out, dict) and out.get("document_id") or ""
+        if doc_id:
+            try:
+                if job_id:
+                    _job_progress(cfg, job_id, 70, "running hipporag")
+                with silenced_stdout():
+                    with storage.sqlite_session(cfg) as sconn:
+                        hipporag_summary = hipporag_index.index_document(
+                            cfg, sconn, doc_id, rebuild_synonyms_after=False
+                        )
+            except Exception as exc:  # noqa: BLE001
+                hipporag_summary = {"error": str(exc)}
+    if job_id:
+        _job_progress(cfg, job_id, 95, "finalizing")
+    return {
+        "dataset_id": ds,
+        "file": fp,
+        "response": out,
+        **({"hipporag": hipporag_summary} if hipporag_summary is not None else {}),
+    }
+
+
+def _run_upload_directory(cfg, args: dict, *, job_id: str | None = None) -> dict:
+    ds = _require_str(args, "dataset_id")
+    dp = _require_str(args, "dir_path")
+    if not ds:
+        raise ValueError("dataset_id is required")
+    if not dp:
+        raise ValueError("dir_path is required")
+    dir_path = Path(dp)
+    if not dir_path.is_dir():
+        raise ValueError(f"Directory not found or not a directory: {dp}")
+    ext = args.get("file_extension")
+    if ext and not ext.startswith("."):
+        ext = "." + ext
+    pipeline_name = _pipeline_name(args)
+    metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
+    skip_embedding = bool(args.get("skip_embedding", False))
+    use_hierarchical = args.get("use_hierarchical")
+    auto_hipporag = bool(args.get("auto_hipporag", False))
+
+    paths: list[Path] = []
+    for file_path in dir_path.rglob("*"):
+        if not file_path.is_file():
+            continue
+        suffix = file_path.suffix.lower()
+        if ext and suffix != ext.lower():
+            continue
+        if not ext and suffix not in _SUPPORTED_EXTS:
+            continue
+        paths.append(file_path)
+
+    results: list[dict] = []
+    errors: list[dict] = []
+    total = max(1, len(paths))
+    with silenced_stdout():
+        for idx, file_path in enumerate(paths, 1):
+            if job_id:
+                pct = int(5 + (idx - 1) * 75 / total)
+                _job_progress(cfg, job_id, pct, f"indexing {idx}/{total}: {file_path.name}")
+            try:
+                out = retriever_api.upload_document(
+                    cfg,
+                    ds,
+                    str(file_path),
+                    pipeline=pipeline_name,
+                    skip_embedding=skip_embedding,
+                    use_hierarchical=use_hierarchical,
+                    metadata=metadata,
+                )
+                results.append({"file": str(file_path), "response": out})
+            except Exception as exc:  # noqa: BLE001
+                errors.append({"file": str(file_path), "error": str(exc)})
+
+    hipporag_summary: dict | None = None
+    if auto_hipporag and results:
+        try:
+            if job_id:
+                _job_progress(cfg, job_id, 85, "running hipporag")
+            with silenced_stdout():
+                with storage.sqlite_session(cfg) as sconn:
+                    hipporag_summary = hipporag_index.index_dataset(
+                        cfg, sconn, ds, rebuild_synonyms_after=True
+                    )
+        except Exception as exc:  # noqa: BLE001
+            hipporag_summary = {"error": str(exc)}
+    if job_id:
+        _job_progress(cfg, job_id, 95, "finalizing")
+    return {
+        "dataset_id": ds,
+        "directory": dp,
+        "processed_count": len(results),
+        "error_count": len(errors),
+        "results": results,
+        "errors": errors,
+        **({"hipporag": hipporag_summary} if hipporag_summary is not None else {}),
+    }
+
+
+def _run_graph_rebuild(cfg) -> dict:
+    with silenced_stdout():
+        with storage.sqlite_session(cfg) as sconn:
+            gconn = retriever_graph.open_graph(cfg)
+            counts = retriever_graph.rebuild_from_sqlite(gconn, sconn)
+    return {"status": "ok", **counts}
+
+
+def _run_hipporag_index(cfg, args: dict, *, document: bool) -> dict:
+    rebuild_syn = bool(args.get("rebuild_synonyms", not document))
+    max_workers = _safe_int(args, "max_workers", 4, lo=1, hi=16)
+    with silenced_stdout():
+        with storage.sqlite_session(cfg) as sconn:
+            if document:
+                doc_id = _require_str(args, "document_id")
+                if not doc_id:
+                    raise ValueError("document_id is required")
+                result = hipporag_index.index_document(
+                    cfg, sconn, doc_id, rebuild_synonyms_after=rebuild_syn, max_workers=max_workers,
+                )
+                payload = {"status": "ok", "document_id": doc_id, **result}
+            else:
+                ds = _require_str(args, "dataset_id")
+                if not ds:
+                    raise ValueError("dataset_id is required")
+                result = hipporag_index.index_dataset(
+                    cfg, sconn, ds, rebuild_synonyms_after=rebuild_syn, max_workers=max_workers,
+                )
+                payload = {"status": "ok", "dataset_id": ds, **result}
+    _ppr_engine(cfg).invalidate()
+    return payload
 
 
 def _editor_state_path(cfg) -> Path:
@@ -355,115 +516,64 @@ def tool_delete_dataset(args: dict) -> dict:
 # ----- documents ----------------------------------------------------------
 
 def tool_upload_directory(args: dict) -> dict:
-    ds = _require_str(args, "dataset_id")
-    dp = _require_str(args, "dir_path")
-    if not ds:
-        return text_result("dataset_id is required", is_error=True)
-    if not dp:
-        return text_result("dir_path is required", is_error=True)
-
-    dir_path = Path(dp)
-    if not dir_path.is_dir():
-        return text_result(f"Directory not found or not a directory: {dp}", is_error=True)
-
-    ext = args.get("file_extension")
-    if ext and not ext.startswith("."):
-        ext = "." + ext
-
     cfg = load_config()
-    pipeline_name = _pipeline_name(args)
-    metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
-    skip_embedding = bool(args.get("skip_embedding", False))
-    use_hierarchical = args.get("use_hierarchical")
-    auto_hipporag = bool(args.get("auto_hipporag", False))
-
-    results: list[dict] = []
-    errors: list[dict] = []
-
-    with silenced_stdout():
-        for file_path in dir_path.rglob("*"):
-            if not file_path.is_file():
-                continue
-            suffix = file_path.suffix.lower()
-            if ext and suffix != ext.lower():
-                continue
-            if not ext and suffix not in _SUPPORTED_EXTS:
-                continue
-            try:
-                out = retriever_api.upload_document(
-                    cfg,
-                    ds,
-                    str(file_path),
-                    pipeline=pipeline_name,
-                    skip_embedding=skip_embedding,
-                    use_hierarchical=use_hierarchical,
-                    metadata=metadata,
-                )
-                results.append({"file": str(file_path), "response": out})
-            except Exception as exc:  # noqa: BLE001 — report per-file failures, keep going
-                errors.append({"file": str(file_path), "error": str(exc)})
-
-    hipporag_summary: dict | None = None
-    if auto_hipporag and results:
-        try:
-            with silenced_stdout():
-                with storage.sqlite_session(cfg) as sconn:
-                    hipporag_summary = hipporag_index.index_dataset(
-                        cfg, sconn, ds, rebuild_synonyms_after=True
-                    )
-        except Exception as exc:  # noqa: BLE001
-            hipporag_summary = {"error": str(exc)}
-
-    return text_result({
-        "dataset_id": ds,
-        "directory": dp,
-        "processed_count": len(results),
-        "error_count": len(errors),
-        "results": results,
-        "errors": errors,
-        **({"hipporag": hipporag_summary} if hipporag_summary is not None else {}),
-    })
+    try:
+        return text_result(_run_upload_directory(cfg, args))
+    except Exception as exc:  # noqa: BLE001
+        return text_result(str(exc), is_error=True)
 
 
 def tool_upload_document(args: dict) -> dict:
-    ds = _require_str(args, "dataset_id")
-    fp = _require_str(args, "file_path")
-    if not ds:
-        return text_result("dataset_id is required", is_error=True)
-    if not fp:
-        return text_result("file_path is required", is_error=True)
     cfg = load_config()
-    pipeline_name = _pipeline_name(args)
-    metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
-    auto_hipporag = bool(args.get("auto_hipporag", False))
-    with silenced_stdout():
-        out = retriever_api.upload_document(
-            cfg,
-            ds,
-            fp,
-            pipeline=pipeline_name,
-            skip_embedding=bool(args.get("skip_embedding", False)),
-            use_hierarchical=args.get("use_hierarchical"),
-            metadata=metadata,
-        )
-    hipporag_summary: dict | None = None
-    if auto_hipporag:
-        doc_id = isinstance(out, dict) and out.get("document_id") or ""
-        if doc_id:
-            try:
-                with silenced_stdout():
-                    with storage.sqlite_session(cfg) as sconn:
-                        hipporag_summary = hipporag_index.index_document(
-                            cfg, sconn, doc_id, rebuild_synonyms_after=False
-                        )
-            except Exception as exc:  # noqa: BLE001 — report but don't fail the upload
-                hipporag_summary = {"error": str(exc)}
-    return text_result({
-        "dataset_id": ds,
-        "file": fp,
-        "response": out,
-        **({"hipporag": hipporag_summary} if hipporag_summary is not None else {}),
-    })
+    try:
+        return text_result(_run_upload_document(cfg, args))
+    except Exception as exc:  # noqa: BLE001
+        return text_result(str(exc), is_error=True)
+
+
+def tool_start_upload_document(args: dict) -> dict:
+    cfg = load_config()
+    ds = _require_str(args, "dataset_id") or ""
+    job = job_manager.start_job(
+        cfg,
+        job_type="upload_document",
+        args=args,
+        dataset_id=ds,
+        runner=lambda job_id: _run_upload_document(cfg, args, job_id=job_id),
+    )
+    return text_result(job)
+
+
+def tool_start_upload_directory(args: dict) -> dict:
+    cfg = load_config()
+    ds = _require_str(args, "dataset_id") or ""
+    job = job_manager.start_job(
+        cfg,
+        job_type="upload_directory",
+        args=args,
+        dataset_id=ds,
+        runner=lambda job_id: _run_upload_directory(cfg, args, job_id=job_id),
+    )
+    return text_result(job)
+
+
+def tool_get_job(args: dict) -> dict:
+    job_id = _require_str(args, "job_id")
+    if not job_id:
+        return text_result("job_id is required", is_error=True)
+    cfg = load_config()
+    job = job_manager.get_job(cfg, job_id)
+    if not job:
+        return text_result(f"job not found: {job_id}", is_error=True)
+    return text_result(job)
+
+
+def tool_list_jobs(args: dict) -> dict:
+    cfg = load_config()
+    status = _require_str(args, "status") or ""
+    limit = _safe_int(args, "limit", 20, lo=1, hi=200)
+    offset = _safe_int(args, "offset", 0, lo=0, hi=10**9)
+    return text_result(job_manager.list_jobs(cfg, limit=limit, offset=offset, status=status))
 
 
 def tool_list_documents(args: dict) -> dict:
@@ -734,54 +844,67 @@ def tool_graph_query(args: dict) -> dict:
 def tool_graph_rebuild(_args: dict) -> dict:
     cfg = load_config()
     try:
-        with silenced_stdout():
-            with storage.sqlite_session(cfg) as sconn:
-                gconn = retriever_graph.open_graph(cfg)
-                counts = retriever_graph.rebuild_from_sqlite(gconn, sconn)
+        return text_result(_run_graph_rebuild(cfg))
     except Exception as exc:  # noqa: BLE001
         return text_result(f"graph_rebuild failed: {exc}", is_error=True)
-    return text_result({"status": "ok", **counts})
+
+
+def tool_start_graph_rebuild(_args: dict) -> dict:
+    cfg = load_config()
+    return text_result(
+        job_manager.start_job(
+            cfg,
+            job_type="graph_rebuild",
+            args={},
+            runner=lambda _job_id: _run_graph_rebuild(cfg),
+        )
+    )
 
 
 # ----- HippoRAG ----------------------------------------------------------
 
 def tool_hipporag_index(args: dict) -> dict:
     cfg = load_config()
-    ds = _require_str(args, "dataset_id")
-    if not ds:
-        return text_result("dataset_id is required", is_error=True)
-    rebuild_syn = bool(args.get("rebuild_synonyms", True))
-    max_workers = _safe_int(args, "max_workers", 4, lo=1, hi=16)
     try:
-        with silenced_stdout():
-            with storage.sqlite_session(cfg) as sconn:
-                result = hipporag_index.index_dataset(
-                    cfg, sconn, ds,
-                    rebuild_synonyms_after=rebuild_syn,
-                    max_workers=max_workers,
-                )
-        _ppr_engine(cfg).invalidate()
+        return text_result(_run_hipporag_index(cfg, args, document=False))
     except Exception as exc:  # noqa: BLE001
         return text_result(f"hipporag_index failed: {exc}", is_error=True)
-    return text_result({"status": "ok", "dataset_id": ds, **result})
+
+
+def tool_start_hipporag_index(args: dict) -> dict:
+    cfg = load_config()
+    ds = _require_str(args, "dataset_id") or ""
+    return text_result(
+        job_manager.start_job(
+            cfg,
+            job_type="hipporag_index",
+            args=args,
+            dataset_id=ds,
+            runner=lambda _job_id: _run_hipporag_index(cfg, args, document=False),
+        )
+    )
 
 
 def tool_hipporag_index_document(args: dict) -> dict:
     cfg = load_config()
-    doc_id = _require_str(args, "document_id")
-    if not doc_id:
-        return text_result("document_id is required", is_error=True)
-    rebuild_syn = bool(args.get("rebuild_synonyms", False))
     try:
-        with silenced_stdout():
-            with storage.sqlite_session(cfg) as sconn:
-                result = hipporag_index.index_document(
-                    cfg, sconn, doc_id, rebuild_synonyms_after=rebuild_syn,
-                )
-        _ppr_engine(cfg).invalidate()
+        return text_result(_run_hipporag_index(cfg, args, document=True))
     except Exception as exc:  # noqa: BLE001
         return text_result(f"hipporag_index_document failed: {exc}", is_error=True)
-    return text_result({"status": "ok", "document_id": doc_id, **result})
+
+
+def tool_start_hipporag_index_document(args: dict) -> dict:
+    cfg = load_config()
+    doc_id = _require_str(args, "document_id") or ""
+    return text_result(
+        job_manager.start_job(
+            cfg,
+            job_type="hipporag_index_document",
+            args=args,
+            document_id=doc_id,
+            runner=lambda _job_id: _run_hipporag_index(cfg, args, document=True),
+        )
+    )
 
 
 def tool_hipporag_refresh_synonyms(_args: dict) -> dict:
@@ -864,6 +987,9 @@ HANDLERS = {
     "delete_dataset": tool_delete_dataset,
     "upload_document": tool_upload_document,
     "upload_directory": tool_upload_directory,
+    "start_upload_document": tool_start_upload_document,
+    "start_upload_directory": tool_start_upload_directory,
+    "get_job": tool_get_job,
     "list_documents": tool_list_documents,
     "get_document": tool_get_document,
     "list_chunks": tool_list_chunks,
@@ -878,6 +1004,7 @@ HANDLERS = {
     "graph_query": tool_graph_query,
     "graph_rebuild": tool_graph_rebuild,
     "hipporag_index": tool_hipporag_index,
+    "start_hipporag_index": tool_start_hipporag_index,
     "hipporag_index_document": tool_hipporag_index_document,
     "hipporag_refresh_synonyms": tool_hipporag_refresh_synonyms,
     "hipporag_search": tool_hipporag_search,

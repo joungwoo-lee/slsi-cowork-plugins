@@ -18,7 +18,9 @@ _ENV_KEYS = (
     "RETRIEVER_DATA_ROOT", "RETRIEVER_DEFAULT_DATASETS",
     "EMBEDDING_API_URL", "EMBEDDING_API_KEY", "EMBEDDING_MODEL", "EMBEDDING_DIM",
     "EMBEDDING_VERIFY_SSL", "EMBEDDING_BATCH_SIZE", "EMBEDDING_TIMEOUT_SEC",
+    "EMBEDDING_API_X_DEP_TICKET", "EMBEDDING_API_X_SYSTEM_NAME",
     "LLM_API_URL", "LLM_API_KEY", "LLM_MODEL", "OPENAI_LLM_MODEL",
+    "LLM_API_X_DEP_TICKET", "LLM_API_X_SYSTEM_NAME", "LLM_VERIFY_SSL", "LLM_TIMEOUT_SEC",
     "RETRIEVER_CHUNK_CHARS", "HYBRID_ALPHA", "RETRIEVER_FUSION", "RRF_K",
 )
 
@@ -99,6 +101,8 @@ class ConfigLoadTest(unittest.TestCase):
         self.env_path.write_text(
             "EMBEDDING_API_URL=https://api.openai.com/v1/embeddings\n"
             "EMBEDDING_API_KEY=embed-key\n"
+            "EMBEDDING_API_X_DEP_TICKET=embed-ticket\n"
+            "EMBEDDING_API_X_SYSTEM_NAME=embed-system\n"
             "EMBEDDING_MODEL=text-embedding-3-small\n"
             "EMBEDDING_DIM=1536\n",
             encoding="utf-8",
@@ -109,6 +113,8 @@ class ConfigLoadTest(unittest.TestCase):
         self.assertEqual(cfg.llm.api_url, "https://api.openai.com/v1/chat/completions")
         self.assertEqual(cfg.llm.api_key, "embed-key")
         self.assertEqual(cfg.llm.model, "gpt-4o-mini")
+        self.assertEqual(cfg.llm.x_dep_ticket, "embed-ticket")
+        self.assertEqual(cfg.llm.x_system_name, "embed-system")
 
     def test_explicit_llm_key_still_wins(self) -> None:
         self.env_path.write_text(
@@ -127,6 +133,33 @@ class ConfigLoadTest(unittest.TestCase):
         self.assertEqual(cfg.llm.api_url, "https://example.test/chat")
         self.assertEqual(cfg.llm.api_key, "llm-key")
         self.assertEqual(cfg.llm.model, "custom-mini")
+
+    def test_explicit_llm_auth_still_wins_over_embedding_auth(self) -> None:
+        self.env_path.write_text(
+            "EMBEDDING_API_URL=https://api.openai.com/v1/embeddings\n"
+            "EMBEDDING_API_KEY=embed-key\n"
+            "EMBEDDING_API_X_DEP_TICKET=embed-ticket\n"
+            "EMBEDDING_API_X_SYSTEM_NAME=embed-system\n"
+            "EMBEDDING_VERIFY_SSL=false\n"
+            "EMBEDDING_TIMEOUT_SEC=11\n"
+            "EMBEDDING_MODEL=text-embedding-3-small\n"
+            "EMBEDDING_DIM=1536\n"
+            "LLM_API_URL=https://example.test/chat\n"
+            "LLM_MODEL=custom-mini\n"
+            "LLM_API_KEY=llm-key\n"
+            "LLM_API_X_DEP_TICKET=llm-ticket\n"
+            "LLM_API_X_SYSTEM_NAME=llm-system\n"
+            "LLM_VERIFY_SSL=true\n"
+            "LLM_TIMEOUT_SEC=22\n",
+            encoding="utf-8",
+        )
+        cfg = load_config(self.env_path)
+        assert cfg.llm is not None
+        self.assertEqual(cfg.llm.api_key, "llm-key")
+        self.assertEqual(cfg.llm.x_dep_ticket, "llm-ticket")
+        self.assertEqual(cfg.llm.x_system_name, "llm-system")
+        self.assertTrue(cfg.llm.verify_ssl)
+        self.assertEqual(cfg.llm.timeout_sec, 22)
 
 
 class EmbeddingConfigTest(unittest.TestCase):

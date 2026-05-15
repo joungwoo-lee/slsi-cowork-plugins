@@ -149,6 +149,23 @@ CREATE TABLE IF NOT EXISTS graph_state (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS jobs (
+    job_id       TEXT PRIMARY KEY,
+    job_type     TEXT NOT NULL,
+    status       TEXT NOT NULL,
+    dataset_id   TEXT DEFAULT '',
+    document_id  TEXT DEFAULT '',
+    submitted_at TEXT DEFAULT (datetime('now')),
+    started_at   TEXT DEFAULT '',
+    finished_at  TEXT DEFAULT '',
+    progress     INTEGER DEFAULT 0,
+    message      TEXT DEFAULT '',
+    args_json    TEXT DEFAULT '{}',
+    result_json  TEXT DEFAULT '',
+    error_text   TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_jobs_submitted_at ON jobs(submitted_at DESC);
 """
 
 

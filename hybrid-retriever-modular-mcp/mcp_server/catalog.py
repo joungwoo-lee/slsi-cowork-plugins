@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 # Tools whose `pipeline` parameter description should be enriched with the
 # list of registered pipelines at tools/list time.
-_PIPELINE_AWARE_TOOLS = {"search", "upload_document", "upload_directory"}
+_PIPELINE_AWARE_TOOLS = {"search", "upload_document", "upload_directory", "start_upload_document", "start_upload_directory"}
 
 _BASE_TOOLS: list[dict[str, Any]] = [
     # --- Search / retrieval ---------------------------------------------
@@ -174,6 +174,26 @@ _BASE_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "start_upload_document",
+        "description": (
+            "[Ingestion Job] Start a background upload of one local file into a dataset. "
+            "Use this instead of upload_document for slow embedding/LLM-backed ingest."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "dataset_id": {"type": "string", "description": "Target dataset/knowledge-base id."},
+                "file_path": {"type": "string", "description": "Absolute path to a local file on the MCP-server host."},
+                "use_hierarchical": {"type": "string", "enum": ["true", "false", "full"]},
+                "skip_embedding": {"type": "boolean", "default": False},
+                "metadata": {"type": "object", "additionalProperties": True},
+                "pipeline": {"type": "string", "default": "default", "description": "Named pipeline profile (see list_pipelines.profiles)."},
+                "auto_hipporag": {"type": "boolean", "default": False},
+            },
+            "required": ["dataset_id", "file_path"],
+        },
+    },
+    {
         "name": "upload_directory",
         "description": (
             "[Ingestion] Upload all supported files in a local directory into a dataset. "
@@ -213,6 +233,27 @@ _BASE_TOOLS: list[dict[str, Any]] = [
                     "default": False,
                     "description": "Run HippoRAG OpenIE + synonym rebuild after the bulk ingest. Requires LLM_API_URL and EMBEDDING_API_URL. Skips per-document synonym work and consolidates it once at the end of the batch.",
                 },
+            },
+            "required": ["dataset_id", "dir_path"],
+        },
+    },
+    {
+        "name": "start_upload_directory",
+        "description": (
+            "[Ingestion Job] Start a background upload of all supported files in a local "
+            "directory. Use this instead of upload_directory for large folders."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "dataset_id": {"type": "string", "description": "Target dataset/knowledge-base id."},
+                "dir_path": {"type": "string", "description": "Absolute path to a local directory on the MCP-server host."},
+                "file_extension": {"type": "string"},
+                "use_hierarchical": {"type": "string", "enum": ["true", "false", "full"]},
+                "skip_embedding": {"type": "boolean", "default": False},
+                "metadata": {"type": "object", "additionalProperties": True},
+                "pipeline": {"type": "string", "default": "default", "description": "Named pipeline profile (see list_pipelines.profiles)."},
+                "auto_hipporag": {"type": "boolean", "default": False},
             },
             "required": ["dataset_id", "dir_path"],
         },
@@ -392,6 +433,15 @@ _BASE_TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "name": "get_job",
+        "description": "[Job] Fetch one background job's current status, progress, and result/error.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"job_id": {"type": "string"}},
+            "required": ["job_id"],
+        },
+    },
     # --- Graph (Kùzu embedded) -------------------------------------------
     {
         "name": "graph_query",
@@ -442,6 +492,19 @@ _BASE_TOOLS: list[dict[str, Any]] = [
                     "default": 4,
                     "description": "Concurrent LLM extraction workers; respects the LLM client throttle/backoff.",
                 },
+            },
+            "required": ["dataset_id"],
+        },
+    },
+    {
+        "name": "start_hipporag_index",
+        "description": "[HippoRAG Job] Start a background dataset HippoRAG index job.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "dataset_id": {"type": "string"},
+                "rebuild_synonyms": {"type": "boolean", "default": True},
+                "max_workers": {"type": "integer", "minimum": 1, "maximum": 16, "default": 4},
             },
             "required": ["dataset_id"],
         },
