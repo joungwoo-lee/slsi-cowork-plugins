@@ -3,6 +3,12 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+import webbrowser
 from pathlib import Path
 from typing import Any
 
@@ -59,6 +65,155 @@ def _under_data_root(path: Path, data_root: Path) -> bool:
         return True
     except ValueError:
         return False
+
+
+def _editor_state_path(cfg) -> Path:
+    return cfg.data_root / "pipeline_editor_state.json"
+
+
+def _read_editor_state(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _probe_editor(url: str, timeout: float = 0.8) -> bool:
+    try:
+        with urllib.request.urlopen(url.rstrip("/") + "/api/health", timeout=timeout) as resp:
+            return 200 <= resp.status < 300
+    except (urllib.error.URLError, TimeoutError, ValueError):
+        return False
+
+
+def _pid_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        result = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return False
+    return str(pid) in result.stdout
+
+
+def _kill_pid(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    try:
+        result = subprocess.run(
+            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError:
+        return False
+    return result.returncode == 0
+
+
+def _current_editor_status(cfg) -> dict[str, Any]:
+    state_path = _editor_state_path(cfg)
+    state = _read_editor_state(state_path)
+    url = str(state.get("url") or "")
+    pid_raw = state.get("pid")
+    pid = int(pid_raw) if isinstance(pid_raw, int) or str(pid_raw).isdigit() else 0
+    alive = bool(url) and _probe_editor(url)
+    if alive:
+        return {
+            "running": True,
+            "url": url,
+            "pid": pid,
+            "port": state.get("port"),
+            "started_at": state.get("started_at"),
+            "state_path": str(state_path),
+            "reused": True,
+        }
+    if state_path.exists() and not _pid_alive(pid):
+        try:
+            state_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return {
+        "running": False,
+        "url": "",
+        "pid": pid,
+        "port": state.get("port"),
+        "started_at": state.get("started_at"),
+        "state_path": str(state_path),
+        "reused": False,
+    }
+
+
+def _launch_pipeline_editor(cfg, preferred_port: int, open_browser: bool) -> dict[str, Any]:
+    status = _current_editor_status(cfg)
+    if status["running"]:
+        if open_browser:
+            webbrowser.open(status["url"])
+        return status
+
+    state_path = _editor_state_path(cfg)
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        state_path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+    cmd = [
+        sys.executable,
+        str(bootstrap.ROOT_PATH / "pipeline_editor.py"),
+        "--port",
+        str(preferred_port),
+        "--state-file",
+        str(state_path),
+        "--no-browser",
+    ]
+
+    creationflags = 0
+    for flag_name in ("DETACHED_PROCESS", "CREATE_NEW_PROCESS_GROUP", "CREATE_NO_WINDOW"):
+        creationflags |= int(getattr(subprocess, flag_name, 0))
+
+    proc = subprocess.Popen(
+        cmd,
+        cwd=str(bootstrap.ROOT_PATH),
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        close_fds=True,
+        creationflags=creationflags,
+    )
+
+    deadline = time.time() + 10.0
+    while time.time() < deadline:
+        if proc.poll() is not None:
+            break
+        state = _read_editor_state(state_path)
+        url = str(state.get("url") or "")
+        if url and _probe_editor(url, timeout=0.5):
+            pid_raw = state.get("pid")
+            pid = int(pid_raw) if isinstance(pid_raw, int) or str(pid_raw).isdigit() else proc.pid
+            if open_browser:
+                webbrowser.open(url)
+            return {
+                "running": True,
+                "url": url,
+                "pid": pid,
+                "port": state.get("port"),
+                "started_at": state.get("started_at"),
+                "state_path": str(state_path),
+                "reused": False,
+            }
+        time.sleep(0.2)
+
+    raise RuntimeError("pipeline editor failed to start within 10 seconds")
 
 
 # ----- search -------------------------------------------------------------
@@ -471,6 +626,44 @@ def tool_save_pipeline(args: dict) -> dict:
         return text_result(f"Failed to save pipeline: {exc}", is_error=True)
 
 
+def tool_open_pipeline_editor(args: dict) -> dict:
+    cfg = load_config()
+    preferred_port = _safe_int(args, "preferred_port", 8765, lo=1, hi=65535)
+    open_browser = bool(args.get("open_browser", True))
+    try:
+        status = _launch_pipeline_editor(cfg, preferred_port, open_browser)
+    except Exception as exc:  # noqa: BLE001
+        return text_result(f"Failed to open pipeline editor: {exc}", is_error=True)
+    return text_result(status)
+
+
+def tool_get_pipeline_editor(_args: dict) -> dict:
+    cfg = load_config()
+    return text_result(_current_editor_status(cfg))
+
+
+def tool_close_pipeline_editor(_args: dict) -> dict:
+    cfg = load_config()
+    status = _current_editor_status(cfg)
+    state_path = _editor_state_path(cfg)
+    if not status["running"]:
+        return text_result({"running": False, "closed": False, "state_path": str(state_path)})
+    pid = int(status.get("pid") or 0)
+    closed = _kill_pid(pid)
+    if closed:
+        try:
+            state_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+    return text_result({
+        "running": False if closed else True,
+        "closed": closed,
+        "pid": pid,
+        "url": status.get("url", ""),
+        "state_path": str(state_path),
+    })
+
+
 # ----- diagnostics --------------------------------------------------------
 
 def tool_health(_args: dict) -> dict:
@@ -540,6 +733,9 @@ HANDLERS = {
     "delete_document": tool_delete_document,
     "list_pipelines": tool_list_pipelines,
     "save_pipeline": tool_save_pipeline,
+    "open_pipeline_editor": tool_open_pipeline_editor,
+    "get_pipeline_editor": tool_get_pipeline_editor,
+    "close_pipeline_editor": tool_close_pipeline_editor,
     "health": tool_health,
     "graph_query": tool_graph_query,
     "graph_rebuild": tool_graph_rebuild,

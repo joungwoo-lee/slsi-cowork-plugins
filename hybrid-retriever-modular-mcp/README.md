@@ -2,7 +2,7 @@
 
 자체 완결형 로컬 RAG MCP 서버. `py server.py`가 stdio MCP 서버를 띄우고, 도구 호출 시 로컬 SQLite FTS5 (kiwipiepy 한국어 형태소) + 선택적 Qdrant 벡터 + 임베디드 Kùzu 그래프를 in-process로 사용합니다. FastAPI 백엔드가 따로 필요하지 않습니다.
 
-파이프라인 편집 UI는 `py -3 server.py --editor`로 실행합니다. 브라우저가 열리며, 좌측에서 단계별 모듈 추가/설정/연결을 편집하고 우측에서 DAG 그래프를 바로 확인할 수 있습니다.
+파이프라인 편집 UI는 MCP tool로 띄웁니다. 에이전트가 `open_pipeline_editor`를 호출하면 브라우저를 열고, 좌측에서 단계별 모듈 추가/설정/연결을 편집하고 우측에서 DAG 그래프를 바로 확인할 수 있습니다.
 
 ## 구조
 
@@ -36,6 +36,7 @@ Claude / 다른 MCP 클라이언트
 | `list_documents`, `get_document`, `list_chunks`, `delete_document` | 문서·청크 관리 |
 | `get_document_content` | 저장된 원문 텍스트 조회 (data_root 외부 경로 차단) |
 | `list_pipelines`, `save_pipeline` | 등록된 파이프라인 프로파일 조회·저장 |
+| `open_pipeline_editor`, `get_pipeline_editor`, `close_pipeline_editor` | 비주얼 파이프라인 편집기 실행/상태 조회/종료 |
 | `health` | DB, 데이터 루트, 임베딩 설정, 인덱스 카운트 확인 |
 | `graph_query`, `graph_rebuild` | Kùzu 그래프 위 Cypher 질의 (read-only) / 재빌드 |
 
@@ -76,9 +77,13 @@ FTS5는 `unicode61` 토크나이저를 쓰지만, 색인·쿼리 양쪽에서 `k
 
 ### 비주얼 파이프라인 편집기
 
-```powershell
-py -3 server.py --editor
-```
+MCP tool 호출:
+
+- `open_pipeline_editor`: 백그라운드로 UI 서버 실행, 이미 실행 중이면 재사용, URL 반환
+- `get_pipeline_editor`: 현재 실행 여부 / URL / PID 확인
+- `close_pipeline_editor`: 실행 중인 UI 종료
+
+에디터 특징:
 
 - 좌측: 단계별 모듈 카탈로그, 모듈별 init parameter 편집, connection 편집
 - 우측: 현재 indexing/retrieval 파이프라인의 연결 그래프(SVG DAG)
@@ -86,12 +91,6 @@ py -3 server.py --editor
   - `retriever/pipelines/<name>_indexing.json`
   - `retriever/pipelines/<name>_retrieval.json`
   - `$RETRIEVER_DATA_ROOT/pipelines.json`
-
-옵션:
-
-```powershell
-py -3 server.py --editor --editor-port 8877 --no-browser
-```
 
 | profile | 용도 |
 |---|---|

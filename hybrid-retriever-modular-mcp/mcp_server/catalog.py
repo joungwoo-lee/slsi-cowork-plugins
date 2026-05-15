@@ -308,6 +308,40 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["name"],
         },
     },
+    {
+        "name": "open_pipeline_editor",
+        "description": (
+            "[System] Launch the local visual pipeline editor in a browser. Reuses the "
+            "existing editor process when already running and returns its URL."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "preferred_port": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 65535,
+                    "default": 8765,
+                    "description": "Preferred local port for the editor; falls back to any free port.",
+                },
+                "open_browser": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Open the editor URL in the default browser on this machine.",
+                }
+            },
+        },
+    },
+    {
+        "name": "get_pipeline_editor",
+        "description": "[System] Return whether the local visual pipeline editor is running and, if so, its URL and PID.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "close_pipeline_editor",
+        "description": "[System] Stop the local visual pipeline editor process if it is running.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
     # --- Diagnostics -----------------------------------------------------
     {
         "name": "health",

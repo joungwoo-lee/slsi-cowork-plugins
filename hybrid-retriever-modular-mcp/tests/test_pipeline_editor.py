@@ -89,6 +89,31 @@ class PipelineEditorPersistenceTest(unittest.TestCase):
         self.assertIn("loader", detail["indexing"]["components"])
         self.assertIn("joiner", detail["retrieval"]["components"])
 
+    def test_main_writes_and_clears_state_file(self) -> None:
+        state_path = self.tmpdir / "editor-state.json"
+        original_server = pipeline_editor.ThreadingHTTPServer
+
+        class FakeServer:
+            def __init__(self, addr, _handler):
+                self.addr = addr
+
+            def serve_forever(self):
+                raise KeyboardInterrupt
+
+            def server_close(self):
+                return None
+
+        pipeline_editor.ThreadingHTTPServer = FakeServer
+        try:
+            rc = pipeline_editor.main([
+                "--port", "8765", "--no-browser", "--state-file", str(state_path)
+            ])
+        finally:
+            pipeline_editor.ThreadingHTTPServer = original_server
+
+        self.assertEqual(rc, 0)
+        self.assertFalse(state_path.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

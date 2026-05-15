@@ -383,6 +383,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send_html(INDEX_HTML)
         elif url.path == "/api/catalog":
             self._send_json({"components": CATALOG, "stages": STAGES})
+        elif url.path == "/api/health":
+            self._send_json({"status": "ok"})
         elif url.path == "/api/pipelines":
             self._send_json({"pipelines": load_pipeline_list()})
         elif url.path.startswith("/api/pipelines/"):
@@ -426,6 +428,7 @@ def _pick_port(preferred: int = 8765) -> int:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Retriever pipeline editor")
     parser.add_argument("--port", type=int, default=8765, help="Preferred port to bind")
+    parser.add_argument("--state-file", type=str, default="", help="Optional JSON state file path")
     parser.add_argument(
         "--no-browser",
         action="store_true",
@@ -439,6 +442,14 @@ def main(argv: list[str] | None = None) -> int:
     port = _pick_port(args.port)
     httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     url = f"http://127.0.0.1:{port}"
+    state_file = Path(args.state_file) if args.state_file else None
+    if state_file:
+        _atomic_write_json(state_file, {
+            "pid": os.getpid(),
+            "port": port,
+            "url": url,
+            "started_at": time.time(),
+        })
     print(f"Pipeline editor: {url}")
     print("Ctrl+C to stop.")
     if not args.no_browser:
@@ -448,6 +459,13 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         print("\nStopping.")
     finally:
+        if state_file and state_file.exists():
+            try:
+                current = _read_json(state_file)
+                if current.get("pid") == os.getpid():
+                    state_file.unlink(missing_ok=True)
+            except OSError:
+                pass
         httpd.server_close()
     return 0
 
