@@ -50,7 +50,7 @@ def test_email_mcp_e2e():
     # Start MCP server
     env = {**dict(subprocess.os.environ), "DATA_ROOT": str(data_root)}
     proc = subprocess.Popen(
-        [sys.executable, str(server_py)],
+        ["py", "-3.11", str(server_py)],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

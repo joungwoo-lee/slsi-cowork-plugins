@@ -82,7 +82,7 @@ def _install_worker(req_path):
     try:
         result = subprocess.run(
             [
-                sys.executable,
+                *bootstrap.PYTHON_CMD,
                 "-m",
                 "pip",
                 "install",
@@ -132,7 +132,10 @@ def boot_doctor() -> Optional[str]:
             return f"pip install finished but these packages are still missing: {pending}"
         return None
 
-    log(f"boot doctor: missing dependencies {pending}; starting background pip install ...")
+    log(
+        f"boot doctor: missing dependencies {pending}; starting background pip install via "
+        f"{bootstrap.PYTHON_CMD_DISPLAY} ..."
+    )
     req_path = bootstrap.ROOT_PATH / "requirements.txt"
     if not req_path.exists():
         return f"missing dependencies {pending} and requirements.txt not found at {req_path}"

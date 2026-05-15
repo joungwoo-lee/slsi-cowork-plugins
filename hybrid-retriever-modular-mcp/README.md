@@ -101,9 +101,9 @@ MCP tool 호출:
 ## 테스트
 
 ```powershell
-py -3 scripts_test\e2e_stdio.py                     # MCP stdio 풀 round-trip
-py -3 scripts_test\test_json_pipeline.py            # JSON 토폴로지 정합성
-py -3 -m unittest discover -s tests -p "test_*.py"  # 유닛 테스트
+py -3.11 scripts_test\e2e_stdio.py                     # MCP stdio 풀 round-trip
+py -3.11 scripts_test\test_json_pipeline.py            # JSON 토폴로지 정합성
+py -3.11 -m unittest discover -s tests -p "test_*.py"  # 유닛 테스트
 ```
 
 `e2e_stdio.py`는 임시 데이터 루트에서 임베딩 없이 keyword-only 경로로 전체 도구를 검증합니다.
@@ -115,7 +115,7 @@ py -3 -m unittest discover -s tests -p "test_*.py"  # 유닛 테스트
   "mcpServers": {
     "retriever": {
       "command": "py",
-      "args": ["-3", "C:\\Users\\<YOU>\\slsi-cowork-plugins\\hybrid-retriever-modular-mcp\\server.py"]
+      "args": ["-3.11", "C:\\Users\\<YOU>\\slsi-cowork-plugins\\hybrid-retriever-modular-mcp\\server.py"]
     }
   }
 }

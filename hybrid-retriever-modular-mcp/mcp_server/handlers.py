@@ -169,7 +169,7 @@ def _launch_pipeline_editor(cfg, preferred_port: int, open_browser: bool) -> dic
         pass
 
     cmd = [
-        sys.executable,
+        *bootstrap.PYTHON_CMD,
         str(bootstrap.ROOT_PATH / "pipeline_editor.py"),
         "--port",
         str(preferred_port),

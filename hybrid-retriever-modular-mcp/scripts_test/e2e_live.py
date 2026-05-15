@@ -5,7 +5,7 @@ so we exercise exactly the binary Claude Desktop / Code uses, with the live
 ``.env`` (real embedding API). Each run uses a unique dataset id so it never
 collides with the user's real data.
 
-Run:    py -3 scripts_test/e2e_live.py
+Run:    py -3.11 scripts_test/e2e_live.py
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ def main() -> int:
 
     print(f"[live] server={server_py}")
     proc = subprocess.Popen(
-        [sys.executable, str(server_py)],
+        ["py", "-3.11", str(server_py)],
         cwd=str(LIVE_REPO),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
