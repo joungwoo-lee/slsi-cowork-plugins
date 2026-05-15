@@ -790,6 +790,12 @@ function setStatus(text, cls) {
   s.style.color = cls === "bad" ? "var(--bad)" : (cls === "ok" ? "var(--ok)" : "var(--muted)");
 }
 
+function bindEditorControl(el) {
+  if (!el) return;
+  el.addEventListener("mousedown", (e) => e.stopPropagation());
+  el.addEventListener("click", (e) => e.stopPropagation());
+}
+
 // Map functional stages to standard engine component names
 const STAGE_DEFAULTS = {
   load: "loader",
@@ -847,6 +853,7 @@ function renderStageEditor() {
 
       // Rename logic
       const renameInp = entry.querySelector(".node-rename-input");
+      bindEditorControl(renameInp);
       renameInp.addEventListener("change", () => {
         const newName = renameInp.value.trim();
         if (!newName || newName === name || findNode(newName)) { renameInp.value = name; return; }
@@ -871,10 +878,12 @@ function renderStageEditor() {
             inp = document.createElement("select");
             inp.innerHTML = `<option value="false">false</option><option value="true">true</option>`;
             inp.value = String(params[p.name] ?? p.default);
+            bindEditorControl(inp);
             inp.addEventListener("change", () => { params[p.name] = inp.value === "true"; redraw(); });
           } else {
             inp = document.createElement("input");
             inp.value = params[p.name] ?? p.default ?? "";
+            bindEditorControl(inp);
             inp.addEventListener("change", () => {
               let v = inp.value;
               if (p.type === "int") v = parseInt(v, 10) || 0;
@@ -900,6 +909,7 @@ function renderStageEditor() {
       const sel = document.createElement("select");
       sel.innerHTML = `<option value="">+ Add module to ${stageLabel}...</option>` +
         available.map(c => `<option value="${c.cls}">${c.name}</option>`).join("");
+      bindEditorControl(sel);
       sel.addEventListener("change", () => {
         if (!sel.value) return;
         const comp = available.find(c => c.cls === sel.value);
