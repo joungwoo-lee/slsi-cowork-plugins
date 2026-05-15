@@ -468,66 +468,38 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
 .section > .head { padding: 8px 10px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 12px; }
 .section > .body { padding: 10px; }
 
-.stage-group { margin-bottom: 8px; }
-.stage-group .stage-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 4px 2px; }
-.comp-card {
-  display: flex; justify-content: space-between; align-items: center;
-  background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
-  padding: 6px 8px; margin-bottom: 4px; cursor: pointer;
-}
-.comp-card:hover { border-color: var(--accent); }
-.comp-card .nm { font-weight: 600; }
-.comp-card .add { font-size: 11px; color: var(--accent); }
-.comp-card .stage-pill {
-  display: inline-block; margin-top: 4px; font-size: 10px; color: #0b1220; background: var(--accent);
-  border-radius: 999px; padding: 2px 6px; font-weight: 600;
-}
+.stage-box { border-bottom: 1px solid var(--border); padding: 12px 0; }
+.stage-box:last-child { border-bottom: none; }
+.stage-box .stage-num { font-size: 10px; font-weight: 700; color: var(--accent); margin-bottom: 4px; }
+.stage-box .stage-title { font-size: 13px; font-weight: 600; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
 
-.node-list .row {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 5px 6px; border-radius: 5px; cursor: pointer;
-}
-.node-list .row:hover { background: var(--panel); }
-.node-list .row.selected { background: rgba(90,169,255,0.12); }
-.node-list .row .nm { font-weight: 600; }
-.node-list .row .cls { color: var(--muted); font-size: 10px; }
-.node-list .row .del { color: var(--bad); font-size: 11px; opacity: 0.7; }
-.node-list .row .del:hover { opacity: 1; }
+.module-entry { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin-bottom: 8px; position: relative; }
+.module-entry.selected { border-color: var(--accent); background: rgba(90,169,255,0.05); }
+.module-entry .hdr { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.module-entry .nm { font-weight: 700; font-size: 12px; color: var(--accent); }
+.module-entry .cls { font-size: 10px; color: var(--muted); }
+.module-entry .del { color: var(--bad); cursor: pointer; font-size: 14px; padding: 0 4px; }
 
-.param-row { margin-bottom: 8px; }
-.param-row .type { font-size: 10px; color: var(--muted); margin-left: 4px; }
-.param-row .help { margin-top: 4px; color: var(--muted); font-size: 10px; }
+.params-grid { display: grid; grid-template-columns: 1fr; gap: 8px; border-top: 1px solid var(--border); padding-top: 10px; margin-top: 8px; }
+.params-grid .p-row { display: grid; grid-template-columns: 100px 1fr; gap: 8px; align-items: center; }
+.params-grid label { margin: 0; text-transform: none; color: var(--text); opacity: 0.8; font-size: 11px; }
 
-.conn-row { display: grid; grid-template-columns: 1fr 1fr auto; gap: 6px; align-items: center; margin-bottom: 4px; }
-.conn-row .arrow { color: var(--muted); }
-.conn-row .del { color: var(--bad); cursor: pointer; padding: 2px 6px; }
+.add-ctrl { margin-top: 8px; }
+.add-ctrl select { font-size: 11px; padding: 4px 6px; height: 28px; }
 
-.tabs { display: flex; gap: 4px; margin-bottom: 8px; }
-.tabs .tab {
-  padding: 5px 10px; background: var(--panel); border: 1px solid var(--border);
-  border-radius: 5px; cursor: pointer; font-size: 12px;
-}
-.tabs .tab.active { background: var(--accent); color: #0b1220; border-color: var(--accent); font-weight: 600; }
-
-.hint { font-size: 11px; color: var(--muted); padding: 4px 0; }
-.overview-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.metric { background: var(--panel); border: 1px solid var(--border); border-radius: 6px; padding: 8px; }
-.metric .v { font-size: 18px; font-weight: 700; }
-.metric .k { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
-.graph-empty {
-  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
-  color: var(--muted); font-size: 14px; pointer-events: none;
-}
+.tabs { margin: 12px 0; }
+.tab { flex: 1; text-align: center; font-weight: 600; }
 </style>
+
 </head>
 <body>
 <div id="app">
   <div id="left">
     <div class="section">
-      <div class="head">Pipeline</div>
+      <div class="head">Step 1: Pipeline Basics</div>
       <div class="body">
         <div class="param-row">
-          <label>Existing</label>
+          <label>Load existing</label>
           <select id="existing"><option value="">— new pipeline —</option></select>
         </div>
         <div class="param-row">
@@ -538,49 +510,48 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
           <label>Description</label>
           <textarea id="pdesc" rows="2"></textarea>
         </div>
-        <div class="tabs">
-          <div class="tab active" data-kind="indexing">Indexing</div>
-          <div class="tab" data-kind="retrieval">Retrieval</div>
-        </div>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <div class="tab active" data-kind="indexing">Step 2: Indexing</div>
+      <div class="tab" data-kind="retrieval">Step 3: Retrieval</div>
+    </div>
+
+    <div class="section">
+      <div class="head" id="step-title">Step 2: Define Modules</div>
+      <div class="body">
         <div class="hint" id="kind-hint"></div>
+        <div id="stage-editor"></div>
       </div>
     </div>
 
     <div class="section">
-      <div class="head">Overview</div>
-      <div class="body overview-grid" id="overview"></div>
-    </div>
-
-    <div class="section">
-      <div class="head">Add module</div>
-      <div class="body" id="catalog"></div>
-    </div>
-
-    <div class="section">
-      <div class="head">Modules on graph</div>
-      <div class="body node-list" id="node-list"></div>
-    </div>
-
-    <div class="section" id="config-section" style="display:none">
-      <div class="head" id="config-head">Module settings</div>
-      <div class="body" id="config-body"></div>
-    </div>
-
-    <div class="section">
-      <div class="head">Connections</div>
-      <div class="body" id="conn-body"></div>
-    </div>
-
-    <div class="section">
-      <div class="head">Overrides &amp; search_kwargs</div>
+      <div class="head">Step 4: Advanced JSON Overrides</div>
       <div class="body">
-        <label>indexing_overrides (JSON)</label>
+        <label>indexing_overrides</label>
         <textarea id="ovr-idx" rows="2">{}</textarea>
-        <label style="margin-top:6px">retrieval_overrides (JSON)</label>
+        <label style="margin-top:6px">retrieval_overrides</label>
         <textarea id="ovr-ret" rows="2">{}</textarea>
-        <label style="margin-top:6px">search_kwargs (JSON)</label>
+        <label style="margin-top:6px">search_kwargs</label>
         <textarea id="ovr-sk" rows="2">{}</textarea>
       </div>
+    </div>
+
+    <div class="section">
+      <div class="head">Step 5: Connections & Finalise</div>
+      <div class="body">
+        <div id="conn-body"></div>
+        <div style="margin-top:12px; display:flex; gap:8px;">
+          <button id="auto-wire" style="flex:1">Auto-wire all</button>
+          <button class="primary" id="save" style="flex:1">Save Pipeline</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="head">Statistics</div>
+      <div class="body overview-grid" id="overview"></div>
     </div>
   </div>
 
@@ -631,6 +602,7 @@ async function boot() {
     document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
     t.classList.add("active");
     kind = t.dataset.kind;
+    document.getElementById("step-title").textContent = kind === "indexing" ? "Step 2: Define Indexing Modules" : "Step 3: Define Retrieval Modules";
     selectedNode = null;
     redraw();
   }));
@@ -640,25 +612,95 @@ async function boot() {
   redraw();
 }
 
-// ---------- catalog UI ----------
-function renderCatalog() {
-  const box = document.getElementById("catalog");
+// ---------- stage-based editor ----------
+function renderStageEditor() {
+  const box = document.getElementById("stage-editor");
   box.innerHTML = "";
-  for (const [stage, label] of STAGES) {
-    const comps = CATALOG.filter(c => c.stage === stage);
-    if (!comps.length) continue;
-    const group = document.createElement("div");
-    group.className = "stage-group";
-    group.innerHTML = `<div class="stage-label">${label}</div>`;
-    for (const c of comps) {
-      const row = document.createElement("div");
-      row.className = "comp-card";
-      row.innerHTML = `<div><div class="nm">${c.name}</div><div class="cls" style="font-size:10px;color:var(--muted)">${c.cls}</div><div class="stage-pill">${label}</div></div><div class="add">+ add</div>`;
-      row.addEventListener("click", () => addNode(c));
-      group.appendChild(row);
+  const t = currentTopo();
+
+  // Filter stages relevant to current kind
+  const activeStages = kind === "indexing" 
+    ? ["load", "convert", "split", "embed", "write"]
+    : ["embed", "retrieve", "fuse", "post"];
+
+  activeStages.forEach((sid, idx) => {
+    const stageLabel = STAGES.find(s => s[0] === sid)?.[1] || sid;
+    const stageBox = document.createElement("div");
+    stageBox.className = "stage-box";
+    stageBox.innerHTML = `
+      <div class="stage-num">STAGE ${idx + 1}</div>
+      <div class="stage-title">${stageLabel}</div>
+    `;
+
+    // 1. Existing modules in this stage
+    const nodes = Object.entries(t.components).filter(([_, def]) => findComp(def.type)?.stage === sid);
+    nodes.forEach(([name, def]) => {
+      const comp = findComp(def.type);
+      const entry = document.createElement("div");
+      entry.className = "module-entry" + (selectedNode === name ? " selected" : "");
+      entry.innerHTML = `
+        <div class="hdr">
+          <div class="nm">${name}</div>
+          <div class="del" title="Remove">✕</div>
+        </div>
+        <div class="cls">${comp ? comp.name : def.type}</div>
+        <div class="params-grid" id="pgrid-${name}"></div>
+      `;
+      entry.querySelector(".del").addEventListener("click", (e) => { e.stopPropagation(); removeNode(name); });
+      entry.addEventListener("click", () => { selectedNode = name; redraw(); });
+
+      // Parameters
+      const pgrid = entry.querySelector(".params-grid");
+      if (comp && comp.params.length) {
+        comp.params.forEach(p => {
+          const prow = document.createElement("div");
+          prow.className = "p-row";
+          prow.innerHTML = `<label>${p.name}</label>`;
+          let inp;
+          if (p.type === "bool") {
+            inp = document.createElement("select");
+            inp.innerHTML = `<option value="false">false</option><option value="true">true</option>`;
+            inp.value = String(def.init_parameters[p.name] ?? p.default);
+            inp.addEventListener("change", () => { def.init_parameters[p.name] = inp.value === "true"; redraw(); });
+          } else {
+            inp = document.createElement("input");
+            inp.value = def.init_parameters[p.name] ?? p.default ?? "";
+            inp.addEventListener("change", () => {
+              let v = inp.value;
+              if (p.type === "int") v = parseInt(v, 10) || 0;
+              else if (p.type === "float") v = parseFloat(v) || 0;
+              def.init_parameters[p.name] = v;
+              redraw();
+            });
+          }
+          prow.appendChild(inp);
+          pgrid.appendChild(prow);
+        });
+      } else {
+        pgrid.innerHTML = '<div class="hint">No settings.</div>';
+      }
+      stageBox.appendChild(entry);
+    });
+
+    // 2. Add module to this stage
+    const available = CATALOG.filter(c => c.stage === sid);
+    if (available.length) {
+      const addCtrl = document.createElement("div");
+      addCtrl.className = "add-ctrl";
+      const sel = document.createElement("select");
+      sel.innerHTML = `<option value="">+ Add module to ${stageLabel}...</option>` + 
+        available.map(c => `<option value="${c.cls}">${c.name}</option>`).join("");
+      sel.addEventListener("change", () => {
+        if (!sel.value) return;
+        const comp = available.find(c => c.cls === sel.value);
+        addNode(comp);
+      });
+      addCtrl.appendChild(sel);
+      stageBox.appendChild(addCtrl);
     }
-    box.appendChild(group);
-  }
+
+    box.appendChild(stageBox);
+  });
 }
 
 function uniqueName(base) {
@@ -687,391 +729,20 @@ function removeNode(name) {
   redraw();
 }
 
-// ---------- node list + config ----------
-function renderNodeList() {
-  const box = document.getElementById("node-list");
-  box.innerHTML = "";
-  const t = currentTopo();
-  for (const [name, def] of Object.entries(t.components)) {
-    const comp = findComp(def.type);
-    const row = document.createElement("div");
-    row.className = "row" + (selectedNode === name ? " selected" : "");
-    row.innerHTML = `<div><div class="nm">${name}</div><div class="cls">${comp ? comp.name : def.type}</div></div><div class="del">✕</div>`;
-    row.addEventListener("click", e => {
-      if (e.target.classList.contains("del")) { removeNode(name); return; }
-      selectedNode = name; redraw();
-    });
-    box.appendChild(row);
-  }
-  if (Object.keys(t.components).length === 0) {
-    box.innerHTML = `<div class="hint">No modules yet. Pick one above.</div>`;
-  }
-}
-
-function renderConfig() {
-  const sec = document.getElementById("config-section");
-  const head = document.getElementById("config-head");
-  const body = document.getElementById("config-body");
-  if (!selectedNode) { sec.style.display = "none"; return; }
-  const t = currentTopo();
-  const def = t.components[selectedNode];
-  if (!def) { sec.style.display = "none"; return; }
-  const comp = findComp(def.type);
-  sec.style.display = "";
-  head.textContent = selectedNode + "  ·  " + (comp ? comp.name : def.type);
-  body.innerHTML = "";
-
-  // Rename
-  const renameRow = document.createElement("div");
-  renameRow.className = "param-row";
-  renameRow.innerHTML = `<label>node name</label>`;
-  const nameInp = document.createElement("input");
-  nameInp.value = selectedNode;
-  nameInp.addEventListener("change", () => {
-    const newName = nameInp.value.trim();
-    if (!newName || newName === selectedNode || t.components[newName]) { nameInp.value = selectedNode; return; }
-    t.components[newName] = t.components[selectedNode];
-    delete t.components[selectedNode];
-    t.connections = t.connections.map(e => ({
-      sender: e.sender.startsWith(selectedNode + ".") ? newName + e.sender.slice(selectedNode.length) : e.sender,
-      receiver: e.receiver.startsWith(selectedNode + ".") ? newName + e.receiver.slice(selectedNode.length) : e.receiver,
-    }));
-    selectedNode = newName;
-    redraw();
-  });
-  renameRow.appendChild(nameInp);
-  const renameHelp = document.createElement("div");
-  renameHelp.className = "help";
-  renameHelp.textContent = "Node names become connection endpoints like loader.text or joiner.documents.";
-  renameRow.appendChild(renameHelp);
-  body.appendChild(renameRow);
-
-  if (!comp || !comp.params.length) {
-    body.appendChild(hint("No constructor parameters."));
-    return;
-  }
-  for (const p of comp.params) {
-    const row = document.createElement("div");
-    row.className = "param-row";
-    row.innerHTML = `<label>${p.name}<span class="type">${p.type}</span></label>`;
-    let inp;
-    if (p.type === "bool") {
-      inp = document.createElement("select");
-      inp.innerHTML = `<option value="false">false</option><option value="true">true</option>`;
-      inp.value = String(def.init_parameters[p.name] ?? p.default);
-      inp.addEventListener("change", () => { def.init_parameters[p.name] = inp.value === "true"; });
-    } else {
-      inp = document.createElement("input");
-      inp.value = def.init_parameters[p.name] ?? p.default ?? "";
-      inp.addEventListener("change", () => {
-        let v = inp.value;
-        if (p.type === "int") v = parseInt(v, 10) || 0;
-        else if (p.type === "float") v = parseFloat(v) || 0;
-        def.init_parameters[p.name] = v;
-      });
-    }
-    row.appendChild(inp);
-    body.appendChild(row);
-  }
-}
-
-function hint(text) {
-  const d = document.createElement("div");
-  d.className = "hint"; d.textContent = text; return d;
-}
-
-// ---------- connections UI ----------
-function renderConnections() {
-  const box = document.getElementById("conn-body");
-  box.innerHTML = "";
-  const t = currentTopo();
-  for (let i = 0; i < t.connections.length; i++) {
-    const e = t.connections[i];
-    const row = document.createElement("div");
-    row.className = "conn-row";
-    row.innerHTML = `<div>${e.sender}</div><div>→ ${e.receiver}</div><div class="del">✕</div>`;
-    row.querySelector(".del").addEventListener("click", () => { t.connections.splice(i, 1); redraw(); });
-    box.appendChild(row);
-  }
-
-  // Adder
-  const adder = document.createElement("div");
-  adder.style.marginTop = "8px";
-  adder.innerHTML = `
-    <label>Add connection</label>
-    <div class="conn-row">
-      <select id="add-from"></select>
-      <select id="add-to"></select>
-      <button id="add-btn">+</button>
-    </div>
-    <div class="hint" id="conn-hint">Choose an output port → input port</div>
-  `;
-  box.appendChild(adder);
-
-  const fromSel = adder.querySelector("#add-from");
-  const toSel = adder.querySelector("#add-to");
-  for (const [name, def] of Object.entries(t.components)) {
-    const comp = findComp(def.type);
-    if (!comp) continue;
-    for (const o of comp.outputs) {
-      const opt = document.createElement("option");
-      opt.value = `${name}.${o.name}`;
-      opt.textContent = `${name}.${o.name}  (${o.type})`;
-      opt.dataset.type = o.type;
-      fromSel.appendChild(opt);
-    }
-    for (const i of comp.inputs) {
-      const opt = document.createElement("option");
-      opt.value = `${name}.${i.name}`;
-      opt.textContent = `${name}.${i.name}  (${i.type})`;
-      opt.dataset.type = i.type;
-      toSel.appendChild(opt);
-    }
-  }
-  const hintEl = adder.querySelector("#conn-hint");
-  function checkTypes() {
-    const a = fromSel.selectedOptions[0]?.dataset.type;
-    const b = toSel.selectedOptions[0]?.dataset.type;
-    if (!a || !b) { hintEl.textContent = ""; return; }
-    if (a === b || a === "Any" || b === "Any") {
-      hintEl.style.color = "var(--ok)"; hintEl.textContent = "Types match.";
-    } else {
-      hintEl.style.color = "var(--warn)"; hintEl.textContent = `Type mismatch: ${a} → ${b}`;
-    }
-  }
-  fromSel.addEventListener("change", checkTypes); toSel.addEventListener("change", checkTypes);
-  checkTypes();
-  adder.querySelector("#add-btn").addEventListener("click", () => {
-    if (!fromSel.value || !toSel.value) return;
-    if (t.connections.some(e => e.sender === fromSel.value && e.receiver === toSel.value)) return;
-    t.connections.push({ sender: fromSel.value, receiver: toSel.value });
-    redraw();
-  });
-}
-
-function renderOverview() {
-  const box = document.getElementById("overview");
-  const t = currentTopo();
-  const nodeCount = Object.keys(t.components).length;
-  const edgeCount = t.connections.length;
-  const stages = new Set();
-  for (const def of Object.values(t.components)) {
-    const comp = findComp(def.type);
-    if (comp) stages.add(comp.stage);
-  }
-  box.innerHTML = `
-    <div class="metric"><div class="v">${nodeCount}</div><div class="k">Modules</div></div>
-    <div class="metric"><div class="v">${edgeCount}</div><div class="k">Connections</div></div>
-    <div class="metric"><div class="v">${stages.size}</div><div class="k">Stages used</div></div>
-  `;
-}
-
-// ---------- auto-wire ----------
-// Connects compatible output→input ports by greedy type match.
-function autoWire() {
-  const t = currentTopo();
-  const nodes = Object.entries(t.components);
-  const made = new Set(t.connections.map(e => e.sender + "|" + e.receiver));
-  for (const [an, ad] of nodes) {
-    const aComp = findComp(ad.type); if (!aComp) continue;
-    for (const out of aComp.outputs) {
-      for (const [bn, bd] of nodes) {
-        if (bn === an) continue;
-        const bComp = findComp(bd.type); if (!bComp) continue;
-        for (const inp of bComp.inputs) {
-          if (inp.name !== out.name) continue;          // match by name first
-          if (inp.type !== out.type && inp.type !== "Any" && out.type !== "Any") continue;
-          const key = `${an}.${out.name}|${bn}.${inp.name}`;
-          if (made.has(key)) continue;
-          // skip if this input port already has a sender
-          if (t.connections.some(e => e.receiver === `${bn}.${inp.name}`)) continue;
-          t.connections.push({ sender: `${an}.${out.name}`, receiver: `${bn}.${inp.name}` });
-          made.add(key);
-        }
-      }
-    }
-  }
-  redraw();
-}
-
-// ---------- graph rendering (dagre + SVG) ----------
-function renderGraph() {
-  const svg = document.getElementById("canvas");
-  const empty = document.getElementById("graph-empty");
-  svg.innerHTML = "";
-  const t = currentTopo();
-  const entries = Object.entries(t.components);
-  if (!entries.length) {
-    empty.style.display = "flex";
-    svg.setAttribute("viewBox", "0 0 800 400");
-    return;
-  }
-  empty.style.display = "none";
-
-  const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: "LR", nodesep: 30, ranksep: 60, marginx: 30, marginy: 30 });
-  g.setDefaultEdgeLabel(() => ({}));
-
-  const NODE_W = 200;
-  for (const [name, def] of entries) {
-    const comp = findComp(def.type);
-    const inN = comp ? comp.inputs.length : 0;
-    const outN = comp ? comp.outputs.length : 0;
-    const h = 50 + Math.max(inN, outN) * 14;
-    g.setNode(name, { width: NODE_W, height: h, comp, def, name });
-  }
-  for (const e of t.connections) {
-    const s = e.sender.split(".")[0], r = e.receiver.split(".")[0];
-    if (g.hasNode(s) && g.hasNode(r)) g.setEdge(s, r, e);
-  }
-  dagre.layout(g);
-
-  const w = g.graph().width || 800;
-  const h = g.graph().height || 400;
-  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-  svg.setAttribute("width", w);
-  svg.setAttribute("height", h);
-
-  // edges
-  for (const eid of g.edges()) {
-    const edge = g.edge(eid);
-    const pts = edge.points;
-    const d = pts.map((p, i) => (i === 0 ? "M" : "L") + p.x + "," + p.y).join(" ");
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    path.setAttribute("d", d);
-    path.setAttribute("class", "edge-line");
-    path.setAttribute("marker-end", "url(#arrow)");
-    svg.appendChild(path);
-  }
-
-  // marker
-  const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
-  defs.innerHTML = `<marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#4a5470"/></marker>`;
-  svg.appendChild(defs);
-
-  // nodes
-  for (const name of g.nodes()) {
-    const n = g.node(name);
-    const x = n.x - n.width / 2, y = n.y - n.height / 2;
-    const grp = document.createElementNS("http://www.w3.org/2000/svg", "g");
-    grp.setAttribute("transform", `translate(${x},${y})`);
-    grp.addEventListener("click", () => { selectedNode = name; redraw(); });
-
-    const rect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    rect.setAttribute("width", n.width); rect.setAttribute("height", n.height);
-    rect.setAttribute("class", "node-rect" + (selectedNode === name ? " selected" : ""));
-    grp.appendChild(rect);
-
-    const title = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    title.setAttribute("class", "node-title"); title.setAttribute("x", 10); title.setAttribute("y", 18);
-    title.textContent = name; grp.appendChild(title);
-
-    const cls = document.createElementNS("http://www.w3.org/2000/svg", "text");
-    cls.setAttribute("class", "node-cls"); cls.setAttribute("x", 10); cls.setAttribute("y", 32);
-    cls.textContent = n.comp ? n.comp.name : n.def.type;
-    grp.appendChild(cls);
-
-    // ports
-    if (n.comp) {
-      n.comp.inputs.forEach((p, i) => {
-        const py = 45 + i * 14;
-        const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        dot.setAttribute("cx", 0); dot.setAttribute("cy", py); dot.setAttribute("class", "port-dot in"); dot.setAttribute("r", 3.5);
-        grp.appendChild(dot);
-        const lbl = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        lbl.setAttribute("class", "port-text"); lbl.setAttribute("x", 8); lbl.setAttribute("y", py + 3);
-        lbl.textContent = p.name; grp.appendChild(lbl);
-      });
-      n.comp.outputs.forEach((p, i) => {
-        const py = 45 + i * 14;
-        const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-        dot.setAttribute("cx", n.width); dot.setAttribute("cy", py); dot.setAttribute("class", "port-dot out"); dot.setAttribute("r", 3.5);
-        grp.appendChild(dot);
-        const lbl = document.createElementNS("http://www.w3.org/2000/svg", "text");
-        lbl.setAttribute("class", "port-text"); lbl.setAttribute("text-anchor", "end");
-        lbl.setAttribute("x", n.width - 8); lbl.setAttribute("y", py + 3);
-        lbl.textContent = p.name; grp.appendChild(lbl);
-      });
-    }
-    svg.appendChild(grp);
-  }
-}
-
-// ---------- load / save ----------
-async function onLoadPipeline(e) {
-  const name = e.target.value;
-  if (!name) {
-    document.getElementById("pname").value = "";
-    document.getElementById("pdesc").value = "";
-    topo = { indexing: emptyTopo(), retrieval: emptyTopo() };
-    selectedNode = null; setStatus(""); redraw(); return;
-  }
-  const r = await fetch("/api/pipelines/" + encodeURIComponent(name));
-  const data = await r.json();
-  if (data.error) { setStatus(data.error, "bad"); return; }
-  document.getElementById("pname").value = data.name;
-  document.getElementById("pdesc").value = data.description || "";
-  document.getElementById("ovr-idx").value = JSON.stringify(data.indexing_overrides || {}, null, 2);
-  document.getElementById("ovr-ret").value = JSON.stringify(data.retrieval_overrides || {}, null, 2);
-  document.getElementById("ovr-sk").value = JSON.stringify(data.search_kwargs || {}, null, 2);
-  topo.indexing = data.indexing ? topoFromJson(data.indexing) : emptyTopo();
-  topo.retrieval = data.retrieval ? topoFromJson(data.retrieval) : emptyTopo();
-  selectedNode = null;
-  setStatus("Loaded " + name + " (" + data.source + ")", "ok");
-  redraw();
-}
-
-function topoFromJson(j) {
-  return {
-    components: j.components || {},
-    connections: (j.connections || []).map(e => ({ sender: e.sender, receiver: e.receiver })),
-  };
-}
-
-function safeJson(s) { try { const v = JSON.parse(s); return (v && typeof v === "object") ? v : {}; } catch { return null; } }
-
-async function onSave() {
-  const name = document.getElementById("pname").value.trim();
-  if (!name) { setStatus("Name is required", "bad"); return; }
-  const ovrIdx = safeJson(document.getElementById("ovr-idx").value);
-  const ovrRet = safeJson(document.getElementById("ovr-ret").value);
-  const sk = safeJson(document.getElementById("ovr-sk").value);
-  if (ovrIdx === null || ovrRet === null || sk === null) { setStatus("Override JSON invalid", "bad"); return; }
-
-  const payload = {
-    name,
-    description: document.getElementById("pdesc").value,
-    indexing_overrides: ovrIdx,
-    retrieval_overrides: ovrRet,
-    search_kwargs: sk,
-    indexing_topology: Object.keys(topo.indexing.components).length ? topo.indexing : null,
-    retrieval_topology: Object.keys(topo.retrieval.components).length ? topo.retrieval : null,
-  };
-  const r = await fetch("/api/pipelines", { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(payload) });
-  const data = await r.json();
-  if (data.error) { setStatus(data.error, "bad"); return; }
-  setStatus("Saved → " + (data.indexing_topology || data.retrieval_topology || data.profile_path), "ok");
-}
-
-function setStatus(text, cls) {
-  const s = document.getElementById("status");
-  s.textContent = text; s.className = cls || "";
-}
-
 // ---------- redraw ----------
 function redraw() {
   document.getElementById("kind-hint").textContent =
     kind === "indexing"
-      ? "Indexing pipeline: load → split → embed → write."
-      : "Retrieval pipeline: query_embedder + fts5 → joiner → parent.";
+      ? "Build your indexing flow: load → split → embed → write."
+      : "Build your retrieval flow: embed → retrieve → fuse → post.";
   renderOverview();
-  renderNodeList();
-  renderConfig();
+  renderStageEditor();
   renderConnections();
   renderGraph();
 }
 
 boot();
+
 </script>
 </body>
 </html>
