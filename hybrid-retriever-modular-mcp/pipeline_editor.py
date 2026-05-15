@@ -438,31 +438,32 @@ input, select, textarea {
 input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
 label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
 
-#app { display: flex; justify-content: center; height: 100vh; background: var(--bg); }
-#left { width: 100%; max-width: 600px; overflow-y: auto; padding: 20px; }
+#app { display: flex; flex-direction: column; height: 100vh; background: var(--bg); }
+#main-container { flex: 1; overflow-y: auto; display: flex; justify-content: center; padding: 20px; }
+#settings-panel { width: 100%; max-width: 700px; }
+
 #right { 
   display: none; 
   position: fixed; 
   inset: 0; 
   background: var(--bg); 
-  z-index: 1000; 
+  z-index: 2000; 
   flex-direction: column; 
 }
 #right.open { display: flex; }
 
 #topbar {
-  display: flex; gap: 8px; padding: 10px 14px; border-bottom: 1px solid var(--border);
-  background: var(--panel); align-items: center;
+  display: flex; gap: 12px; padding: 12px 24px; border-bottom: 1px solid var(--border);
+  background: var(--panel); align-items: center; position: sticky; top: 0; z-index: 100;
 }
-#topbar h1 { margin: 0; font-size: 14px; font-weight: 600; }
+#topbar h1 { margin: 0; font-size: 16px; font-weight: 700; color: var(--accent); }
 #topbar .spacer { flex: 1; }
-#status { font-size: 11px; color: var(--muted); margin-left: 8px; }
-#status.ok { color: var(--ok); }
-#status.bad { color: var(--bad); }
+#status { font-size: 11px; color: var(--muted); }
 
 #graph-topbar {
-  display: flex; align-items: center; padding: 10px 20px; background: var(--panel); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 12px 24px; background: var(--panel); border-bottom: 1px solid var(--border);
 }
+#graph-topbar h1 { margin: 0; font-size: 16px; font-weight: 700; }
 
 #graph { flex: 1; position: relative; overflow: auto; background: #0b0d12; }
 #graph svg { display: block; }
@@ -507,67 +508,69 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
 </head>
 <body>
 <div id="app">
-  <div id="left">
-    <div id="topbar" style="margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px;">
-      <h1>Retriever Editor</h1>
-      <span id="status"></span>
-      <div class="spacer"></div>
-      <button id="view-graph-btn" class="primary">View Graph</button>
-      <button id="reset-btn">Reset</button>
-    </div>
+  <div id="topbar">
+    <h1>Retriever Editor</h1>
+    <span id="status"></span>
+    <div class="spacer"></div>
+    <button id="view-graph-btn" class="primary">View Graph</button>
+    <button id="reset-btn">Reset</button>
+    <button class="primary" id="save">Save Pipeline</button>
+  </div>
 
-    <div class="section">
-      <div class="head">Step 1: Pipeline Basics</div>
-      <div class="body">
-        <div class="param-row">
-          <label>Load existing</label>
-          <select id="existing"><option value="">— new pipeline —</option></select>
-        </div>
-        <div class="param-row">
-          <label>Name</label>
-          <input id="pname" placeholder="my_pipeline">
-        </div>
-        <div class="param-row">
-          <label>Description</label>
-          <textarea id="pdesc" rows="2"></textarea>
-        </div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="head">Pipeline Configuration (Stages 1-8)</div>
-      <div class="body">
-        <div class="hint">Define the complete flow from ingestion to search.</div>
-        <div id="dynamic-steps"></div>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="head">Advanced: JSON Overrides</div>
-      <div class="body">
-        <label>indexing_overrides</label>
-        <textarea id="ovr-idx" rows="2">{}</textarea>
-        <label style="margin-top:6px">retrieval_overrides</label>
-        <textarea id="ovr-ret" rows="2">{}</textarea>
-        <label style="margin-top:6px">search_kwargs</label>
-        <textarea id="ovr-sk" rows="2">{}</textarea>
-      </div>
-    </div>
-
-    <div class="section">
-      <div class="head">Finalise: Connections & Save</div>
-      <div class="body">
-        <div id="conn-body"></div>
-        <div style="margin-top:12px; display:flex; gap:8px;">
-          <button id="auto-wire" style="flex:1">Auto-wire all</button>
-          <button class="primary" id="save" style="flex:1">Save Pipeline</button>
+  <div id="main-container">
+    <div id="settings-panel">
+      <div class="section">
+        <div class="head">Step 1: Pipeline Basics</div>
+        <div class="body">
+          <div class="param-row">
+            <label>Load existing</label>
+            <select id="existing"><option value="">— new pipeline —</option></select>
+          </div>
+          <div class="param-row">
+            <label>Name</label>
+            <input id="pname" placeholder="my_pipeline">
+          </div>
+          <div class="param-row">
+            <label>Description</label>
+            <textarea id="pdesc" rows="2"></textarea>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="section">
-      <div class="head">Statistics</div>
-      <div class="body overview-grid" id="overview"></div>
+      <div class="section">
+        <div class="head">Pipeline Configuration (Stages 1-8)</div>
+        <div class="body">
+          <div class="hint">Define the complete flow from ingestion to search.</div>
+          <div id="dynamic-steps"></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="head">Advanced: JSON Overrides</div>
+        <div class="body">
+          <label>indexing_overrides</label>
+          <textarea id="ovr-idx" rows="2">{}</textarea>
+          <label style="margin-top:6px">retrieval_overrides</label>
+          <textarea id="ovr-ret" rows="2">{}</textarea>
+          <label style="margin-top:6px">search_kwargs</label>
+          <textarea id="ovr-sk" rows="2">{}</textarea>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="head">Finalise: Connections</div>
+        <div class="body">
+          <div id="conn-body"></div>
+          <div style="margin-top:12px;">
+            <button id="auto-wire" style="width:100%">Auto-wire all ports</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="head">Statistics</div>
+        <div class="body overview-grid" id="overview"></div>
+      </div>
     </div>
   </div>
 
