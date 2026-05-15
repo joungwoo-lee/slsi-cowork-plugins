@@ -271,9 +271,11 @@ def load_pipeline_detail(name: str) -> dict:
 
     topo_indexing = profile.get("indexing_topology")
     topo_retrieval = profile.get("retrieval_topology")
+    topo_unified = profile.get("unified_topology")
     out = dict(profile)
     out["indexing"] = _read_json(PIPELINES_DIR / topo_indexing) if topo_indexing else None
     out["retrieval"] = _read_json(PIPELINES_DIR / topo_retrieval) if topo_retrieval else None
+    out["unified"] = _read_json(PIPELINES_DIR / topo_unified) if topo_unified else None
     return out
 
 
@@ -530,7 +532,7 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
         <div class="body">
           <div class="param-row">
             <label>Load existing</label>
-            <select id="existing"><option value="">??new pipeline ??/option></select>
+            <select id="existing"><option value="">-- new pipeline --</option></select>
           </div>
           <div class="param-row">
             <label>Name</label>
@@ -592,26 +594,45 @@ function findComp(cls) { return CATALOG.find(c => c.cls === cls); }
 
 // ---------- bootstrap ----------
 async function boot() {
-  const [cat, pipes] = await Promise.all([
-    fetch("/api/catalog").then(r => r.json()),
-    fetch("/api/pipelines").then(r => r.json()),
-  ]);
-  CATALOG = cat.components;
-  STAGES = cat.stages;
-  renderCatalog();
+  try {
+    const [cat, pipes] = await Promise.all([
+      fetch("/api/catalog").then(r => r.json()),
+      fetch("/api/pipelines").then(r => r.json()),
+    ]);
+    CATALOG = cat.components;
+    STAGES = cat.stages;
+    populatePipelineDropdown(pipes.pipelines || []);
+    const sel = document.getElementById("existing");
+    sel.addEventListener("change", onLoadPipeline);
+    document.getElementById("save").addEventListener("click", onSave);
+    document.getElementById("reset-btn").addEventListener("click", () => { topo = { components: {}, connections: [] }; selectedNode = null; document.getElementById("pname").value=""; document.getElementById("pdesc").value=""; sel.value=""; setStatus(""); redraw(); });
+    document.getElementById("auto-wire").addEventListener("click", autoWire);
+    document.getElementById("view-graph-btn").addEventListener("click", () => { document.getElementById("right").classList.add("open"); redraw(); });
+    document.getElementById("close-graph-btn").addEventListener("click", () => { document.getElementById("right").classList.remove("open"); });
+    redraw();
+  } catch (err) {
+    setStatus("boot failed: " + err.message, "bad");
+    console.error(err);
+  }
+}
+
+function populatePipelineDropdown(pipelines) {
   const sel = document.getElementById("existing");
-  for (const p of pipes.pipelines) {
+  // wipe and rebuild so reloads stay consistent
+  sel.innerHTML = '<option value="">-- new pipeline --</option>';
+  for (const p of pipelines) {
     const o = document.createElement("option");
-    o.value = p.name; o.textContent = p.name + " (" + p.source + ")";
+    o.value = p.name;
+    o.textContent = p.name + " (" + (p.source || "user") + ")";
     sel.appendChild(o);
   }
-  sel.addEventListener("change", onLoadPipeline);
-  document.getElementById("save").addEventListener("click", onSave);
-  document.getElementById("reset-btn").addEventListener("click", () => { topo = { components: {}, connections: [] }; selectedNode = null; redraw(); });
-  document.getElementById("auto-wire").addEventListener("click", autoWire);
-  document.getElementById("view-graph-btn").addEventListener("click", () => { document.getElementById("right").classList.add("open"); redraw(); });
-  document.getElementById("close-graph-btn").addEventListener("click", () => { document.getElementById("right").classList.remove("open"); });
-  redraw();
+}
+
+function setStatus(text, cls) {
+  const s = document.getElementById("status");
+  if (!s) return;
+  s.textContent = text || "";
+  s.style.color = cls === "bad" ? "var(--bad)" : (cls === "ok" ? "var(--ok)" : "var(--muted)");
 }
 
 // Map functional stages to standard engine component names
@@ -657,7 +678,7 @@ function renderStageEditor() {
       entry.innerHTML = `
         <div class="hdr">
           <div class="nm">${name}</div>
-          <div class="del" title="Remove">??/div>
+          <div class="del" title="Remove">&times;</div>
         </div>
         <div class="cls">${comp ? comp.name : def.type}</div>
         
@@ -776,6 +797,217 @@ function removeNode(name) {
   t.connections = t.connections.filter(e => !e.sender.startsWith(name + ".") && !e.receiver.startsWith(name + "."));
   if (selectedNode === name) selectedNode = null;
   redraw();
+}
+
+// ---------- load / save ----------
+function topoFromJson(j) {
+  if (!j || typeof j !== "object") return { components: {}, connections: [] };
+  return {
+    components: j.components || {},
+    connections: (j.connections || []).map(e => ({ sender: e.sender, receiver: e.receiver })),
+  };
+}
+
+async function onLoadPipeline(e) {
+  const name = e.target.value;
+  if (!name) {
+    document.getElementById("pname").value = "";
+    document.getElementById("pdesc").value = "";
+    topo = { components: {}, connections: [] };
+    selectedNode = null;
+    setStatus("");
+    redraw();
+    return;
+  }
+  try {
+    const r = await fetch("/api/pipelines/" + encodeURIComponent(name));
+    const data = await r.json();
+    if (data.error) { setStatus(data.error, "bad"); return; }
+    document.getElementById("pname").value = data.name || name;
+    document.getElementById("pdesc").value = data.description || "";
+    // Built-in pipelines store their graph as `unified_topology`; user pipelines
+    // saved through this editor may write indexing/retrieval keys instead.
+    const source = data.unified || data.indexing || data.retrieval;
+    topo = topoFromJson(source);
+    selectedNode = null;
+    setStatus("Loaded " + name + " (" + (data.source || "user") + ")", "ok");
+    redraw();
+  } catch (err) {
+    setStatus("load failed: " + err.message, "bad");
+  }
+}
+
+async function onSave() {
+  const name = document.getElementById("pname").value.trim();
+  if (!name) { setStatus("Name is required", "bad"); return; }
+  const hasComponents = Object.keys(topo.components).length > 0;
+  const payload = {
+    name,
+    description: document.getElementById("pdesc").value,
+    unified_topology: hasComponents ? topo : null,
+  };
+  try {
+    const r = await fetch("/api/pipelines", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(payload),
+    });
+    const data = await r.json();
+    if (data.error) { setStatus(data.error, "bad"); return; }
+    setStatus("Saved " + name, "ok");
+    // Refresh dropdown so the new pipeline appears immediately.
+    const pipes = await fetch("/api/pipelines").then(r => r.json());
+    const sel = document.getElementById("existing");
+    const prev = sel.value;
+    populatePipelineDropdown(pipes.pipelines || []);
+    sel.value = name || prev;
+  } catch (err) {
+    setStatus("save failed: " + err.message, "bad");
+  }
+}
+
+// ---------- auto-wire ----------
+// Find a sensible connection for each component input by walking earlier stages
+// and matching first by exact port name, then by port type. Existing connections
+// are left intact.
+function autoWire() {
+  const t = currentTopo();
+  const stageOrder = STAGES.map(s => s[0]);
+  const nodes = Object.entries(t.components).map(([name, def]) => {
+    const comp = findComp(def.type);
+    return { name, def, comp, stageIdx: comp ? stageOrder.indexOf(comp.stage) : -1 };
+  }).filter(n => n.comp);
+
+  const existing = new Set(t.connections.map(e => e.receiver));
+  for (const recv of nodes) {
+    for (const inp of recv.comp.inputs || []) {
+      const target = `${recv.name}.${inp.name}`;
+      if (existing.has(target)) continue;
+      let match = null;
+      for (const send of nodes) {
+        if (send.name === recv.name) continue;
+        if (send.stageIdx > recv.stageIdx) continue;
+        const outByName = (send.comp.outputs || []).find(o => o.name === inp.name);
+        if (outByName) { match = `${send.name}.${outByName.name}`; break; }
+      }
+      if (!match) {
+        for (const send of nodes) {
+          if (send.name === recv.name) continue;
+          if (send.stageIdx > recv.stageIdx) continue;
+          const outByType = (send.comp.outputs || []).find(o => o.type === inp.type);
+          if (outByType) { match = `${send.name}.${outByType.name}`; break; }
+        }
+      }
+      if (match) {
+        t.connections.push({ sender: match, receiver: target });
+        existing.add(target);
+      }
+    }
+  }
+  redraw();
+}
+
+// ---------- overview / connections / graph ----------
+function renderOverview() {
+  const box = document.getElementById("overview");
+  if (!box) return;
+  const t = currentTopo();
+  const compCount = Object.keys(t.components).length;
+  const connCount = t.connections.length;
+  const byStage = {};
+  for (const [, def] of Object.entries(t.components)) {
+    const s = findComp(def.type)?.stage || "?";
+    byStage[s] = (byStage[s] || 0) + 1;
+  }
+  const stageSummary = Object.entries(byStage).map(([s, n]) => `${s}: ${n}`).join(", ") || "no modules";
+  box.innerHTML = `<div>Modules: <b>${compCount}</b> &nbsp; Connections: <b>${connCount}</b></div>
+                   <div style="color:var(--muted);margin-top:4px;">${stageSummary}</div>`;
+}
+
+function renderConnections() {
+  const box = document.getElementById("conn-body");
+  if (!box) return;
+  const t = currentTopo();
+  if (!t.connections.length) {
+    box.innerHTML = '<div style="color:var(--muted)">No connections. Add modules and click <b>Auto-wire all ports</b>.</div>';
+    return;
+  }
+  box.innerHTML = "";
+  t.connections.forEach((e, i) => {
+    const row = document.createElement("div");
+    row.style.cssText = "display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px;";
+    row.innerHTML = `<span><b>${e.sender}</b> &rarr; <b>${e.receiver}</b></span>
+                     <span class="del" data-i="${i}" style="cursor:pointer;color:var(--bad);">&times;</span>`;
+    row.querySelector(".del").addEventListener("click", () => {
+      t.connections.splice(i, 1);
+      redraw();
+    });
+    box.appendChild(row);
+  });
+}
+
+function renderGraph() {
+  const svg = document.getElementById("canvas");
+  const empty = document.getElementById("graph-empty");
+  if (!svg) return;
+  while (svg.firstChild) svg.removeChild(svg.firstChild);
+  const t = currentTopo();
+  const names = Object.keys(t.components);
+  if (!names.length) { if (empty) empty.style.display = "block"; return; }
+  if (empty) empty.style.display = "none";
+
+  if (typeof dagre === "undefined") return;
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: "LR", marginx: 20, marginy: 20, nodesep: 30, ranksep: 60 });
+  g.setDefaultEdgeLabel(() => ({}));
+  for (const n of names) g.setNode(n, { label: n, width: 160, height: 50 });
+  for (const e of t.connections) {
+    const s = e.sender.split(".")[0];
+    const r = e.receiver.split(".")[0];
+    if (g.hasNode(s) && g.hasNode(r)) g.setEdge(s, r);
+  }
+  dagre.layout(g);
+
+  const ns = "http://www.w3.org/2000/svg";
+  const w = g.graph().width || 400;
+  const h = g.graph().height || 200;
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.setAttribute("width", w);
+  svg.setAttribute("height", h);
+
+  g.edges().forEach(edge => {
+    const points = g.edge(edge).points;
+    const d = points.map((p, i) => (i === 0 ? "M" : "L") + p.x + "," + p.y).join(" ");
+    const path = document.createElementNS(ns, "path");
+    path.setAttribute("d", d);
+    path.setAttribute("class", "edge-line");
+    svg.appendChild(path);
+  });
+
+  g.nodes().forEach(n => {
+    const node = g.node(n);
+    const def = t.components[n];
+    const comp = def ? findComp(def.type) : null;
+    const grp = document.createElementNS(ns, "g");
+    grp.setAttribute("transform", `translate(${node.x - node.width / 2}, ${node.y - node.height / 2})`);
+    const rect = document.createElementNS(ns, "rect");
+    rect.setAttribute("class", "node-rect" + (selectedNode === n ? " selected" : ""));
+    rect.setAttribute("width", node.width);
+    rect.setAttribute("height", node.height);
+    grp.appendChild(rect);
+    const title = document.createElementNS(ns, "text");
+    title.setAttribute("class", "node-title");
+    title.setAttribute("x", 10); title.setAttribute("y", 20);
+    title.textContent = n;
+    grp.appendChild(title);
+    const cls = document.createElementNS(ns, "text");
+    cls.setAttribute("class", "node-cls");
+    cls.setAttribute("x", 10); cls.setAttribute("y", 38);
+    cls.textContent = comp ? comp.name : (def?.type || "");
+    grp.appendChild(cls);
+    grp.addEventListener("click", () => { selectedNode = n; redraw(); });
+    svg.appendChild(grp);
+  });
 }
 
 // ---------- redraw ----------
