@@ -8,8 +8,10 @@ response (for everything else) — never propagated, so the loop stays alive.
 """
 from __future__ import annotations
 
+from collections import deque
 import json
 import sys
+import threading
 import traceback
 from typing import Any, Callable, Optional
 
@@ -69,18 +71,31 @@ REQUIRED_DEPS = (
 
 _BOOT_DOCTOR_OK = False
 
-
-
-import threading
-
 _INSTALL_THREAD = None
 _INSTALL_ERROR = None
+_INSTALL_LOG = deque(maxlen=40)
+_INSTALL_LOG_LOCK = threading.Lock()
+
+
+def _append_install_log(line: str) -> None:
+    text = line.rstrip()
+    if not text:
+        return
+    with _INSTALL_LOG_LOCK:
+        _INSTALL_LOG.append(text)
+    log(f"pip: {text}")
+
+
+def _recent_install_log(limit: int = 12) -> str:
+    with _INSTALL_LOG_LOCK:
+        recent = list(_INSTALL_LOG)[-limit:]
+    return "\n".join(recent)
 
 def _install_worker(req_path):
     global _INSTALL_ERROR
     import subprocess
     try:
-        result = subprocess.run(
+        proc = subprocess.Popen(
             [
                 *bootstrap.PYTHON_CMD,
                 "-m",
@@ -90,15 +105,27 @@ def _install_worker(req_path):
                 "-r",
                 str(req_path),
             ],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
         )
-        if result.returncode != 0:
+        if proc.stdout is not None:
+            for line in proc.stdout:
+                _append_install_log(line)
+            proc.stdout.close()
+
+        returncode = proc.wait()
+        if returncode != 0:
+            recent = _recent_install_log(limit=20)
             _INSTALL_ERROR = (
-                f"pip install exited with code {result.returncode}.\n"
-                f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
+                f"pip install exited with code {returncode}."
+                + (f"\nRecent output:\n{recent}" if recent else "")
             )
         else:
+            _append_install_log("pip install completed successfully")
             _INSTALL_ERROR = None
     except Exception as exc:
         _INSTALL_ERROR = f"pip install execution failed: {exc}"
@@ -121,7 +148,11 @@ def boot_doctor() -> Optional[str]:
 
     if _INSTALL_THREAD is not None:
         if _INSTALL_THREAD.is_alive():
-            return f"Dependencies {pending} are installing in background... Please wait ~1 min and try again."
+            recent = _recent_install_log()
+            msg = f"Dependencies {pending} are installing in background... Please wait ~1 min and try again."
+            if recent:
+                msg += f"\nLatest progress:\n{recent}"
+            return msg
         
         if _INSTALL_ERROR:
             return f"Installation failed: {_INSTALL_ERROR}"
@@ -141,6 +172,8 @@ def boot_doctor() -> Optional[str]:
         return f"missing dependencies {pending} and requirements.txt not found at {req_path}"
 
     _INSTALL_ERROR = None
+    with _INSTALL_LOG_LOCK:
+        _INSTALL_LOG.clear()
     _INSTALL_THREAD = threading.Thread(target=_install_worker, args=(req_path,), daemon=True)
     _INSTALL_THREAD.start()
 
