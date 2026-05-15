@@ -19,8 +19,8 @@ except Exception:  # pragma: no cover — sys.stdout may already be wrapped
     pass
 
 ROOT_PATH = Path(__file__).resolve().parent.parent
-PYTHON_CMD = ("py", "-3.11")
-PYTHON_CMD_DISPLAY = "py -3.11"
+PYTHON_CMD = ("py", "-3.12")
+PYTHON_CMD_DISPLAY = "py -3.12"
 
 
 def _split_csv(value: str | None) -> list[str]:

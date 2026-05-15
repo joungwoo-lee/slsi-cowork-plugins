@@ -1,10 +1,10 @@
 """End-to-end MCP stdio test for the modular retriever.
 
-Spawns ``py -3.11 server.py`` as a child process, drives JSON-RPC through
+Spawns ``py -3.12 server.py`` as a child process, drives JSON-RPC through
 stdin/stdout, and asserts that every MCP tool returns the legacy response
 shape with the new modular pipelines wired in.
 
-Run:    py -3.11 scripts_test/e2e_stdio.py
+Run:    py -3.12 scripts_test/e2e_stdio.py
 """
 from __future__ import annotations
 
@@ -36,7 +36,7 @@ def main() -> int:
 
     server_py = REPO / "server.py"
     proc = subprocess.Popen(
-        ["py", "-3.11", str(server_py)],
+        ["py", "-3.12", str(server_py)],
         cwd=str(REPO),
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,

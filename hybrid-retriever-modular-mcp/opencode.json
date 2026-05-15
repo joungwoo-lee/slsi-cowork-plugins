@@ -4,7 +4,7 @@
       "type": "local",
       "command": [
         "py",
-        "-3.11",
+        "-3.12",
         "C:\\Users\\joung\\slsi-cowork-plugins\\hybrid-retriever-modular-mcp\\server.py"
       ],
       "enabled": true

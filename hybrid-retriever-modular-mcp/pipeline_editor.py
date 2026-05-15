@@ -1,6 +1,6 @@
 """Local web UI for editing hybrid-retriever pipelines.
 
-Run:  py -3.11 pipeline_editor.py
+Run:  py -3.12 pipeline_editor.py
 
 Opens http://127.0.0.1:8765 in the default browser. The page lists the
 component catalogue on the left (grouped by pipeline stage), lets you
