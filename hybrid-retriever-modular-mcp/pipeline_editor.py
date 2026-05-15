@@ -1,4 +1,4 @@
-"""Local web UI for editing hybrid-retriever pipelines.
+﻿"""Local web UI for editing hybrid-retriever pipelines.
 
 Run:  py -3.12 pipeline_editor.py
 
@@ -8,8 +8,8 @@ configure each component's constructor parameters, define connections
 between them, and shows the resulting DAG as an SVG graph on the right.
 
 Saving writes:
-  * pipelines/<name>_indexing.json (or _retrieval.json) — Haystack topology
-  * $RETRIEVER_DATA_ROOT/pipelines.json — profile entry that points to it,
+  * pipelines/<name>_indexing.json (or _retrieval.json) ??Haystack topology
+  * $RETRIEVER_DATA_ROOT/pipelines.json ??profile entry that points to it,
     matching the format used by the MCP ``save_pipeline`` tool.
 
 Dependencies: stdlib only on the server. The browser pulls dagre from
@@ -195,7 +195,11 @@ CATALOG: list[dict] = [
         "name": "HybridJoiner",
         "cls": "retriever.components.hybrid_joiner.HybridJoiner",
         "stage": "fuse",
-        "params": [],
+        "params": [
+            {"name": "fusion", "type": "str", "default": "linear"},
+            {"name": "vector_weight", "type": "float", "default": 0.5},
+            {"name": "rrf_k", "type": "int", "default": 60},
+        ],
         "inputs": [
             {"name": "keyword_documents", "type": "List[Document]"},
             {"name": "semantic_documents", "type": "List[Document]"},
@@ -210,7 +214,9 @@ CATALOG: list[dict] = [
         "name": "ParentChunkReplacer",
         "cls": "retriever.components.parent_replace.ParentChunkReplacer",
         "stage": "post",
-        "params": [],
+        "params": [
+            {"name": "enabled", "type": "bool", "default": True},
+        ],
         "inputs": [
             {"name": "documents", "type": "List[Document]"},
             {"name": "enabled", "type": "bool"},
@@ -524,7 +530,7 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
         <div class="body">
           <div class="param-row">
             <label>Load existing</label>
-            <select id="existing"><option value="">— new pipeline —</option></select>
+            <select id="existing"><option value="">??new pipeline ??/option></select>
           </div>
           <div class="param-row">
             <label>Name</label>
@@ -540,20 +546,8 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
       <div class="section">
         <div class="head">Pipeline Configuration (Stages 1-8)</div>
         <div class="body">
-          <div class="hint">Define the complete flow from ingestion to search.</div>
+          <div class="hint">Define modules and their parameters for each stage. These values are saved directly into the pipeline JSON.</div>
           <div id="dynamic-steps"></div>
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="head">Advanced: JSON Overrides</div>
-        <div class="body">
-          <label>indexing_overrides</label>
-          <textarea id="ovr-idx" rows="2">{}</textarea>
-          <label style="margin-top:6px">retrieval_overrides</label>
-          <textarea id="ovr-ret" rows="2">{}</textarea>
-          <label style="margin-top:6px">search_kwargs</label>
-          <textarea id="ovr-sk" rows="2">{}</textarea>
         </div>
       </div>
 
@@ -663,7 +657,7 @@ function renderStageEditor() {
       entry.innerHTML = `
         <div class="hdr">
           <div class="nm">${name}</div>
-          <div class="del" title="Remove">✕</div>
+          <div class="del" title="Remove">??/div>
         </div>
         <div class="cls">${comp ? comp.name : def.type}</div>
         
@@ -802,3 +796,4 @@ boot();
 
 if __name__ == "__main__":
     sys.exit(main())
+
