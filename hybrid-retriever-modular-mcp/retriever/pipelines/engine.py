@@ -32,8 +32,7 @@ logger = logging.getLogger(__name__)
 PIPELINES_DIR = Path(__file__).parent
 REGISTRY_PATH = PIPELINES_DIR / "registry.json"
 
-DEFAULT_INDEXING_TOPOLOGY = "default_indexing.json"
-DEFAULT_RETRIEVAL_TOPOLOGY = "default_retrieval.json"
+DEFAULT_UNIFIED_TOPOLOGY = "default_unified.json"
 
 
 # --- Profile registry -------------------------------------------------------
@@ -268,7 +267,7 @@ def run_indexing(
     doc_id = _document_id_for(dataset_id, path)
     stored_source, stored_content = _stage_source(path, cfg, dataset_id, doc_id)
 
-    topology_file = (profile.unified_topology or profile.indexing_topology if profile else None) or DEFAULT_INDEXING_TOPOLOGY
+    topology_file = (profile.unified_topology or profile.indexing_topology if profile else None) or DEFAULT_UNIFIED_TOPOLOGY
     pipeline = _load_pipeline(topology_file)
     _inject_indexing_runtime(pipeline, cfg, indexing_opts)
 
@@ -352,7 +351,7 @@ def run_retrieval(
     metadata_condition: dict | None = None,
     profile: PipelineProfile | None = None,
 ) -> dict:
-    topology_file = (profile.unified_topology or profile.retrieval_topology if profile else None) or DEFAULT_RETRIEVAL_TOPOLOGY
+    topology_file = (profile.unified_topology or profile.retrieval_topology if profile else None) or DEFAULT_UNIFIED_TOPOLOGY
     pipeline = _load_pipeline(topology_file)
     _inject_retrieval_runtime(pipeline, cfg)
 

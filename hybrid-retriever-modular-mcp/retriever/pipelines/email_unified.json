@@ -1,0 +1,125 @@
+{
+  "metadata": {},
+  "max_runs_per_component": 100,
+  "components": {
+    "loader": {
+      "type": "retriever.components.email_loader.EmailSourceLoader",
+      "init_parameters": {
+        "worker_path": ""
+      }
+    },
+    "converter": {
+      "type": "retriever.components.email_markdown_converter.EmailMarkdownConverter",
+      "init_parameters": {
+        "max_body_chars": 1000000,
+        "max_attachment_chars": 500000
+      }
+    },
+    "splitter": {
+      "type": "retriever.components.hierarchical_splitter.HierarchicalSplitter",
+      "init_parameters": {
+        "chunk_chars": 512,
+        "chunk_overlap": 50,
+        "parent_chunk_chars": 1024,
+        "parent_chunk_overlap": 100,
+        "child_chunk_chars": 256,
+        "child_chunk_overlap": 50
+      }
+    },
+    "embedder": {
+      "type": "retriever.components.document_embedder.HttpDocumentEmbedder",
+      "init_parameters": {
+        "api_url": "",
+        "api_key": "",
+        "model": "",
+        "dim": 0,
+        "x_dep_ticket": "",
+        "x_system_name": "hybrid-retriever-modular-mcp",
+        "batch_size": 16,
+        "timeout_sec": 60,
+        "verify_ssl": false
+      }
+    },
+    "qdrant_writer": {
+      "type": "retriever.components.vector_retriever.LocalQdrantWriter",
+      "init_parameters": {
+        "data_root": "",
+        "collection": "retriever_chunks"
+      }
+    },
+    "query_embedder": {
+      "type": "retriever.components.document_embedder.HttpTextEmbedder",
+      "init_parameters": {
+        "api_url": "",
+        "api_key": "",
+        "model": "",
+        "dim": 0,
+        "x_dep_ticket": "",
+        "x_system_name": "hybrid-retriever-modular-mcp",
+        "batch_size": 16,
+        "timeout_sec": 60,
+        "verify_ssl": false
+      }
+    },
+    "fts5": {
+      "type": "retriever.components.fts5_retriever.Fts5Retriever",
+      "init_parameters": {
+        "data_root": ""
+      }
+    },
+    "vector": {
+      "type": "retriever.components.vector_retriever.LocalQdrantRetriever",
+      "init_parameters": {
+        "data_root": "",
+        "collection": "retriever_chunks"
+      }
+    },
+    "joiner": {
+      "type": "retriever.components.hybrid_joiner.HybridJoiner",
+      "init_parameters": {}
+    },
+    "parent": {
+      "type": "retriever.components.parent_replace.ParentChunkReplacer",
+      "init_parameters": {}
+    }
+  },
+  "connections": [
+    {
+      "sender": "loader.raw_emails",
+      "receiver": "converter.raw_emails"
+    },
+    {
+      "sender": "converter.documents",
+      "receiver": "splitter.documents"
+    },
+    {
+      "sender": "splitter.documents",
+      "receiver": "embedder.documents"
+    },
+    {
+      "sender": "embedder.documents",
+      "receiver": "qdrant_writer.documents"
+    },
+    {
+      "sender": "embedder.has_vector",
+      "receiver": "qdrant_writer.has_vector"
+    },
+    {
+      "sender": "query_embedder.embedding",
+      "receiver": "vector.embedding"
+    },
+    {
+      "sender": "fts5.documents",
+      "receiver": "joiner.keyword_documents"
+    },
+    {
+      "sender": "vector.documents",
+      "receiver": "joiner.semantic_documents"
+    },
+    {
+      "sender": "joiner.documents",
+      "receiver": "parent.documents"
+    }
+  ],
+  "connection_type_validation": true
+}

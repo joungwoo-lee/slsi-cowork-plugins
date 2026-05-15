@@ -3,7 +3,8 @@
     "description": "Legacy hybrid retriever: SQLite FTS5 + optional local Qdrant, linear fusion, parent-chunk replacement, kiwipiepy tokenisation. Every call that does not pass a 'pipeline' argument uses this.",
     "indexing_overrides": {},
     "retrieval_overrides": {},
-    "search_kwargs": {}
+    "search_kwargs": {},
+    "unified_topology": "default_unified.json"
   },
   "keyword_only": {
     "description": "Pure SQLite FTS5 keyword retrieval with RRF fusion. Skips the embedding API entirely; useful when the embedding endpoint is down or for benchmarking keyword recall against the default hybrid pipeline.",
@@ -13,13 +14,14 @@
     "search_kwargs": {
       "vector_similarity_weight": 0.0,
       "fusion": "rrf"
-    }
+    },
+    "unified_topology": "default_unified.json"
   },
   "email": {
     "description": "Email ingestion pipeline. Extracts messages from a .pst file (via Python 3.9 worker) and converts body + attachments to Markdown. Headers (subject, sender, recipients, received, folder_path) are folded into Document metadata so search can filter via metadata_condition. Retrieval uses the default hybrid pipeline.",
     "indexing_overrides": {
       "use_hierarchical": "false"
     },
-    "indexing_topology": "email_indexing.json"
+    "unified_topology": "email_unified.json"
   }
 }
