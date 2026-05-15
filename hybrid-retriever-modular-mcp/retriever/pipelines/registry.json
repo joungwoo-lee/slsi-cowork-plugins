@@ -23,5 +23,19 @@
       "use_hierarchical": "false"
     },
     "unified_topology": "email_unified.json"
+  },
+  "rrf_rerank": {
+    "description": "Hybrid retrieval with RRF fusion and BGE cross-encoder reranking (BAAI/bge-reranker-v2-m3). Pipeline: FTS5 + Qdrant -> HybridJoiner(rrf) -> BgeReranker -> ParentChunkReplacer. Requires FlagEmbedding (torch); model is downloaded on first use.",
+    "indexing_overrides": {},
+    "retrieval_overrides": {
+      "fusion": "rrf",
+      "use_reranker": true,
+      "reranker_model": "BAAI/bge-reranker-v2-m3",
+      "rerank_top_n": 12
+    },
+    "search_kwargs": {
+      "fusion": "rrf"
+    },
+    "unified_topology": "rrf_rerank_unified.json"
   }
 }

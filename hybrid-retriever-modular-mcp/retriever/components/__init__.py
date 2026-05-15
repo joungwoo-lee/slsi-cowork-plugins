@@ -12,6 +12,7 @@ from .fts5_retriever import Fts5Retriever
 from .vector_retriever import LocalQdrantRetriever, LocalQdrantWriter
 from .hybrid_joiner import HybridJoiner
 from .parent_replace import ParentChunkReplacer
+from .bge_reranker import BgeReranker
 
 __all__ = [
     "EmailSourceLoader",
@@ -25,4 +26,5 @@ __all__ = [
     "LocalQdrantWriter",
     "HybridJoiner",
     "ParentChunkReplacer",
+    "BgeReranker",
 ]

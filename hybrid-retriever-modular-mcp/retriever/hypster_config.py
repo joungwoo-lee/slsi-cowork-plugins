@@ -43,6 +43,9 @@ def compose_defaults(cfg: Config) -> dict[str, dict[str, Any]]:
             "keyword": True,
             "top_n": 12,
             "top_k": 200,
+            "use_reranker": False,
+            "reranker_model": "BAAI/bge-reranker-v2-m3",
+            "rerank_top_n": 12,
         },
     }
 
@@ -70,6 +73,9 @@ def retrieval_config(hp) -> dict[str, Any]:
     keyword = hp.bool(True, name="keyword")
     top_n = hp.int(12, name="top_n", min=1, max=50)
     top_k = hp.int(200, name="top_k", min=1, max=500)
+    use_reranker = hp.bool(False, name="use_reranker")
+    reranker_model = hp.text("BAAI/bge-reranker-v2-m3", name="reranker_model")
+    rerank_top_n = hp.int(12, name="rerank_top_n", min=1, max=200)
     return hp.collect(locals())
 
 

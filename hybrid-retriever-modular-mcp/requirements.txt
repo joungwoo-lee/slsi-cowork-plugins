@@ -27,3 +27,7 @@ pywin32>=306
 # to them while preserving their public surface.
 haystack-ai>=2.10.0
 hypster>=0.3.0
+
+# Cross-encoder reranker used by the `rrf_rerank` pipeline (BgeReranker).
+# Pulls in torch transitively; install only if reranker pipelines are used.
+FlagEmbedding>=1.2.10

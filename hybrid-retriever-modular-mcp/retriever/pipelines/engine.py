@@ -26,6 +26,7 @@ from haystack import Pipeline
 from .. import storage  # noqa: F401  (importing for side-effects? keep explicit below)
 from ..config import Config
 from ..stores import SqliteFts5DocumentStore
+from .node_topology import is_node_centric, to_haystack_dict
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +129,10 @@ def _load_pipeline(topology_file: str) -> Pipeline:
     if not topology_path.is_file():
         raise FileNotFoundError(f"pipeline topology not found: {topology_path}")
     with open(topology_path, "r", encoding="utf-8") as f:
-        return Pipeline.loads(f.read())
+        raw = json.load(f)
+    if is_node_centric(raw):
+        raw = to_haystack_dict(raw)
+    return Pipeline.from_dict(raw)
 
 
 def _iter_components(pipeline: Pipeline):
@@ -285,7 +289,7 @@ def run_indexing(
     
     # Satisfy mandatory inputs for components NOT in the indexing path to bypass validation
     graph_inputs = pipeline.inputs()
-    for name in ["query_embedder", "fts5", "vector", "joiner", "parent"]:
+    for name in ["query_embedder", "fts5", "vector", "joiner", "reranker", "parent"]:
         if name in graph_inputs:
             needed = graph_inputs[name]
             if name == "query_embedder":
@@ -301,6 +305,10 @@ def run_indexing(
             elif name == "joiner":
                 if "keyword_documents" in needed: run_inputs.setdefault(name, {})["keyword_documents"] = []
                 if "semantic_documents" in needed: run_inputs.setdefault(name, {})["semantic_documents"] = []
+            elif name == "reranker":
+                if "documents" in needed: run_inputs.setdefault(name, {})["documents"] = []
+                if "query" in needed: run_inputs.setdefault(name, {})["query"] = ""
+                if "enabled" in needed: run_inputs.setdefault(name, {})["enabled"] = False
             elif name == "parent":
                 if "documents" in needed: run_inputs.setdefault(name, {})["documents"] = []
                 if "enabled" in needed: run_inputs.setdefault(name, {})["enabled"] = False
@@ -371,6 +379,8 @@ def run_retrieval(
     top_n = int(retrieval_opts.get("top_n", 12))
     rrf_k = int(retrieval_opts.get("rrf_k", 60))
     keyword = bool(retrieval_opts.get("keyword", True))
+    use_reranker = bool(retrieval_opts.get("use_reranker", False))
+    rerank_top_n = int(retrieval_opts.get("rerank_top_n", top_n))
 
     run_inputs: dict[str, dict] = {
         "query_embedder": {"text": query if weight > 0.0 else ""},
@@ -386,6 +396,11 @@ def run_retrieval(
             "vector_weight": weight,
             "rrf_k": rrf_k,
             "metadata_condition": metadata_condition,
+        },
+        "reranker": {
+            "query": query,
+            "top_n": rerank_top_n,
+            "enabled": use_reranker,
         },
         "parent": {"enabled": effective_parent},
     }
