@@ -304,6 +304,16 @@ TOOLS: list[dict[str, Any]] = [
                     "description": "Per-call kwargs to force (e.g. vector_similarity_weight, parent_chunk_replace).",
                     "additionalProperties": True,
                 },
+                "indexing_topology": {
+                    "type": ["object", "null"],
+                    "description": "Optional full indexing topology from the visual pipeline editor.",
+                    "additionalProperties": True,
+                },
+                "retrieval_topology": {
+                    "type": ["object", "null"],
+                    "description": "Optional full retrieval topology from the visual pipeline editor.",
+                    "additionalProperties": True,
+                },
             },
             "required": ["name"],
         },

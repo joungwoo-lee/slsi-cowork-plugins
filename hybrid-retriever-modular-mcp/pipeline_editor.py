@@ -29,14 +29,16 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
+from retriever.pipelines import editor_store
+
 ROOT = Path(__file__).resolve().parent
-PIPELINES_DIR = ROOT / "retriever" / "pipelines"
-REGISTRY_PATH = PIPELINES_DIR / "registry.json"
+PIPELINES_DIR = editor_store.PIPELINES_DIR
+REGISTRY_PATH = editor_store.REGISTRY_PATH
 
 # Resolve the data root the same way retriever.config does, without importing
 # the package (so the editor still runs if haystack is not installed).
-DATA_ROOT = Path(os.environ.get("RETRIEVER_DATA_ROOT") or r"C:\Retriever_Data")
-USER_PROFILES_PATH = DATA_ROOT / "pipelines.json"
+DATA_ROOT = editor_store.user_profiles_path().parent
+USER_PROFILES_PATH = editor_store.user_profiles_path()
 
 
 # --- Component catalogue ----------------------------------------------------
@@ -232,22 +234,11 @@ STAGES = [
 # --- Disk I/O ---------------------------------------------------------------
 
 def _read_json(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        return data if isinstance(data, dict) else {}
-    except (OSError, json.JSONDecodeError):
-        return {}
+    return editor_store.read_json(path)
 
 
 def _atomic_write_json(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2, ensure_ascii=False)
-    os.replace(tmp, path)
+    editor_store.atomic_write_json(path, data)
 
 
 def load_pipeline_list() -> list[dict]:
@@ -281,78 +272,17 @@ def load_pipeline_detail(name: str) -> dict:
 
 
 def save_pipeline(payload: dict) -> dict:
-    """Persist a pipeline edited in the UI.
-
-    Expected payload shape::
-
-        {
-          "name": "my_pipe",
-          "description": "...",
-          "indexing_overrides": {...},
-          "retrieval_overrides": {...},
-          "search_kwargs": {...},
-          "indexing_topology": {components, connections} | null,
-          "retrieval_topology": {components, connections} | null
-        }
-    """
-    name = (payload.get("name") or "").strip()
-    if not name or not name.replace("_", "").replace("-", "").isalnum():
-        return {"error": "name must be alphanumeric (underscore/hyphen allowed)"}
-
-    profile: dict = {
-        "description": payload.get("description", ""),
-        "indexing_overrides": payload.get("indexing_overrides") or {},
-        "retrieval_overrides": payload.get("retrieval_overrides") or {},
-        "search_kwargs": payload.get("search_kwargs") or {},
-    }
-
-    indexing_topology = payload.get("indexing_topology")
-    if isinstance(indexing_topology, dict) and indexing_topology.get("components"):
-        topology_file = f"{name}_indexing.json"
-        topology = _normalise_topology(indexing_topology)
-        _atomic_write_json(PIPELINES_DIR / topology_file, topology)
-        profile["indexing_topology"] = topology_file
-
-    retrieval_topology = payload.get("retrieval_topology")
-    if isinstance(retrieval_topology, dict) and retrieval_topology.get("components"):
-        topology_file = f"{name}_retrieval.json"
-        topology = _normalise_topology(retrieval_topology)
-        _atomic_write_json(PIPELINES_DIR / topology_file, topology)
-        profile["retrieval_topology"] = topology_file
-
-    profiles = _read_json(USER_PROFILES_PATH)
-    profiles[name] = profile
-    _atomic_write_json(USER_PROFILES_PATH, profiles)
-
-    return {
-        "status": "ok",
-        "profile_path": str(USER_PROFILES_PATH),
-        "indexing_topology": profile.get("indexing_topology"),
-        "retrieval_topology": profile.get("retrieval_topology"),
-    }
+    """Persist a pipeline edited in the UI."""
+    return editor_store.save_pipeline_payload(
+        payload,
+        pipelines_dir=PIPELINES_DIR,
+        profiles_path=USER_PROFILES_PATH,
+    )
 
 
 def _normalise_topology(raw: dict) -> dict:
     """Coerce a UI topology into the Haystack v2 JSON shape."""
-    components = {}
-    for cname, cdef in (raw.get("components") or {}).items():
-        components[cname] = {
-            "type": cdef.get("type") or cdef.get("cls"),
-            "init_parameters": cdef.get("init_parameters") or cdef.get("params") or {},
-        }
-    connections = []
-    for edge in raw.get("connections") or []:
-        sender = edge.get("sender")
-        receiver = edge.get("receiver")
-        if sender and receiver:
-            connections.append({"sender": sender, "receiver": receiver})
-    return {
-        "metadata": raw.get("metadata") or {},
-        "max_runs_per_component": raw.get("max_runs_per_component", 100),
-        "components": components,
-        "connections": connections,
-        "connection_type_validation": bool(raw.get("connection_type_validation", True)),
-    }
+    return editor_store.normalise_topology(raw)
 
 
 # --- HTTP server ------------------------------------------------------------

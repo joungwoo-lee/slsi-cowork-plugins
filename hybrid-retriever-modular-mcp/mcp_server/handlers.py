@@ -16,6 +16,7 @@ from retriever import api as retriever_api
 from retriever import graph as retriever_graph
 from retriever import storage
 from retriever.config import load_config
+from retriever.pipelines import editor_store
 from retriever.pipelines import profiles as pipeline_profiles
 
 from . import bootstrap
@@ -592,38 +593,12 @@ def tool_list_pipelines(_args: dict) -> dict:
 
 def tool_save_pipeline(args: dict) -> dict:
     """Create a new pipeline profile and save it to ``DATA_ROOT/pipelines.json``."""
-    name = _require_str(args, "name")
-    if not name:
-        return text_result("name is required", is_error=True)
-
     cfg = load_config()
-    json_path = cfg.data_root / "pipelines.json"
-
-    existing_data: dict[str, Any] = {}
-    if json_path.exists():
-        try:
-            with open(json_path, "r", encoding="utf-8") as f:
-                existing_data = json.load(f)
-            if not isinstance(existing_data, dict):
-                existing_data = {}
-        except (OSError, json.JSONDecodeError):
-            existing_data = {}
-
-    existing_data[name] = {
-        "description": args.get("description", ""),
-        "indexing_overrides": args.get("indexing_overrides", {}),
-        "retrieval_overrides": args.get("retrieval_overrides", {}),
-        "search_kwargs": args.get("search_kwargs", {}),
-    }
-
-    try:
-        json_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(json_path, "w", encoding="utf-8") as f:
-            json.dump(existing_data, f, indent=2, ensure_ascii=False)
-        pipeline_profiles.sync_with_disk(cfg)
-        return text_result({"status": "ok", "message": f"Pipeline '{name}' saved to {json_path}"})
-    except OSError as exc:
-        return text_result(f"Failed to save pipeline: {exc}", is_error=True)
+    result = editor_store.save_pipeline_payload(args, cfg=cfg)
+    if result.get("error"):
+        return text_result(result["error"], is_error=True)
+    pipeline_profiles.sync_with_disk(cfg)
+    return text_result(result)
 
 
 def tool_open_pipeline_editor(args: dict) -> dict:

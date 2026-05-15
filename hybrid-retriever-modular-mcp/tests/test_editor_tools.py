@@ -21,10 +21,13 @@ class EditorToolTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmpdir = Path(tempfile.mkdtemp(prefix="editor_tool_"))
         self.cfg = _DummyCfg(self.tmpdir)
+        self.orig_pipelines_dir = handlers.editor_store.PIPELINES_DIR
+        handlers.editor_store.PIPELINES_DIR = self.tmpdir / "pipelines"
 
     def tearDown(self) -> None:
         import shutil
 
+        handlers.editor_store.PIPELINES_DIR = self.orig_pipelines_dir
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_current_status_reuses_live_editor(self) -> None:
@@ -54,6 +57,28 @@ class EditorToolTest(unittest.TestCase):
 
         self.assertNotIn("isError", result)
         self.assertIn('"closed": false', result["content"][0]["text"].lower())
+
+    def test_save_pipeline_uses_shared_editor_store(self) -> None:
+        payload = {
+            "name": "shared_save",
+            "description": "shared path",
+            "indexing_topology": {
+                "components": {
+                    "loader": {
+                        "type": "retriever.components.file_loader.LocalFileLoader",
+                        "init_parameters": {"max_chars": 321},
+                    }
+                },
+                "connections": [],
+            },
+        }
+
+        with patch("mcp_server.handlers.load_config", return_value=self.cfg):
+            result = handlers.tool_save_pipeline(payload)
+
+        self.assertNotIn("isError", result)
+        self.assertIn('"status": "ok"', result["content"][0]["text"].lower())
+        self.assertTrue((handlers.editor_store.PIPELINES_DIR / "shared_save_indexing.json").exists())
 
 
 if __name__ == "__main__":
