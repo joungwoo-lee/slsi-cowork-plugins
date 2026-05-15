@@ -513,21 +513,16 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
       </div>
     </div>
 
-    <div class="tabs">
-      <div class="tab active" data-kind="indexing">Step 2: Indexing</div>
-      <div class="tab" data-kind="retrieval">Step 3: Retrieval</div>
-    </div>
-
     <div class="section">
-      <div class="head" id="step-title">Step 2: Define Modules</div>
+      <div class="head">Pipeline Configuration (Stages 1-8)</div>
       <div class="body">
-        <div class="hint" id="kind-hint"></div>
-        <div id="stage-editor"></div>
+        <div class="hint">Define the complete flow from ingestion to search.</div>
+        <div id="dynamic-steps"></div>
       </div>
     </div>
 
     <div class="section">
-      <div class="head">Step 4: Advanced JSON Overrides</div>
+      <div class="head">Advanced: JSON Overrides</div>
       <div class="body">
         <label>indexing_overrides</label>
         <textarea id="ovr-idx" rows="2">{}</textarea>
@@ -539,7 +534,7 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
     </div>
 
     <div class="section">
-      <div class="head">Step 5: Connections & Finalise</div>
+      <div class="head">Finalise: Connections & Save</div>
       <div class="body">
         <div id="conn-body"></div>
         <div style="margin-top:12px; display:flex; gap:8px;">
@@ -573,13 +568,11 @@ label { display: block; font-size: 11px; color: var(--muted); margin-bottom: 3px
 // ---------- state ----------
 let CATALOG = [];
 let STAGES = [];
-let kind = "indexing";  // or "retrieval"
-let topo = { indexing: emptyTopo(), retrieval: emptyTopo() };
+let topo = { components: {}, connections: [] };
 let selectedNode = null;
 let counter = 0;
 
-function emptyTopo() { return { components: {}, connections: [] }; }
-function currentTopo() { return topo[kind]; }
+function currentTopo() { return topo; }
 function findComp(cls) { return CATALOG.find(c => c.cls === cls); }
 
 // ---------- bootstrap ----------
@@ -598,39 +591,45 @@ async function boot() {
     sel.appendChild(o);
   }
   sel.addEventListener("change", onLoadPipeline);
-  document.querySelectorAll(".tab").forEach(t => t.addEventListener("click", () => {
-    document.querySelectorAll(".tab").forEach(x => x.classList.remove("active"));
-    t.classList.add("active");
-    kind = t.dataset.kind;
-    document.getElementById("step-title").textContent = kind === "indexing" ? "Step 2: Define Indexing Modules" : "Step 3: Define Retrieval Modules";
-    selectedNode = null;
-    redraw();
-  }));
   document.getElementById("save").addEventListener("click", onSave);
-  document.getElementById("reset").addEventListener("click", () => { topo[kind] = emptyTopo(); selectedNode = null; redraw(); });
+  document.getElementById("reset").addEventListener("click", () => { topo = { components: {}, connections: [] }; selectedNode = null; redraw(); });
   document.getElementById("auto-wire").addEventListener("click", autoWire);
   redraw();
 }
 
+// Map functional stages to standard engine component names
+const STAGE_DEFAULTS = {
+  load: "loader",
+  convert: "converter",
+  split: "splitter",
+  embed: "embedder",
+  write: "writer",
+  retrieve: "retriever",
+  fuse: "joiner",
+  post: "parent"
+};
+
 // ---------- stage-based editor ----------
 function renderStageEditor() {
-  const box = document.getElementById("stage-editor");
-  box.innerHTML = "";
+  const container = document.getElementById("dynamic-steps");
+  container.innerHTML = "";
   const t = currentTopo();
 
-  // Filter stages relevant to current kind
-  const activeStages = kind === "indexing" 
-    ? ["load", "convert", "split", "embed", "write"]
-    : ["embed", "retrieve", "fuse", "post"];
+  const activeStages = ["load", "convert", "split", "embed", "write", "retrieve", "fuse", "post"];
 
   activeStages.forEach((sid, idx) => {
     const stageLabel = STAGES.find(s => s[0] === sid)?.[1] || sid;
-    const stageBox = document.createElement("div");
-    stageBox.className = "stage-box";
-    stageBox.innerHTML = `
-      <div class="stage-num">STAGE ${idx + 1}</div>
-      <div class="stage-title">${stageLabel}</div>
+    const section = document.createElement("div");
+    section.className = "section";
+    const pathLabel = sid === "load" || sid === "convert" || sid === "split" || sid === "write" ? " (Indexing Path)" : 
+                     (sid === "retrieve" || sid === "fuse" || sid === "post" ? " (Retrieval Path)" : " (Shared Path)");
+    
+    section.innerHTML = `
+      <div class="head">Step ${idx + 2}: ${stageLabel}${pathLabel}</div>
+      <div class="body" id="stage-body-${sid}"></div>
     `;
+    container.appendChild(section);
+    const body = section.querySelector(".body");
 
     // 1. Existing modules in this stage
     const nodes = Object.entries(t.components).filter(([_, def]) => findComp(def.type)?.stage === sid);
@@ -644,8 +643,30 @@ function renderStageEditor() {
           <div class="del" title="Remove">✕</div>
         </div>
         <div class="cls">${comp ? comp.name : def.type}</div>
+        
+        <div class="p-row" style="margin: 8px 0;">
+          <label style="font-size:9px">node name</label>
+          <input type="text" value="${name}" class="node-rename-input" style="font-size:11px; padding:2px 6px; height:22px;">
+        </div>
+
         <div class="params-grid" id="pgrid-${name}"></div>
       `;
+
+      // Rename logic
+      const renameInp = entry.querySelector(".node-rename-input");
+      renameInp.addEventListener("change", () => {
+        const newName = renameInp.value.trim();
+        if (!newName || newName === name || t.components[newName]) { renameInp.value = name; return; }
+        t.components[newName] = t.components[name];
+        delete t.components[name];
+        t.connections = t.connections.map(e => ({
+          sender: e.sender.startsWith(name + ".") ? newName + e.sender.slice(name.length) : e.sender,
+          receiver: e.receiver.startsWith(name + ".") ? newName + e.receiver.slice(name.length) : e.receiver,
+        }));
+        selectedNode = newName;
+        redraw();
+      });
+
       entry.querySelector(".del").addEventListener("click", (e) => { e.stopPropagation(); removeNode(name); });
       entry.addEventListener("click", () => { selectedNode = name; redraw(); });
 
@@ -679,7 +700,7 @@ function renderStageEditor() {
       } else {
         pgrid.innerHTML = '<div class="hint">No settings.</div>';
       }
-      stageBox.appendChild(entry);
+      body.appendChild(entry);
     });
 
     // 2. Add module to this stage
@@ -693,13 +714,24 @@ function renderStageEditor() {
       sel.addEventListener("change", () => {
         if (!sel.value) return;
         const comp = available.find(c => c.cls === sel.value);
-        addNode(comp);
+        
+        // Suggest standard name
+        let bname = STAGE_DEFAULTS[sid] || sid;
+        if (sid === "embed") {
+            bname = comp.name.toLowerCase().includes("text") ? "query_embedder" : "embedder";
+        }
+        if (sid === "retrieve") bname = comp.name.toLowerCase().includes("fts5") ? "fts5" : "vector";
+        
+        const name = uniqueName(bname);
+        const initParams = {};
+        for (const p of comp.params) initParams[p.name] = p.default;
+        t.components[name] = { type: comp.cls, init_parameters: initParams };
+        selectedNode = name;
+        redraw();
       });
       addCtrl.appendChild(sel);
-      stageBox.appendChild(addCtrl);
+      body.appendChild(addCtrl);
     }
-
-    box.appendChild(stageBox);
   });
 }
 
@@ -731,10 +763,6 @@ function removeNode(name) {
 
 // ---------- redraw ----------
 function redraw() {
-  document.getElementById("kind-hint").textContent =
-    kind === "indexing"
-      ? "Build your indexing flow: load → split → embed → write."
-      : "Build your retrieval flow: embed → retrieve → fuse → post.";
   renderOverview();
   renderStageEditor();
   renderConnections();

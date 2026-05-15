@@ -47,6 +47,7 @@ class PipelineProfile:
     search_kwargs: dict[str, Any] = field(default_factory=dict)
     indexing_topology: Optional[str] = None
     retrieval_topology: Optional[str] = None
+    unified_topology: Optional[str] = None
 
 
 _REGISTRY: dict[str, PipelineProfile] = {}
@@ -76,6 +77,7 @@ def describe_profiles() -> list[dict[str, Any]]:
             "indexing_overrides": p.indexing_overrides,
             "retrieval_overrides": p.retrieval_overrides,
             "search_kwargs": p.search_kwargs,
+            "unified_topology": p.unified_topology,
         }
         for p in _REGISTRY.values()
     ]
@@ -266,7 +268,7 @@ def run_indexing(
     doc_id = _document_id_for(dataset_id, path)
     stored_source, stored_content = _stage_source(path, cfg, dataset_id, doc_id)
 
-    topology_file = (profile.indexing_topology if profile else None) or DEFAULT_INDEXING_TOPOLOGY
+    topology_file = (profile.unified_topology or profile.indexing_topology if profile else None) or DEFAULT_INDEXING_TOPOLOGY
     pipeline = _load_pipeline(topology_file)
     _inject_indexing_runtime(pipeline, cfg, indexing_opts)
 
@@ -326,7 +328,7 @@ def run_retrieval(
     metadata_condition: dict | None = None,
     profile: PipelineProfile | None = None,
 ) -> dict:
-    topology_file = (profile.retrieval_topology if profile else None) or DEFAULT_RETRIEVAL_TOPOLOGY
+    topology_file = (profile.unified_topology or profile.retrieval_topology if profile else None) or DEFAULT_RETRIEVAL_TOPOLOGY
     pipeline = _load_pipeline(topology_file)
     _inject_retrieval_runtime(pipeline, cfg)
 

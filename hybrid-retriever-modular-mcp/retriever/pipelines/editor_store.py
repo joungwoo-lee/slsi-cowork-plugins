@@ -94,6 +94,16 @@ def save_pipeline_payload(
     }
 
     target_pipelines_dir = pipelines_dir or PIPELINES_DIR
+    
+    unified_topology = payload.get("unified_topology")
+    if isinstance(unified_topology, dict) and unified_topology.get("components"):
+        topology_file = f"{name}_unified.json"
+        atomic_write_json(target_pipelines_dir / topology_file, normalise_topology(unified_topology))
+        profile["unified_topology"] = topology_file
+        # Also keep indexing/retrieval pointing to the same file for compatibility
+        profile["indexing_topology"] = topology_file
+        profile["retrieval_topology"] = topology_file
+
     indexing_topology = payload.get("indexing_topology")
     if isinstance(indexing_topology, dict) and indexing_topology.get("components"):
         topology_file = f"{name}_indexing.json"
