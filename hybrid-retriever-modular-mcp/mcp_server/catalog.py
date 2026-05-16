@@ -23,7 +23,6 @@ _ADMIN_ONLY_TOOLS = {
     "create_dataset",
     "delete_dataset",
     "delete_document",
-    "get_job",
     "get_document",
     "list_chunks",
     "health",

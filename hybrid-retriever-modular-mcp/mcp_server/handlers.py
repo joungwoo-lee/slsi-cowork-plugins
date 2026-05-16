@@ -191,13 +191,27 @@ def _upload_args_from_unified(args: dict) -> dict:
             "auto_hipporag": bool(args.get("auto_hipporag", False)),
         }
     if path.is_dir():
+        pipeline_name = _pipeline_name(args)
+        # Email-MCP converted directories (mail_*/meta.json + body.md) are
+        # one email per directory, not a bulk folder. Route them through the
+        # single-document path so email_loader sees the directory it expects.
+        if pipeline_name == "email" and (path / "meta.json").exists():
+            return {
+                "dataset_id": ds,
+                "file_path": str(path),
+                "use_hierarchical": args.get("use_hierarchical"),
+                "skip_embedding": bool(args.get("skip_embedding", False)),
+                "metadata": args.get("metadata") if isinstance(args.get("metadata"), dict) else None,
+                "pipeline": pipeline_name,
+                "auto_hipporag": bool(args.get("auto_hipporag", False)),
+            }
         payload = {
             "dataset_id": ds,
             "dir_path": str(path),
             "use_hierarchical": args.get("use_hierarchical"),
             "skip_embedding": bool(args.get("skip_embedding", False)),
             "metadata": args.get("metadata") if isinstance(args.get("metadata"), dict) else None,
-            "pipeline": _pipeline_name(args),
+            "pipeline": pipeline_name,
             "auto_hipporag": bool(args.get("auto_hipporag", False)),
         }
         if isinstance(args.get("file_extension"), str) and args.get("file_extension"):
@@ -1071,10 +1085,6 @@ def tool_admin_help(_args: dict) -> dict:
             {
                 "name": "health",
                 "use_when": "Diagnose data paths, embedding configuration, and index counts.",
-            },
-            {
-                "name": "get_job",
-                "use_when": "Poll a background job returned by upload or other long-running start responses.",
             },
             {
                 "name": "graph_query",

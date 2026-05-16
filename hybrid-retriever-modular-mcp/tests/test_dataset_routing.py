@@ -137,7 +137,10 @@ class DatasetRoutingTest(unittest.TestCase):
     def test_admin_tools_are_hidden_from_public_catalog(self) -> None:
         tools = {tool["name"]: tool for tool in build_tools()}
         self.assertIn("admin_help", tools)
-        self.assertNotIn("get_job", tools)
+        # get_job is public because upload defaults to async=true and its
+        # next_step tells the agent to call get_job — hiding it would force
+        # an extra admin_help round-trip on every async upload.
+        self.assertIn("get_job", tools)
         self.assertNotIn("create_dataset", tools)
         self.assertNotIn("health", tools)
         self.assertNotIn("graph_query", tools)
@@ -151,6 +154,7 @@ class DatasetRoutingTest(unittest.TestCase):
         names = [item["name"] for item in body["admin_tools"]]
         self.assertIn("graph_rebuild", names)
         self.assertIn("list_pipelines", names)
+        self.assertNotIn("get_job", names)
 
 
 if __name__ == "__main__":

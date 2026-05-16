@@ -26,6 +26,11 @@ class EmailSourceLoader:
 
     @component.output_types(raw_emails=List[dict[str, Any]], path=str)
     def run(self, path: str) -> dict[str, Any]:
+        # Retrieval bypasses ingestion components by feeding them empty
+        # placeholder inputs; treat that as a no-op so search on an email-
+        # indexed dataset does not crash on a fake path.
+        if not path:
+            return {"raw_emails": [], "path": ""}
         target = Path(path).expanduser()
         raw_emails = []
 

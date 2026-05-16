@@ -152,27 +152,17 @@ class BuiltInProfilesReadDescriptionFromTopologyTest(unittest.TestCase):
 
 
 class BuildToolsEnrichesPipelineParamTest(unittest.TestCase):
-    def test_search_tool_pipeline_description_lists_registered_profiles(self) -> None:
+    def test_upload_pipeline_param_lists_registered_profiles(self) -> None:
         from mcp_server.catalog import build_tools
 
         tools = {tool["name"]: tool for tool in build_tools()}
-        search = tools["search"]
-        param = search["inputSchema"]["properties"]["pipeline"]
-        # The description should mention at least the built-in profile names.
+        upload = tools["upload"]
+        param = upload["inputSchema"]["properties"]["pipeline"]
         for name in ("default", "keyword_only", "email", "rrf_rerank"):
             self.assertIn(name, param["description"])
-        # And the enum should include them too.
         self.assertIn("enum", param)
         for name in ("default", "keyword_only", "email"):
             self.assertIn(name, param["enum"])
-
-    def test_upload_tools_also_enriched(self) -> None:
-        from mcp_server.catalog import build_tools
-
-        tools = {tool["name"]: tool for tool in build_tools()}
-        for name in ("upload_document", "upload_directory"):
-            param = tools[name]["inputSchema"]["properties"]["pipeline"]
-            self.assertIn("default", param["description"])
 
 
 if __name__ == "__main__":

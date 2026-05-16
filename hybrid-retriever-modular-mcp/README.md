@@ -28,16 +28,26 @@ Claude / 다른 MCP 클라이언트
 
 ## 도구 (MCP tools)
 
+기본 `tools/list`는 **에이전트가 한 라운드에 결정할 수 있도록** 검색/업로드/폴링/관리 게이트웨이 8개만 노출합니다. tools/list 응답 자체가 클로드 컨텍스트에 매번 들어가므로, 노출 도구를 최소화하는 것이 토큰 비용·라우팅 정확도 양쪽에 유리합니다.
+
 | 도구 | 설명 |
 |---|---|
 | `search` | dataset metadata를 보고 자동으로 검색 경로를 선택해 chunk를 검색. 일반 hybrid / email / HippoRAG 경로를 서버가 내부적으로 결정 |
-| `list_datasets`, `get_dataset` | 데이터셋 목록/상세 조회. `use_when`과 dataset metadata 확인 |
-| `upload` | 파일/폴더 경로를 자동 판별해 ingest. 기본 `async=true`; 오래 걸리는 작업은 `job_id`와 다음 단계 안내를 반환 |
+| `list_datasets` | 사용 가능한 dataset 목록과 `use_when` 노트 조회 |
+| `get_dataset` | 단일 dataset 메타데이터 조회 |
+| `upload` | 파일/폴더 경로를 자동 판별해 ingest. 기본 `async=true`; 오래 걸리는 작업은 `job_id` + `next_step="Call get_job ..."` 반환 |
 | `list_documents` | dataset 안의 문서 목록 브라우징 |
 | `get_document_content` | 저장된 원문 텍스트 조회 (data_root 외부 경로 차단) |
-| `admin_help` | 기본 `tools/list`에서 숨겨진 관리용 도구와 사용 시점 안내 |
+| `get_job` | `upload` 가 반환한 백그라운드 job 상태 폴링. async upload UX 가 한 round-trip 안에 완결되도록 공개 도구 |
+| `admin_help` | 숨겨진 관리/진단/고급 그래프 도구 카탈로그를 필요할 때만 끌어오는 게이트웨이 |
 
-기본 `tools/list`에는 검색/업로드/브라우징에 필요한 최소 도구만 노출합니다. 그 외 관리/진단/고급 그래프 도구는 `admin_help`에서 확인합니다. 예: `create_dataset`, `delete_dataset`, `get_job`, `get_document`, `list_chunks`, `delete_document`, `health`, `graph_query`, `graph_rebuild`, `hipporag_index`, `hipporag_refresh_synonyms`, `list_pipelines`, `save_pipeline`, pipeline editor 관련 도구 등.
+`admin_help`를 호출하면 다음 도구들과 각 도구의 `use_when` 설명이 나옵니다. 이들은 핸들러로는 살아 있어 `tools/call` 로 바로 호출 가능하지만, 평소 `tools/list` 에는 등장하지 않습니다.
+
+- 파괴적: `create_dataset`, `delete_dataset`, `delete_document`
+- 디버깅/진단: `health`, `get_document`, `list_chunks`
+- 그래프 고급: `graph_query`, `graph_rebuild`
+- HippoRAG: `start_hipporag_index`, `hipporag_index`, `hipporag_index_document`, `hipporag_refresh_synonyms`, `hipporag_search`, `hipporag_stats`
+- 파이프라인 관리: `list_pipelines`, `save_pipeline`, `open_pipeline_editor`, `get_pipeline_editor`, `close_pipeline_editor`
 
 ## Dataset Metadata 중심 설계
 
@@ -71,7 +81,7 @@ Claude / 다른 MCP 클라이언트
 - `status`
 - `next_step`: `get_job(job_id=...)` 호출 안내
 
-`get_job` 자체는 관리용 도구로 숨겨져 있으며, 필요할 때는 `upload` 응답이나 `admin_help`가 안내합니다.
+`get_job` 은 공개 도구입니다(`tools/list` 에 노출). async upload → 폴링 흐름이 `admin_help` 우회 없이 한 round-trip 안에 닫히도록 설계됐습니다.
 
 ## HippoRAG 지식 그래프 (선택)
 
