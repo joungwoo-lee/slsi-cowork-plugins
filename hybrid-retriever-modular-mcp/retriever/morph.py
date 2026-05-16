@@ -51,18 +51,19 @@ def _get_kiwi():
 
 
 def tokenize_for_index(text: str) -> str:
-    """All morpheme forms joined by spaces for FTS5 storage."""
+    """Original text (for Porter) + Morphemes (for Korean)."""
     if not text:
         return ""
-    return " ".join(t.form for t in _get_kiwi().tokenize(text) if t.form)
+    morphemes = " ".join(t.form for t in _get_kiwi().tokenize(text) if t.form)
+    return f"{text} {morphemes}"
 
 
 def tokenize_for_query(query: str) -> str:
-    """Content morphemes only, OR-joined for FTS5 MATCH.
+    """Content morphemes only, AND-joined for FTS5 MATCH.
 
     Drops: Korean particles/endings/affixes/punctuation, English stop words,
     any token with no alphanumeric character.
-    Joins survivors with OR so BM25 ranks by how many terms match.
+    Joins survivors with spaces (implicit AND).
     """
     if not query:
         return ""
@@ -85,6 +86,6 @@ def tokenize_for_query(query: str) -> str:
 
     if not kept:
         raw = [w for w in cleaned.split() if len(w) >= 2]
-        return " OR ".join(f'"{w}"' for w in raw[:10]) if raw else ""
+        return " ".join(f'"{w}"' for w in raw[:10]) if raw else ""
 
-    return " OR ".join(f'"{f}"' for f in kept)
+    return " ".join(f'"{f}"' for f in kept)

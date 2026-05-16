@@ -19,7 +19,7 @@ from . import graph
 # Bump when the FTS5 build strategy changes so existing DBs are rebuilt on
 # the next open. 0 = legacy unicode61 (no morph), 1 = trigram, 2 = unicode61
 # fed by kiwipiepy morphemes (current).
-INDEX_SCHEMA_VERSION = 2
+INDEX_SCHEMA_VERSION = 3
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS datasets (
@@ -70,7 +70,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(
     dataset_id UNINDEXED,
     document_name,
     content,
-    tokenize='unicode61'
+    tokenize='porter unicode61'
 );
 
 -- Hippo2 knowledge-graph tables. These mirror what's projected into the
@@ -258,7 +258,7 @@ def _migrate_fts_tokenizer(conn: sqlite3.Connection) -> None:
             dataset_id UNINDEXED,
             document_name,
             content,
-            tokenize='unicode61'
+            tokenize='porter unicode61'
         );
         """
     )
