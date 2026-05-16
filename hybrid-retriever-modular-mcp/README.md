@@ -96,6 +96,23 @@ py -3.12 -m unittest discover -s tests -p "test_*.py"  # 유닛
 
 `e2e_stdio.py`는 임시 data_root에서 임베딩 없이 keyword-only로 전체 도구를 검증합니다.
 
+## 파이프라인 성능 벤치마크
+
+10개 문서 · 5개 쿼리 기준:
+
+| 파이프라인 | 인제스트 | 검색 (평균) | 결과수 | 용도 |
+|-----------|:-------:|:--------:|:----:|------|
+| **keyword_only** | 0.3초 | 0.033초 | 1 | ⚡ 초저지연 (API 불필요) |
+| **default** | 2.5초 | 0.029초 | 1 | ⚖️ 속도 + 정확도 균형 |
+| **hippo2** | 30초 | 3.2초 | 5 | 🧠 고정확도 (엔티티 그래프) |
+
+**선택 기준:**
+- `keyword_only`: 지연 < 50ms 필수, 임베딩 API 불가
+- `default`: 일반 검색 (권장)
+- `hippo2`: 멀티홉 관계 필요 (배치/오프라인 용)
+
+상세 분석: [`PERFORMANCE_BENCHMARK.md`](./PERFORMANCE_BENCHMARK.md)
+
 ## Claude 설정 예시
 
 ```json
