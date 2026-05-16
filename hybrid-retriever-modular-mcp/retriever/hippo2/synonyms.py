@@ -2,7 +2,7 @@
 
 For every entity with a stored embedding we find its top-K nearest
 neighbours by cosine similarity and emit an undirected SYNONYM edge for
-each pair whose similarity exceeds ``HIPPORAG_SYNONYM_THRESHOLD``.
+each pair whose similarity exceeds ``HIPPO2_SYNONYM_THRESHOLD``.
 
 Implementation uses normalized numpy matmul in batches to bound memory:
 peak working set is O(batch × N × 4 bytes). At N=100k entities and
@@ -17,7 +17,7 @@ import sqlite3
 
 import numpy as np
 
-from ..config import HippoRAGConfig
+from ..config import Hippo2Config
 from ..graph import unpack_vector
 
 log = logging.getLogger(__name__)
@@ -56,7 +56,7 @@ def _load_embedding_matrix(
 
 def rebuild_synonyms(
     conn: sqlite3.Connection,
-    hipporag_cfg: HippoRAGConfig,
+    hippo2_cfg: Hippo2Config,
 ) -> dict:
     """Wipe ``entity_synonyms`` and rebuild it from current embeddings.
 
@@ -67,8 +67,8 @@ def rebuild_synonyms(
         conn.execute("DELETE FROM entity_synonyms")
         return {"entities": mat.shape[0], "edges": 0, "skipped": 0, "dim": dim}
 
-    threshold = float(hipporag_cfg.synonym_threshold)
-    top_k = max(1, int(hipporag_cfg.synonym_top_k))
+    threshold = float(hippo2_cfg.synonym_threshold)
+    top_k = max(1, int(hippo2_cfg.synonym_top_k))
     N = mat.shape[0]
 
     conn.execute("DELETE FROM entity_synonyms")

@@ -35,7 +35,7 @@
     "unified_topology": "email_unified.json"
   },
   "hippo2": {
-    "description": "Use when: you want HippoRAG2-style memory retrieval. Ingest keeps passage embeddings/Qdrant, then runs OpenIE plus entity/fact embeddings; search combines fact/entity seeding, dense passage fallback, and PPR scoring.",
+    "description": "Use when: you want Hippo2 memory retrieval. Ingest keeps passage embeddings/Qdrant, then runs OpenIE plus entity/fact embeddings; search aligns the query to triples, seeds entity and passage nodes, runs PPR over the fused graph, and applies online LLM filtering.",
     "indexing_overrides": {},
     "retrieval_overrides": {
       "fusion": "rrf"
@@ -82,7 +82,7 @@
     },
     "unified_topology": "rrf_graph_rerank_unified.json"
   },
-  "hippo_graph_rrf": {
+  "hippo2_graph_rrf": {
     "indexing_overrides": {},
     "retrieval_overrides": {
       "fusion": "rrf",
@@ -93,6 +93,6 @@
     "search_kwargs": {
       "fusion": "rrf"
     },
-    "unified_topology": "hippo_graph_rrf_unified.json"
+    "unified_topology": "hippo2_graph_rrf_unified.json"
   }
 }

@@ -63,7 +63,7 @@ class EmbeddingConfig:
 
 @dataclass
 class LLMConfig:
-    """Chat-completions LLM endpoint used by HippoRAG OpenIE and query-entity steps."""
+    """Chat-completions LLM endpoint used by Hippo2 OpenIE and query-entity steps."""
 
     api_url: str
     api_key: str
@@ -82,7 +82,7 @@ class LLMConfig:
 
 
 @dataclass
-class HippoRAGConfig:
+class Hippo2Config:
     synonym_threshold: float = 0.85
     synonym_top_k: int = 8
     ppr_alpha: float = 0.85
@@ -93,6 +93,9 @@ class HippoRAGConfig:
     passage_node_weight: float = 0.05
     top_chunks: int = 12
     extraction_max_triples: int = 32
+    online_filter_enabled: bool = True
+    online_filter_candidates: int = 24
+    online_filter_min_keep: int = 1
 
 
 @dataclass
@@ -128,7 +131,7 @@ class Config:
     qdrant: QdrantConfig = field(default_factory=QdrantConfig)
     ingest: IngestConfig = field(default_factory=IngestConfig)
     search: SearchConfig = field(default_factory=SearchConfig)
-    hipporag: HippoRAGConfig = field(default_factory=HippoRAGConfig)
+    hippo2: Hippo2Config = field(default_factory=Hippo2Config)
 
     @property
     def files_root(self) -> Path:
@@ -264,16 +267,19 @@ def load_config(env_path: str | os.PathLike[str] | None = None) -> Config:
             rrf_k=_int(os.getenv("RRF_K"), 60),
             parent_chunk_replace=_bool(os.getenv("ENABLE_PARENT_CHILD_CHUNKING"), True),
         ),
-        hipporag=HippoRAGConfig(
-            synonym_threshold=_float(os.getenv("HIPPORAG_SYNONYM_THRESHOLD"), 0.85),
-            synonym_top_k=_int(os.getenv("HIPPORAG_SYNONYM_TOP_K"), 8),
-            ppr_alpha=_float(os.getenv("HIPPORAG_PPR_ALPHA"), 0.85),
-            ppr_max_iter=_int(os.getenv("HIPPORAG_PPR_MAX_ITER"), 50),
-            ppr_tol=_float(os.getenv("HIPPORAG_PPR_TOL"), 1e-6),
-            query_top_entities=_int(os.getenv("HIPPORAG_QUERY_TOP_ENTITIES"), 5),
-            linking_top_k=_int(os.getenv("HIPPORAG_LINKING_TOP_K"), 5),
-            passage_node_weight=_float(os.getenv("HIPPORAG_PASSAGE_NODE_WEIGHT"), 0.05),
-            top_chunks=_int(os.getenv("HIPPORAG_TOP_CHUNKS"), 12),
-            extraction_max_triples=_int(os.getenv("HIPPORAG_EXTRACTION_MAX_TRIPLES"), 32),
+        hippo2=Hippo2Config(
+            synonym_threshold=_float(os.getenv("HIPPO2_SYNONYM_THRESHOLD"), 0.85),
+            synonym_top_k=_int(os.getenv("HIPPO2_SYNONYM_TOP_K"), 8),
+            ppr_alpha=_float(os.getenv("HIPPO2_PPR_ALPHA"), 0.85),
+            ppr_max_iter=_int(os.getenv("HIPPO2_PPR_MAX_ITER"), 50),
+            ppr_tol=_float(os.getenv("HIPPO2_PPR_TOL"), 1e-6),
+            query_top_entities=_int(os.getenv("HIPPO2_QUERY_TOP_ENTITIES"), 5),
+            linking_top_k=_int(os.getenv("HIPPO2_LINKING_TOP_K"), 5),
+            passage_node_weight=_float(os.getenv("HIPPO2_PASSAGE_NODE_WEIGHT"), 0.05),
+            top_chunks=_int(os.getenv("HIPPO2_TOP_CHUNKS"), 12),
+            extraction_max_triples=_int(os.getenv("HIPPO2_EXTRACTION_MAX_TRIPLES"), 32),
+            online_filter_enabled=_bool(os.getenv("HIPPO2_ONLINE_FILTER_ENABLED"), True),
+            online_filter_candidates=_int(os.getenv("HIPPO2_ONLINE_FILTER_CANDIDATES"), 24),
+            online_filter_min_keep=_int(os.getenv("HIPPO2_ONLINE_FILTER_MIN_KEEP"), 1),
         ),
     )

@@ -32,6 +32,6 @@ hypster>=0.3.0
 # Pulls in torch transitively; install only if reranker pipelines are used.
 FlagEmbedding>=1.2.10
 
-# HippoRAG: Personalized PageRank over the Kùzu entity graph. scipy ships
+# Hippo2: Personalized PageRank over the fused entity+passage graph. scipy ships
 # the sparse CSR matrix + power-iteration we use; numpy is transitive.
 scipy>=1.11.0

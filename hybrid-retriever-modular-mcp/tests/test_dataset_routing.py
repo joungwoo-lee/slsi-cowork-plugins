@@ -41,53 +41,17 @@ class DatasetRoutingTest(unittest.TestCase):
     def test_get_dataset_exposes_metadata(self) -> None:
         with storage.sqlite_session(self.cfg) as conn:
             storage.ensure_dataset(conn, "demo", "demo")
-            storage.update_dataset_metadata(conn, "demo", {"preferred_search_pipeline": "hipporag"})
+            storage.update_dataset_metadata(conn, "demo", {"preferred_search_pipeline": "hippo2"})
         result = handlers.tool_get_dataset({"dataset_id": "demo"})
         body = _payload(result)
-        self.assertEqual(body["metadata"]["preferred_search_pipeline"], "hipporag")
-
-    def test_search_auto_routes_to_hipporag(self) -> None:
-        with storage.sqlite_session(self.cfg) as conn:
-            storage.ensure_dataset(conn, "demo", "demo")
-            storage.update_dataset_metadata(conn, "demo", {"preferred_search_pipeline": "hipporag"})
-
-        old_hippo = handlers.hipporag_query.search
-        old_hybrid = handlers.retriever_api.hybrid_search
-
-        class Result:
-            query_entities = ["samsung"]
-            chunks = [{
-                "chunk_id": "doc:0",
-                "dataset_id": "demo",
-                "document_id": "doc",
-                "document_name": "doc.txt",
-                "position": 0,
-                "content": "Samsung is in Seoul",
-                "score": 1.0,
-                "matched_entities": ["e1"],
-            }]
-
-        try:
-            handlers.hipporag_query.search = lambda *args, **kwargs: Result()
-
-            def fail_hybrid(*args, **kwargs):
-                raise AssertionError("hybrid_search should not be called")
-
-            handlers.retriever_api.hybrid_search = fail_hybrid
-            result = handlers.tool_search({"query": "samsung", "dataset_ids": ["demo"]})
-            body = _payload(result)
-            self.assertEqual(body["search_pipeline"], "hipporag")
-            self.assertEqual(body["total"], 1)
-        finally:
-            handlers.hipporag_query.search = old_hippo
-            handlers.retriever_api.hybrid_search = old_hybrid
+        self.assertEqual(body["metadata"]["preferred_search_pipeline"], "hippo2")
 
     def test_search_auto_routes_to_hippo2(self) -> None:
         with storage.sqlite_session(self.cfg) as conn:
             storage.ensure_dataset(conn, "demo", "demo")
             storage.update_dataset_metadata(conn, "demo", {"preferred_search_pipeline": "hippo2"})
 
-        old_hippo = handlers.hipporag_query.search
+        old_hippo = handlers.hippo2_query.search
         old_hybrid = handlers.retriever_api.hybrid_search
 
         class Result:
@@ -104,7 +68,7 @@ class DatasetRoutingTest(unittest.TestCase):
             }]
 
         try:
-            handlers.hipporag_query.search = lambda *args, **kwargs: Result()
+            handlers.hippo2_query.search = lambda *args, **kwargs: Result()
 
             def fail_hybrid(*args, **kwargs):
                 raise AssertionError("hybrid_search should not be called")
@@ -115,32 +79,32 @@ class DatasetRoutingTest(unittest.TestCase):
             self.assertEqual(body["search_pipeline"], "hippo2")
             self.assertEqual(body["total"], 1)
         finally:
-            handlers.hipporag_query.search = old_hippo
+            handlers.hippo2_query.search = old_hippo
             handlers.retriever_api.hybrid_search = old_hybrid
 
     def test_search_falls_back_to_default_for_mixed_datasets(self) -> None:
         with storage.sqlite_session(self.cfg) as conn:
             storage.ensure_dataset(conn, "a", "a")
             storage.ensure_dataset(conn, "b", "b")
-            storage.update_dataset_metadata(conn, "a", {"preferred_search_pipeline": "hipporag"})
+            storage.update_dataset_metadata(conn, "a", {"preferred_search_pipeline": "hippo2"})
             storage.update_dataset_metadata(conn, "b", {"preferred_search_pipeline": "default"})
 
-        old_hippo = handlers.hipporag_query.search
+        old_hippo = handlers.hippo2_query.search
         old_hybrid = handlers.retriever_api.hybrid_search
         try:
             def fake_hybrid(*args, **kwargs):
                 return {"items": [], "total": 0}
 
             def fail_hippo(*args, **kwargs):
-                raise AssertionError("hipporag_search should not be called")
+                raise AssertionError("hippo2_search should not be called")
 
             handlers.retriever_api.hybrid_search = fake_hybrid
-            handlers.hipporag_query.search = fail_hippo
+            handlers.hippo2_query.search = fail_hippo
             result = handlers.tool_search({"query": "x", "dataset_ids": ["a", "b"]})
             body = _payload(result)
             self.assertEqual(body["search_pipeline"], "default")
         finally:
-            handlers.hipporag_query.search = old_hippo
+            handlers.hippo2_query.search = old_hippo
             handlers.retriever_api.hybrid_search = old_hybrid
 
     def test_search_omitted_keyword_keeps_keyword_enabled(self) -> None:
@@ -220,7 +184,7 @@ class DatasetRoutingTest(unittest.TestCase):
             "health",
             "graph_query",
             "list_pipelines",
-            "hipporag_index",
+            "hippo2_index",
         ):
             self.assertNotIn(hidden, tools)
 

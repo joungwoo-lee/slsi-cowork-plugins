@@ -1,6 +1,6 @@
 {
   "metadata": {
-    "description": "HippoRAG + Graph Neighborhood (combined in one node) + Hybrid (FTS5/Vector) with RRF fusion and BGE reranking. No module modification required."
+    "description": "Hippo2 + Graph Neighborhood (combined in one node) + Hybrid (FTS5/Vector) with RRF fusion and BGE reranking. No module modification required."
   },
   "max_runs_per_component": 100,
   "connection_type_validation": true,
@@ -76,7 +76,7 @@
     },
     {
       "name": "graph",
-      "module": "retriever.components.hippo_graph_retriever.HippoGraphRetriever",
+      "module": "retriever.components.hippo2_graph_retriever.Hippo2GraphRetriever",
       "params": {"data_root": ""}
     },
     {
@@ -111,7 +111,7 @@
       "module": "retriever.components.parent_replace.ParentChunkReplacer",
       "params": {},
       "inputs": [{"port": "documents", "from": "reranker.documents"}],
-      "answer_template": "HippoRAG 스타일 엔티티 그래프 검색 결과다. source.matched_entities를 살펴 핵심 엔티티 관계를 1~2문장 요약한 뒤 본문 인용을 이어라. 인용은 [document_name:position]."
+      "answer_template": "Hippo2 entity+passage 그래프 검색 결과다. source.matched_entities와 passage/entity PPR 신호를 참고해 핵심 사실/맥락을 1~2문장 요약한 뒤 본문 인용을 이어라. 인용은 [document_name:position]."
     }
   ]
 }

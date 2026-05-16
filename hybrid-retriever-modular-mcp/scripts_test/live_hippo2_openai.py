@@ -1,9 +1,9 @@
-"""Live HippoRAG smoke test using the repo's .env.
+"""Live Hippo2 smoke test using the repo's .env.
 
 Uses the existing embedding OpenAI key for both embeddings and LLM calls when
 ``LLM_*`` is unset. Prints only sanitized config metadata, never secrets.
 
-Run: py -3.12 scripts_test/live_hipporag_openai.py
+Run: py -3.12 scripts_test/live_hippo2_openai.py
 """
 from __future__ import annotations
 
@@ -93,9 +93,9 @@ def main() -> int:
             raise RuntimeError(str(payload))
         return payload
 
-    dataset_id = f"hipporag_live_{uuid.uuid4().hex[:8]}"
+    dataset_id = f"hippo2_live_{uuid.uuid4().hex[:8]}"
     marker = uuid.uuid4().hex
-    tmp_doc = LIVE_REPO / f"_hipporag_live_{marker}.txt"
+    tmp_doc = LIVE_REPO / f"_hippo2_live_{marker}.txt"
     tmp_doc.write_text(
         (
             "Samsung Electronics is headquartered in Seoul.\n"
@@ -111,7 +111,7 @@ def main() -> int:
             {
                 "protocolVersion": "2025-06-18",
                 "capabilities": {},
-                "clientInfo": {"name": "hipporag-live", "version": "1.0"},
+                "clientInfo": {"name": "hippo2-live", "version": "1.0"},
             },
         )
         assert init["result"]["protocolVersion"]
@@ -123,15 +123,15 @@ def main() -> int:
                 "dataset_id": dataset_id,
                 "file_path": str(tmp_doc),
                 "skip_embedding": False,
-                "auto_hipporag": True,
+                "auto_hippo2": True,
                 "use_hierarchical": "false",
             },
         )
         doc_id = up["response"]["document_id"]
-        hippo = up.get("hipporag") or {}
+        hippo = up.get("hippo2") or {}
         assert hippo.get("chunks_processed", 0) >= 1, hippo
         assert hippo.get("triples_written", 0) >= 1, hippo
-        print({"upload_document": up["response"], "hipporag": hippo})
+        print({"upload_document": up["response"], "hippo2": hippo})
 
         gq = call(
             "graph_query",
@@ -145,7 +145,7 @@ def main() -> int:
         print({"graph_query": gq["rows"]})
 
         hs = call(
-            "hipporag_search",
+            "hippo2_search",
             {
                 "query": "What city is Samsung Electronics headquartered in?",
                 "dataset_ids": [dataset_id],
@@ -155,7 +155,7 @@ def main() -> int:
         assert hs.get("chunks"), hs
         top = hs["chunks"][0]
         assert top["chunk_id"].startswith(doc_id), top
-        print({"hipporag_top_result": top, "result_count": len(hs["chunks"])})
+        print({"hippo2_top_result": top, "result_count": len(hs["chunks"])})
         return 0
     finally:
         try:

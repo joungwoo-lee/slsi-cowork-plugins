@@ -45,18 +45,18 @@ _ADMIN_ONLY_TOOLS = {
     "list_chunks",
     "health",
     "graph_query",
-    "start_hipporag_index",
+    "start_hippo2_index",
     "list_pipelines",
     "save_pipeline",
     "open_pipeline_editor",
     "get_pipeline_editor",
     "close_pipeline_editor",
     "graph_rebuild",
-    "hipporag_index",
-    "hipporag_index_document",
-    "hipporag_refresh_synonyms",
-    "hipporag_search",
-    "hipporag_stats",
+    "hippo2_index",
+    "hippo2_index_document",
+    "hippo2_refresh_synonyms",
+    "hippo2_search",
+    "hippo2_stats",
     "pipeline_tutorial",
 }
 
@@ -232,7 +232,7 @@ _BASE_TOOLS: list[dict[str, Any]] = [
                     "default": "default",
                     "description": "Named ingest pipeline profile used to define the dataset's indexing behavior.",
                 },
-                "auto_hipporag": {"type": "boolean", "default": False},
+                "auto_hippo2": {"type": "boolean", "default": False},
             },
             "required": ["dataset_id", "path"],
         },
@@ -454,15 +454,15 @@ _BASE_TOOLS: list[dict[str, Any]] = [
         ),
         "inputSchema": {"type": "object", "properties": {}},
     },
-    # --- HippoRAG knowledge layer ---------------------------------------
+    # --- Hippo2 knowledge layer ---------------------------------------
     {
-        "name": "hipporag_index",
+        "name": "hippo2_index",
         "description": (
-            "[HippoRAG] Build (or refresh) the entity knowledge graph for a dataset. "
+            "[Hippo2] Build (or refresh) the entity+passage memory graph for a dataset. "
             "Runs LLM-driven OpenIE on every chunk, canonicalises entities, embeds "
-            "them, and rebuilds the synonym edges. Idempotent — re-running on an "
+            "entities and triples, and rebuilds synonym/context edges. Idempotent — re-running on an "
             "unchanged corpus hits the per-chunk extraction cache. Required before "
-            "hipporag_search returns useful results."
+            "hippo2_search returns useful results."
         ),
         "inputSchema": {
             "type": "object",
@@ -481,8 +481,8 @@ _BASE_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
-        "name": "start_hipporag_index",
-        "description": "[HippoRAG Job] Start a background dataset HippoRAG index job.",
+        "name": "start_hippo2_index",
+        "description": "[Hippo2 Job] Start a background dataset Hippo2 index job.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -494,11 +494,11 @@ _BASE_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
-        "name": "hipporag_index_document",
+        "name": "hippo2_index_document",
         "description": (
-            "[HippoRAG] Incremental: re-extract triples for one document's chunks. "
+            "[Hippo2] Incremental: re-extract triples for one document's chunks. "
             "Skips synonym rebuild by default so it's safe to call in a tight loop. "
-            "Run hipporag_refresh_synonyms once at the end of a batch."
+            "Run hippo2_refresh_synonyms once at the end of a batch."
         ),
         "inputSchema": {
             "type": "object",
@@ -510,23 +510,23 @@ _BASE_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
-        "name": "hipporag_refresh_synonyms",
+        "name": "hippo2_refresh_synonyms",
         "description": (
-            "[HippoRAG] Rebuild the SYNONYM edges from current entity embeddings. "
+            "[Hippo2] Rebuild the SYNONYM edges from current entity embeddings. "
             "All-pairs operation — call once after a batch index rather than per "
-            "document. Threshold is HIPPORAG_SYNONYM_THRESHOLD."
+            "document. Threshold is HIPPO2_SYNONYM_THRESHOLD."
         ),
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
-        "name": "hipporag_search",
+        "name": "hippo2_search",
         "description": (
-            "[HippoRAG] Graph-primary retrieval. Extracts query entities via LLM, "
-            "links them to graph entities by embedding similarity, runs Personalized "
-            "PageRank from those seeds, and aggregates the rank back to chunks. Use "
-            "when the question is about relationships, multi-hop facts, or when "
-            "plain hybrid search misses passages that share linked entities. "
-            "Requires hipporag_index to have run."
+            "[Hippo2] Graph-primary retrieval over fused entity+passage nodes. "
+            "Aligns the whole query to embedded triples, seeds matching entities "
+            "and passage nodes, runs Personalized PageRank, then applies online "
+            "LLM filtering to remove noisy candidates. Use when the question is "
+            "about factual memory, relationships, multi-hop context, or associative recall. "
+            "Requires hippo2_index to have run."
         ),
         "inputSchema": {
             "type": "object",
@@ -540,6 +540,11 @@ _BASE_TOOLS: list[dict[str, Any]] = [
             },
             "required": ["query"],
         },
+    },
+    {
+        "name": "hippo2_stats",
+        "description": "[Hippo2] Inspect passage/entity/triple counts and PPR cache state.",
+        "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "pipeline_tutorial",
