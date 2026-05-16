@@ -659,26 +659,16 @@ def tool_search(args: dict) -> dict:
             "score": c["similarity"],
             "chunk_id": c["chunk_id"],
         })
-    _reveal_and_notify("get_document_content")
-    payload = {
+    # search returns reranked chunks + citations — those *are* the answer,
+    # so it intentionally has no flow follow-up to reveal.
+    return text_result({
         "query": query.strip(),
         "dataset_ids": datasets,
         "search_pipeline": pipeline_name,
         "total": data["total"],
         "contexts": contexts,
         "citations": citations,
-    }
-    if contexts:
-        first_ds = contexts[0]["source"]["dataset_id"]
-        first_doc = contexts[0]["source"]["document_id"]
-        payload["next_actions"] = {
-            "get_full_document": {
-                "tool": "get_document_content",
-                "arguments": {"dataset_id": first_ds, "document_id": first_doc},
-                "use_when": "Need the original full source text for a cited document.",
-            }
-        }
-    return text_result(payload)
+    })
 
 
 # ----- datasets -----------------------------------------------------------
@@ -697,7 +687,7 @@ def tool_list_datasets(_args: dict) -> dict:
         except (TypeError, ValueError):
             obj["metadata"] = {}
         items.append(obj)
-    _reveal_and_notify("list_documents", "get_dataset")
+    _reveal_and_notify("list_documents")
     example_ds = items[0]["id"] if items else ""
     return text_result({
         "datasets": items,
@@ -706,11 +696,6 @@ def tool_list_datasets(_args: dict) -> dict:
                 "tool": "list_documents",
                 "arguments": {"dataset_id": example_ds},
                 "use_when": "Browse the documents inside a dataset.",
-            },
-            "inspect_dataset": {
-                "tool": "get_dataset",
-                "arguments": {"dataset_id": example_ds},
-                "use_when": "Re-fetch one dataset's metadata.",
             },
         },
     })
@@ -1132,6 +1117,14 @@ def tool_admin_help(_args: dict) -> dict:
             {
                 "name": "delete_document",
                 "use_when": "Permanently remove one document from a dataset.",
+            },
+            {
+                "name": "get_dataset",
+                "use_when": "Re-fetch one dataset's metadata by id (rare — list_datasets already returns full metadata).",
+            },
+            {
+                "name": "get_document_content",
+                "use_when": "Read the original full source text of a document. Rare after search — chunks already carry the relevant passages.",
             },
             {
                 "name": "health",

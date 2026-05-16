@@ -20,24 +20,28 @@ logger = logging.getLogger(__name__)
 
 _PIPELINE_AWARE_TOOLS = {"upload"}
 
-# Tools that only make sense as a follow-up to another tool. They start
-# hidden so a small-context model sees ~4 tools by default. Each is added
-# to the visible catalog (via ``reveal()`` + tools/list_changed) after the
-# parent tool runs, and the parent response always echoes a structured
-# ``next_actions`` so the model has the exact next call even before the
-# refreshed list arrives.
+# Tools that only make sense as a direct drill-down from another tool.
+# Hidden by default; revealed via ``reveal()`` + tools/list_changed when
+# the parent tool returns something pointing at them. The parent response
+# also echoes a structured ``next_action`` so the model has the exact next
+# call even before the refreshed list arrives.
+#
+# Only flows where the parent's *primary output* doesn't already answer
+# the model's likely next question count as a flow-reveal. ``search``
+# returns reranked chunks + citations — those *are* the answer, so it has
+# no flow follow-up.
 _FLOW_REVEALED_TOOLS = {
-    "get_job",                # revealed by: upload (async=true)
-    "list_documents",         # revealed by: list_datasets
-    "get_dataset",            # revealed by: list_datasets
-    "get_document_content",   # revealed by: search
+    "get_job",         # revealed by: upload (async=true) — must poll a job_id
+    "list_documents",  # revealed by: list_datasets — drill into a dataset
 }
 
 _ADMIN_ONLY_TOOLS = {
     "create_dataset",
     "delete_dataset",
     "delete_document",
+    "get_dataset",            # redundant with list_datasets payload
     "get_document",
+    "get_document_content",   # raw original source — niche, not needed after search
     "list_chunks",
     "health",
     "graph_query",

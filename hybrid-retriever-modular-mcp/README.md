@@ -6,16 +6,17 @@
 
 `tools/list` cold start = **4개**: `search`, `upload`, `list_datasets`, `admin_help`. 후속 도구는 부모 도구가 실행된 직후 `notifications/tools/list_changed`로 자동 노출됩니다. 작은 모델이 받는 시작 컨텍스트를 최소화하면서, 도구가 필요해진 순간에는 카탈로그가 늘어나 있습니다.
 
-| 부모 호출 | 노출되는 후속 도구 |
-|---|---|
-| `upload(async=true)` | `get_job` (응답에 `next_action: {tool, arguments}` 동봉) |
-| `list_datasets` | `list_documents`, `get_dataset` |
-| `search` | `get_document_content` |
-| `admin_help` | 위 4개 + 모든 관리/진단/그래프/HippoRAG/파이프라인 도구 |
+| 부모 호출 | 노출되는 후속 도구 | 이유 |
+|---|---|---|
+| `upload(async=true)` | `get_job` | 비동기 작업은 `job_id`를 폴링해야 결과 도착 확인 |
+| `list_datasets` | `list_documents` | dataset 안 문서로 드릴-다운 자연스러움 |
+| `admin_help` | 위 + 모든 관리 도구 | 명시적 admin 진입 |
 
-`admin_help` 게이트 뒤 도구군: **파괴적**(`create_dataset`, `delete_dataset`, `delete_document`) · **진단**(`health`, `get_document`, `list_chunks`) · **그래프**(`graph_query`, `graph_rebuild`) · **HippoRAG**(`hipporag_index`, `hipporag_search`, `hipporag_stats`, …) · **파이프라인**(`list_pipelines`, `save_pipeline`, `open_pipeline_editor`, …).
+`search`는 의도적으로 후속 노출이 없습니다. 리턴이 이미 **리랭크된 청크 + citation** 이라 그 자체가 답입니다. `get_document_content`(원문 전체)는 사후 디버깅용이라 `admin_help` 뒤로 둡니다. `get_dataset`도 `list_datasets`가 같은 metadata를 다 돌려주므로 잉여 → admin 뒤.
 
-부모 응답에는 항상 구조화된 `next_action`/`next_actions`(`{tool, arguments, use_when}`)이 포함되어, 클라이언트가 `tools/list_changed`를 무시하는 경우에도 다음 호출 모양을 그대로 받아쓸 수 있습니다.
+`admin_help` 게이트 뒤 도구군: **파괴적**(`create_dataset`, `delete_dataset`, `delete_document`) · **잉여/디버깅**(`get_dataset`, `get_document`, `get_document_content`, `list_chunks`, `health`) · **그래프**(`graph_query`, `graph_rebuild`) · **HippoRAG**(`hipporag_index`, `hipporag_search`, `hipporag_stats`, …) · **파이프라인**(`list_pipelines`, `save_pipeline`, `open_pipeline_editor`, …).
+
+부모 응답에는 구조화된 `next_action`/`next_actions`(`{tool, arguments, use_when}`)이 포함되어, 클라이언트가 `tools/list_changed`를 무시하는 경우에도 다음 호출 모양을 그대로 받아쓸 수 있습니다.
 
 ## 동작 흐름
 
@@ -26,8 +27,10 @@ upload(path, [pipeline])  →  ingest → SQLite/Qdrant/그래프 투영
               ↳ 서버가 tools/list_changed 송출 → get_job 노출
 
 search(query, dataset_ids?)  →  dataset metadata가 경로 선택
-   └ 결과 + next_actions: {get_full_document: {tool: "get_document_content", ...}}
-              ↳ get_document_content 노출
+   └ 리턴: 리랭크된 청크 + citation (= 답 자체, 후속 호출 불필요)
+
+list_datasets()
+   └ next_actions.browse_documents → list_documents 노출
 ```
 
 `tools/list`의 `dataset_id` / `dataset_ids` 파라미터에는 **현재 등록된 dataset과 각 `use_when` 노트**가 동적으로 들어갑니다. 에이전트는 파이프라인이 아닌 dataset만 고르면 됩니다.

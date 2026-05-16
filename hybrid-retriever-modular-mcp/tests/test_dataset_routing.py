@@ -175,12 +175,40 @@ class DatasetRoutingTest(unittest.TestCase):
         ):
             self.assertIn(revealed, tools, f"admin_help did not reveal {revealed}")
 
+    def test_list_datasets_reveals_list_documents_only(self) -> None:
+        from mcp_server import catalog as _cat
+        _cat._REVEALED.clear()
+        handlers.tool_list_datasets({})
+        tools = {tool["name"]: tool for tool in build_tools()}
+        self.assertIn("list_documents", tools)
+        # get_dataset is redundant with list_datasets payload, so it stays
+        # hidden until admin_help is called.
+        self.assertNotIn("get_dataset", tools)
+
+    def test_search_does_not_reveal_followups(self) -> None:
+        # search returns reranked chunks + citations — that *is* the answer,
+        # so it must not reveal get_document_content (or anything else).
+        from mcp_server import catalog as _cat
+        _cat._REVEALED.clear()
+        with storage.sqlite_session(self.cfg) as conn:
+            storage.ensure_dataset(conn, "fin", "fin")
+        old_hybrid = handlers.retriever_api.hybrid_search
+        try:
+            handlers.retriever_api.hybrid_search = lambda *a, **kw: {"items": [], "total": 0}
+            handlers.tool_search({"query": "hello", "dataset_ids": ["fin"]})
+        finally:
+            handlers.retriever_api.hybrid_search = old_hybrid
+        tools = {tool["name"]: tool for tool in build_tools()}
+        self.assertNotIn("get_document_content", tools)
+
     def test_admin_help_listing_includes_descriptions(self) -> None:
         result = handlers.tool_admin_help({})
         body = _payload(result)
         names = [item["name"] for item in body["admin_tools"]]
         self.assertIn("graph_rebuild", names)
         self.assertIn("list_pipelines", names)
+        self.assertIn("get_document_content", names)
+        self.assertIn("get_dataset", names)
 
 
 if __name__ == "__main__":
