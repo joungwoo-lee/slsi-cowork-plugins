@@ -1376,7 +1376,7 @@ def _run_benchmark_pipelines(cfg, args: dict, job_id: str | None = None) -> dict
     prefix = str(args.get("dataset_id_prefix") or "beir_nf").strip() or "beir_nf"
     top_n = _safe_int(args, "top_n", 10, lo=1, hi=100)
     cleanup = bool(args.get("cleanup", True))
-    setup = bool(args.get("setup", True))
+    setup = bool(args.get("setup", False))
 
     import tempfile
     import os
@@ -1392,6 +1392,9 @@ def _run_benchmark_pipelines(cfg, args: dict, job_id: str | None = None) -> dict
     out_dir = os.path.join(tempfile.gettempdir(), "beir_datasets")
     data_path = os.path.join(out_dir, dataset)
     docs_dir = Path(tempfile.gettempdir()) / "nfcorpus_docs"
+
+    if not setup and (not os.path.exists(data_path) or not docs_dir.exists() or not any(docs_dir.iterdir())):
+        setup = True
 
     if setup:
         if job_id:
@@ -1414,8 +1417,6 @@ def _run_benchmark_pipelines(cfg, args: dict, job_id: str | None = None) -> dict
                 file_path_doc = docs_dir / f"{doc_id}.txt"
                 file_path_doc.write_text(text, encoding="utf-8")
     else:
-        if not os.path.exists(data_path):
-            return {"error": f"Dataset not found at {data_path}. Please run with setup=True first."}
         corpus, queries, qrels = GenericDataLoader(data_path).load(split="test")
 
     total_pipelines = len(pipelines_to_test)
