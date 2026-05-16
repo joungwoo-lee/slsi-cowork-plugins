@@ -1541,6 +1541,13 @@ def _run_benchmark_pipelines(cfg, args: dict, job_id: str | None = None) -> dict
 
     # --- markdown report ---
     lines = ["# BEIR NFCorpus RAG Benchmark Report", ""]
+    lines.append("| 지표 | 질문의 요지 | 순위(1등이냐 10등이냐) 고려 여부 |")
+    lines.append("| :--- | :--- | :--- |")
+    lines.append("| **P@10** | \"가져온 10개 중에 쓸 만한 게 몇 개나 있어?\" | ❌ 고려 안 함 (개수만 중요) |")
+    lines.append("| **Recall@10** | \"전체 정답 중에서 몇 개나 안 놓치고 가져왔어?\" | ❌ 고려 안 함 (개수만 중요) |")
+    lines.append("| **MAP@10** | \"정답 문서들을 최대한 상위권에 잘 모아뒀어?\" | ⭕ 고려함 (O/X 정답용) |")
+    lines.append("| **NDCG@10** | \"진짜 중요한 문서를 찰떡같이 1~2등에 배치했어?\" | ⭕ 아주 강력하게 고려함 (점수형 정답용) |")
+    lines.append("")
     lines.append(f"Queries per pipeline: {len(qrels)}, top_n={top_n}")
     lines.append("")
     lines.append("| Pipeline | Status | Ingest(s) | Avg Latency(ms) | NDCG@10 | MAP@10 | Recall@10 | P@10 |")
