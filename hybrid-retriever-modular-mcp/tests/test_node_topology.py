@@ -71,6 +71,14 @@ class NodeTopologyTest(unittest.TestCase):
             engine.PIPELINES_DIR = original_dir
             shutil.rmtree(tmpdir, ignore_errors=True)
 
+    def test_keyword_only_topology_has_no_vector_nodes(self) -> None:
+        pipeline = engine._load_pipeline("keyword_only_unified.json")
+
+        self.assertNotIn("embedder", pipeline.graph.nodes)
+        self.assertNotIn("qdrant_writer", pipeline.graph.nodes)
+        self.assertNotIn("query_embedder", pipeline.graph.nodes)
+        self.assertNotIn("vector", pipeline.graph.nodes)
+
 
 if __name__ == "__main__":
     unittest.main()

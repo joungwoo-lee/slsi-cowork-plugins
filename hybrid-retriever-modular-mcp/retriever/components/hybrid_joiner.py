@@ -28,13 +28,14 @@ class HybridJoiner:
     def run(
         self,
         keyword_documents: List[Document],
-        semantic_documents: List[Document],
+        semantic_documents: List[Document] | None = None,
         graph_documents: List[Document] | None = None,
         fusion: str = "linear",
         vector_weight: float = 0.5,
         rrf_k: int = 60,
         metadata_condition: dict | None = None,
     ) -> dict:
+        semantic_documents = semantic_documents or []
         graph_documents = graph_documents or []
         kw_rows = _docs_to_rows(keyword_documents, score_key="fts_score")
         sem_rows = _docs_to_rows(semantic_documents, score_key="vector_score")
