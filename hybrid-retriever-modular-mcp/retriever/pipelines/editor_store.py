@@ -84,10 +84,43 @@ def normalise_topology(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+# Per-node fields the editor/storage path is allowed to round-trip even though
+# the Haystack standard format (components + connections) doesn't carry them.
+# Listed explicitly so a typo in a third-party topology doesn't silently
+# propagate through saves.
+_PRESERVED_NODE_FIELDS: tuple[str, ...] = ("answer_template",)
+
+
 def topology_for_storage(raw: dict[str, Any]) -> dict[str, Any]:
-    """Convert any incoming topology blob into the node-centric on-disk form."""
+    """Convert any incoming topology blob into the node-centric on-disk form.
+
+    The Haystack intermediate shape (``components`` + ``connections``) drops
+    per-node extras like ``answer_template``. Capture those before normalising
+    and re-attach them by node name afterwards so they survive editor saves.
+    """
+    extras: dict[str, dict[str, Any]] = {}
+    if is_node_centric(raw):
+        for node in raw.get("nodes") or []:
+            if not isinstance(node, dict):
+                continue
+            node_name = node.get("name")
+            if not isinstance(node_name, str):
+                continue
+            preserved = {k: node[k] for k in _PRESERVED_NODE_FIELDS if k in node}
+            if preserved:
+                extras[node_name] = preserved
+
     standard = normalise_topology(raw)
-    return from_haystack_dict(standard)
+    node_centric = from_haystack_dict(standard)
+
+    if extras:
+        for node in node_centric.get("nodes") or []:
+            if not isinstance(node, dict):
+                continue
+            extra = extras.get(node.get("name") or "")
+            if extra:
+                node.update(extra)
+    return node_centric
 
 
 def topology_for_ui(raw: dict[str, Any]) -> dict[str, Any]:

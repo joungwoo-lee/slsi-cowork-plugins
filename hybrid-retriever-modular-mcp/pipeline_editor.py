@@ -935,6 +935,35 @@ function renderStageEditor() {
       } else {
         pgrid.innerHTML = '<div class="hint">No settings.</div>';
       }
+
+      // Answer template — only the LAST node's value is read by the retrieval
+      // engine, so flag the active terminal and dim others. Saving still
+      // preserves whatever is typed (so reordering doesn't lose work).
+      const allNodes = nodesArr();
+      const isTerminal = allNodes.length > 0 && allNodes[allNodes.length - 1].name === name;
+      const atWrap = document.createElement("div");
+      atWrap.className = "answer-template-row";
+      atWrap.style.cssText = "margin-top:10px; padding-top:8px; border-top:1px dashed #ccc;";
+      const hint = isTerminal
+        ? "Answer template (active — sent to agent as answer_instructions on search)"
+        : "Answer template (inactive — only the last node's value is read at search time)";
+      atWrap.innerHTML = `
+        <label style="font-size:9px; display:block; margin-bottom:3px; color:${isTerminal ? '#0a7' : '#888'}">${hint}</label>
+        <textarea class="answer-template-input" rows="4"
+          style="width:100%; box-sizing:border-box; font-family:inherit; font-size:11px; padding:4px;
+                 ${isTerminal ? '' : 'opacity:0.6;'}"
+          placeholder="Per-pipeline instructions for the agent (e.g. output format, citation rules)."
+        >${(node.answer_template || "").replace(/</g, "&lt;")}</textarea>
+      `;
+      const atInp = atWrap.querySelector(".answer-template-input");
+      bindEditorControl(atInp);
+      atInp.addEventListener("input", () => {
+        const v = atInp.value;
+        if (v) node.answer_template = v;
+        else delete node.answer_template;
+      });
+      entry.appendChild(atWrap);
+
       body.appendChild(entry);
     });
 
@@ -990,13 +1019,21 @@ function removeNode(name) {
 function topoFromJson(j) {
   if (!j || typeof j !== "object") return { nodes: [] };
   return {
-    nodes: (j.nodes || []).map(n => ({
-      name: n.name,
-      module: n.module || n.type || n.cls,
-      params: { ...(n.params || n.init_parameters || {}) },
-      inputs: (n.inputs || []).map(e => ({ port: e.port, from: e.from || e.sender })),
-      outputs: (n.outputs || []).map(e => ({ port: e.port, to: e.to || e.receiver })),
-    })),
+    nodes: (j.nodes || []).map(n => {
+      const node = {
+        name: n.name,
+        module: n.module || n.type || n.cls,
+        params: { ...(n.params || n.init_parameters || {}) },
+        inputs: (n.inputs || []).map(e => ({ port: e.port, from: e.from || e.sender })),
+        outputs: (n.outputs || []).map(e => ({ port: e.port, to: e.to || e.receiver })),
+      };
+      // Preserve answer_template — read by retriever.pipelines.engine on the
+      // final search node and forwarded to the agent as answer_instructions.
+      if (typeof n.answer_template === "string" && n.answer_template.length > 0) {
+        node.answer_template = n.answer_template;
+      }
+      return node;
+    }),
   };
 }
 

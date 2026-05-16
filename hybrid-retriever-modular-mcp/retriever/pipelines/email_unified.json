@@ -157,7 +157,7 @@
           "from": "joiner.documents"
         }
       ],
-      "answer_template": "이메일 검색 결과다. 답변 첫 줄에 'From: <발신자> · Date: <YYYY-MM-DD> · Subject: <제목>' 형식으로 출처 메일을 요약한 뒤 본문 인용을 이어서 작성하라. 여러 메일이 섞여 있으면 메일별로 섹션을 나누고, 각 사실마다 [document_name:position]으로 인용을 붙여라."
+      "answer_template": "User-facing display instruction: return the search results as a markdown table with exactly these columns in this order: 일련번호, 제목, 발신자, 수신일. Do NOT include the file path as a table column — table cells wrap long URLs across lines, which breaks click-to-open in most terminals. After the table, list each file path on its own line in the form `[일련번호] file:///...` so the URL never contains a line break. Convert body_path to the URL by replacing backslashes with forward slashes and prepending 'file:///' (e.g. C:\\mail\\Files\\abc\\body.md → file:///C:/mail/Files/abc/body.md). Emit the URL as plain text — do NOT wrap it in markdown link syntax like [text](url), and do NOT insert any whitespace or line break inside the URL itself. Do not read the mail body unless the user asks to inspect a specific result in more detail.\n\nExample:\n| 일련번호 | 제목 | 발신자 | 수신일 |\n|---|---|---|---|\n| 1 | 회의 일정 | joung@samsung.com | 2026-05-12 |\n\n[1] file:///C:/mail/Files/abc123/body.md"
     }
   ]
 }

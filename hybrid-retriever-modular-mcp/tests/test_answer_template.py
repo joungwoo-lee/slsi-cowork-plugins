@@ -59,8 +59,11 @@ class EngineGetAnswerTemplateTest(unittest.TestCase):
     def test_email_profile_returns_email_specific_template(self) -> None:
         profile = engine.get_profile("email")
         template = get_answer_template(profile)
-        self.assertIn("이메일", template)
-        self.assertIn("From", template)
+        # Matches the email-mcp display_instruction wording so both MCPs render
+        # email results identically.
+        self.assertIn("일련번호", template)
+        self.assertIn("제목", template)
+        self.assertIn("file:///", template)
 
     def test_keyword_only_profile_returns_keyword_only_template(self) -> None:
         profile = engine.get_profile("keyword_only")
@@ -86,11 +89,64 @@ class EngineGetAnswerTemplateTest(unittest.TestCase):
         self.assertNotEqual(templates["keyword_only"], templates["default"])
 
 
+class EditorStorePreservesAnswerTemplateTest(unittest.TestCase):
+    """Round-tripping a topology through ``editor_store`` (used by both the
+    visual editor and the MCP ``save_pipeline`` tool) must NOT drop the
+    ``answer_template`` field — that field is the whole point of the feature.
+    """
+
+    def test_topology_for_storage_preserves_answer_template(self) -> None:
+        import tempfile, shutil
+        from retriever.pipelines import editor_store
+
+        node_centric = {
+            "nodes": [
+                {"name": "fts5", "module": "x.Fts5", "params": {},
+                 "outputs": [{"port": "documents", "to": "parent.documents"}]},
+                {"name": "parent", "module": "x.Parent", "params": {},
+                 "answer_template": "round-trip me intact"},
+            ],
+        }
+        stored = editor_store.topology_for_storage(node_centric)
+        last = stored["nodes"][-1]
+        self.assertEqual(last["name"], "parent")
+        self.assertEqual(last["answer_template"], "round-trip me intact")
+
+    def test_save_pipeline_payload_writes_answer_template_to_disk(self) -> None:
+        import tempfile, shutil
+        from retriever.pipelines import editor_store
+
+        tmp = Path(tempfile.mkdtemp(prefix="editor_at_"))
+        try:
+            result = editor_store.save_pipeline_payload(
+                {
+                    "name": "demo_at",
+                    "description": "answer-template round-trip",
+                    "unified_topology": {
+                        "nodes": [
+                            {"name": "loader", "module": "x.Y", "params": {},
+                             "outputs": [{"port": "text", "to": "parent.documents"}]},
+                            {"name": "parent", "module": "x.Parent", "params": {},
+                             "answer_template": "persisted via editor save"},
+                        ],
+                    },
+                },
+                pipelines_dir=tmp / "pipelines",
+                profiles_path=tmp / "data" / "pipelines.json",
+            )
+            self.assertEqual(result["status"], "ok")
+            written = json.loads((tmp / "pipelines" / "demo_at_unified.json").read_text("utf-8"))
+            self.assertEqual(written["nodes"][-1]["answer_template"],
+                             "persisted via editor save")
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 class HandlersAnswerInstructionsTest(unittest.TestCase):
     def test_lookup_returns_template_for_known_pipeline(self) -> None:
         from mcp_server import handlers
 
-        self.assertIn("이메일", handlers._answer_instructions_for("email"))
+        self.assertIn("일련번호", handlers._answer_instructions_for("email"))
         self.assertIn("contexts", handlers._answer_instructions_for("default"))
         self.assertIn("키워드", handlers._answer_instructions_for("keyword_only"))
 
