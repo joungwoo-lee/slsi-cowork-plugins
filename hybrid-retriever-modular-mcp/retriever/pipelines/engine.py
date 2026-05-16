@@ -499,6 +499,7 @@ def _doc_to_item(doc, parent_replace: bool) -> dict:
         "similarity": float(doc.score or 0.0),
         "vector_similarity": float(meta.get("vector_similarity", 0.0)),
         "term_similarity": float(meta.get("term_similarity", 0.0)),
+        "graph_similarity": float(meta.get("graph_similarity", 0.0)),
     }
 
 
