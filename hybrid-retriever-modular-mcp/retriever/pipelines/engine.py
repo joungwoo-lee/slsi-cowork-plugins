@@ -103,6 +103,52 @@ def _read_topology_description(topology_file: str | None) -> str:
     return desc if isinstance(desc, str) else ""
 
 
+def _read_topology_answer_template(topology_file: str | None) -> str:
+    """Read ``answer_template`` from the last node of a topology JSON file.
+
+    Each search pipeline's terminal module (last entry in ``nodes``) carries
+    an editable ``answer_template`` string. ``tool_search`` forwards it to the
+    agent so per-pipeline output formatting (e.g. email header, entity-graph
+    summary) is enforced at the retrieval layer.
+    """
+    if not topology_file:
+        return ""
+    path = PIPELINES_DIR / topology_file
+    if not path.is_file():
+        return ""
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return ""
+    nodes = raw.get("nodes") if isinstance(raw, dict) else None
+    if not isinstance(nodes, list) or not nodes:
+        return ""
+    last = nodes[-1]
+    template = last.get("answer_template") if isinstance(last, dict) else None
+    return template if isinstance(template, str) else ""
+
+
+def get_answer_template(profile: PipelineProfile | None) -> str:
+    """Return the per-pipeline answer template for an agent-facing search response.
+
+    Falls back to the default profile's template when the supplied profile has
+    no topology, then to an empty string.
+    """
+    candidates: list[str] = []
+    if profile is not None:
+        for attr in ("unified_topology", "retrieval_topology"):
+            value = getattr(profile, attr, None)
+            if value:
+                candidates.append(value)
+    candidates.append(DEFAULT_UNIFIED_TOPOLOGY)
+    for topology_file in candidates:
+        template = _read_topology_answer_template(topology_file)
+        if template:
+            return template
+    return ""
+
+
 def _load_profile_dict(data: dict[str, Any]) -> None:
     for name, item in data.items():
         if not isinstance(item, dict):

@@ -156,7 +156,8 @@
           "port": "documents",
           "from": "joiner.documents"
         }
-      ]
+      ],
+      "answer_template": "이메일 검색 결과다. 답변 첫 줄에 'From: <발신자> · Date: <YYYY-MM-DD> · Subject: <제목>' 형식으로 출처 메일을 요약한 뒤 본문 인용을 이어서 작성하라. 여러 메일이 섞여 있으면 메일별로 섹션을 나누고, 각 사실마다 [document_name:position]으로 인용을 붙여라."
     }
   ]
 }

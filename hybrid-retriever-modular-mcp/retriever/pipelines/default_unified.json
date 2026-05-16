@@ -142,7 +142,8 @@
           "port": "documents",
           "from": "joiner.documents"
         }
-      ]
+      ],
+      "answer_template": "아래 contexts만 근거로 한국어로 답하라. 각 사실 뒤에 [document_name:position] 형식으로 인용을 붙이고, 근거가 부족하면 '문서에서 확인되지 않습니다'라고 답하라."
     }
   ]
 }

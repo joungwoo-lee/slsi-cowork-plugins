@@ -106,7 +106,8 @@
       "params": {},
       "inputs": [
         { "port": "documents", "from": "reranker.documents" }
-      ]
+      ],
+      "answer_template": "BGE cross-encoder 리랭커로 상위 청크 순위를 재조정한 결과다. 상위 3개 청크에 더 큰 가중치를 두고 답하라. 인용은 [document_name:position]."
     }
   ]
 }

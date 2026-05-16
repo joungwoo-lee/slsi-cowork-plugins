@@ -110,7 +110,8 @@
       "name": "parent",
       "module": "retriever.components.parent_replace.ParentChunkReplacer",
       "params": {},
-      "inputs": [{"port": "documents", "from": "reranker.documents"}]
+      "inputs": [{"port": "documents", "from": "reranker.documents"}],
+      "answer_template": "HippoRAG 스타일 엔티티 그래프 검색 결과다. source.matched_entities를 살펴 핵심 엔티티 관계를 1~2문장 요약한 뒤 본문 인용을 이어라. 인용은 [document_name:position]."
     }
   ]
 }

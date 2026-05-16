@@ -21,6 +21,7 @@ from retriever.hipporag import query as hipporag_query
 from retriever.hipporag import ppr as hipporag_ppr
 from retriever.hipporag import synonyms as hipporag_synonyms
 from retriever.pipelines import editor_store
+from retriever.pipelines import get_answer_template as _pipeline_answer_template
 from retriever.pipelines import profiles as pipeline_profiles
 
 from . import bootstrap
@@ -159,6 +160,19 @@ def _dataset_search_pipeline(cfg, dataset_ids: list[str], requested: str | None)
     return preferred.pop() if len(preferred) == 1 else "default"
 
 
+def _answer_instructions_for(pipeline_name: str) -> str:
+    """Look up the per-pipeline answer template from the topology JSON.
+
+    ``pipeline_profiles.get`` falls back to the default profile for unknown
+    names, so the agent always receives some template.
+    """
+    try:
+        profile = pipeline_profiles.get(pipeline_name)
+    except Exception:  # noqa: BLE001
+        profile = None
+    return _pipeline_answer_template(profile)
+
+
 def _hipporag_to_search_payload(query: str, dataset_ids: list[str], result, *, pipeline_name: str = "hipporag") -> dict:
     contexts: list[dict[str, Any]] = []
     citations: list[dict[str, Any]] = []
@@ -193,6 +207,7 @@ def _hipporag_to_search_payload(query: str, dataset_ids: list[str], result, *, p
         "citations": citations,
         "search_pipeline": pipeline_name,
         "query_entities": result.query_entities,
+        "answer_instructions": _answer_instructions_for(pipeline_name),
     }
 
 
@@ -687,6 +702,7 @@ def tool_search(args: dict) -> dict:
         "total": data["total"],
         "contexts": contexts,
         "citations": citations,
+        "answer_instructions": _answer_instructions_for(pipeline_name),
     })
 
 

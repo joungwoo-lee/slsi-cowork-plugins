@@ -106,7 +106,8 @@
           "port": "documents",
           "from": "reranker.documents"
         }
-      ]
+      ],
+      "answer_template": "LLM 리랭커로 상위 청크 순위가 재조정되었다. 상위 청크일수록 신뢰도가 높다고 가정하고 답하라. 인용은 [document_name:position]."
     }
   ]
 }

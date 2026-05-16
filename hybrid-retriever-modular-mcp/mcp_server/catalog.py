@@ -93,7 +93,10 @@ _BASE_TOOLS: list[dict[str, Any]] = [
             "[Search] Search indexed chunks by question or keywords. Omit dataset_ids "
             "to use RETRIEVER_DEFAULT_DATASETS first; use list_datasets only when no "
             "default dataset is configured or when you need to inspect available "
-            "datasets. Returns ranked chunks with document metadata and citations."
+            "datasets. Returns ranked chunks with document metadata and citations. "
+            "The response includes an ``answer_instructions`` string carrying the "
+            "active pipeline's per-pipeline answer template — follow it verbatim "
+            "when composing the user-facing reply."
         ),
         "inputSchema": {
             "type": "object",

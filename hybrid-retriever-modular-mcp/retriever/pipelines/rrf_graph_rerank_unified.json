@@ -110,7 +110,8 @@
       "name": "parent",
       "module": "retriever.components.parent_replace.ParentChunkReplacer",
       "params": {},
-      "inputs": [{"port": "documents", "from": "reranker.documents"}]
+      "inputs": [{"port": "documents", "from": "reranker.documents"}],
+      "answer_template": "그래프 인접 정보 + BGE 리랭커가 적용된 결과다. 답변 시작에 관련 엔티티가 어떤 경로로 연결되는지 1~2문장으로 짧게 언급한 뒤 본문 인용을 이어라. 인용은 [document_name:position]."
     }
   ]
 }

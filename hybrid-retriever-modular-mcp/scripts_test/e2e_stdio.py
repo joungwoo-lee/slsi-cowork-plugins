@@ -208,9 +208,14 @@ def main() -> int:
         assert s1["payload"]["total"] >= 1, s1["payload"]
         first_ctx = s1["payload"]["contexts"][0]
         assert first_ctx["source"]["chunk_id"].startswith(document_id), first_ctx
+        ai = s1["payload"].get("answer_instructions")
+        assert isinstance(ai, str) and ai.strip(), (
+            f"search response missing answer_instructions: {s1['payload']}"
+        )
         print(
             "[ok] search rrf/korean: "
-            f"total={s1['payload']['total']}, top_score={first_ctx['source']['similarity']}"
+            f"total={s1['payload']['total']}, top_score={first_ctx['source']['similarity']}, "
+            f"answer_instructions={len(ai)}chars"
         )
 
         # 8. search — English keyword, RRF

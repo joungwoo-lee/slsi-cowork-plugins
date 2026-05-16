@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from .engine import (
     PipelineProfile,
     describe_profiles,
+    get_answer_template,
     get_profile,
     list_profile_names,
     register,
@@ -23,6 +24,7 @@ profiles = SimpleNamespace(
 __all__ = [
     "PipelineProfile",
     "describe_profiles",
+    "get_answer_template",
     "get_profile",
     "list_profile_names",
     "profiles",

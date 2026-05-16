@@ -70,7 +70,8 @@
           "port": "documents",
           "from": "joiner.documents"
         }
-      ]
+      ],
+      "answer_template": "키워드 매칭 결과만 있으므로 의미 추론으로 빈칸을 메우지 말고 매칭된 표현을 그대로 인용해 답하라. 답이 모호하면 '키워드 매칭된 단서만 있음'을 명시하라. 인용은 [document_name:position]."
     }
   ]
 }
