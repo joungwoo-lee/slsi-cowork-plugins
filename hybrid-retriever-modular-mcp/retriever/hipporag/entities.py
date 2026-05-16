@@ -213,3 +213,56 @@ def embed_pending_entities(
             n += 1
         conn.commit()
     return n
+
+
+def _fact_text(subj: str, pred: str, obj: str) -> str:
+    return f"({subj}, {pred}, {obj})"
+
+
+def facts_missing_embeddings(conn: sqlite3.Connection, model: str) -> list[tuple[str, str]]:
+    rows = conn.execute(
+        """
+        SELECT t.triple_id, s.canonical, t.pred, o.canonical
+        FROM triples t
+        JOIN entities s ON s.entity_id = t.subj_id
+        JOIN entities o ON o.entity_id = t.obj_id
+        LEFT JOIN fact_embeddings emb ON emb.triple_id = t.triple_id
+        WHERE emb.triple_id IS NULL OR emb.model != ?
+        """,
+        (model,),
+    ).fetchall()
+    return [(triple_id, _fact_text(subj, pred, obj)) for triple_id, subj, pred, obj in rows]
+
+
+def embed_pending_facts(
+    conn: sqlite3.Connection,
+    embedding_cfg: EmbeddingConfig,
+    *,
+    batch_size: int | None = None,
+) -> int:
+    """Embed OpenIE triples for HippoRAG2 fact retrieval."""
+    if not embedding_cfg or not embedding_cfg.is_configured:
+        log.info("embedding endpoint not configured — skipping fact embeddings")
+        return 0
+
+    client = EmbeddingClient(embedding_cfg)
+    pending = facts_missing_embeddings(conn, embedding_cfg.model)
+    if not pending:
+        return 0
+
+    bsz = max(1, int(batch_size or embedding_cfg.batch_size))
+    n = 0
+    for start in range(0, len(pending), bsz):
+        batch = pending[start : start + bsz]
+        vectors = client.embed([text for _tid, text in batch])
+        for (triple_id, _text), vec in zip(batch, vectors):
+            conn.execute(
+                "INSERT INTO fact_embeddings(triple_id, model, dim, vector) "
+                "VALUES(?, ?, ?, ?) ON CONFLICT(triple_id) DO UPDATE SET "
+                "model = excluded.model, dim = excluded.dim, vector = excluded.vector, "
+                "updated_at = datetime('now')",
+                (triple_id, embedding_cfg.model, embedding_cfg.dim, pack_vector(vec)),
+            )
+            n += 1
+        conn.commit()
+    return n

@@ -21,12 +21,12 @@
     },
     "unified_topology": "email_unified.json"
   },
-  "hippo2rag": {
-    "description": "Use when: you want upload-time HippoRAG indexing and later search queries should automatically route through the HippoRAG entity graph + PPR scorer for that dataset. Its ingest topology excludes document embedding and Qdrant upsert modules.",
+  "hippo2": {
+    "description": "Use when: you want HippoRAG2-style memory retrieval. Ingest keeps passage embeddings/Qdrant, then runs OpenIE plus entity/fact embeddings; search combines fact/entity seeding, dense passage fallback, and PPR scoring.",
     "indexing_overrides": {},
     "retrieval_overrides": {},
     "search_kwargs": {},
-    "indexing_topology": "hippo2rag_indexing.json"
+    "unified_topology": "default_unified.json"
   },
   "rrf_rerank": {
     "indexing_overrides": {},

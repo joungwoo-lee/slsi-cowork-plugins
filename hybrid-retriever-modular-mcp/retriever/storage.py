@@ -99,6 +99,15 @@ CREATE TABLE IF NOT EXISTS entity_embeddings (
     FOREIGN KEY(entity_id) REFERENCES entities(entity_id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS fact_embeddings (
+    triple_id   TEXT PRIMARY KEY,
+    model       TEXT NOT NULL,
+    dim         INTEGER NOT NULL,
+    vector      BLOB NOT NULL,
+    updated_at  TEXT DEFAULT (datetime('now')),
+    FOREIGN KEY(triple_id) REFERENCES triples(triple_id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS triples (
     triple_id   TEXT PRIMARY KEY,
     chunk_id    TEXT NOT NULL,

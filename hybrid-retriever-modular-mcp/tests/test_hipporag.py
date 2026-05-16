@@ -18,7 +18,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from retriever import graph, storage
-from retriever.config import Config, HippoRAGConfig
+from retriever.config import Config, EmbeddingConfig, HippoRAGConfig
 from retriever.hipporag import entities as ent_mod
 from retriever.hipporag import ppr as ppr_mod
 from retriever.hipporag import query as query_mod
@@ -199,6 +199,39 @@ class PPREngineTest(unittest.TestCase):
 
 
 class QueryScoringTest(unittest.TestCase):
+    def test_fact_embeddings_are_written_for_hippo2_fact_retrieval(self) -> None:
+        class FakeEmbeddingClient:
+            def __init__(self, _cfg):
+                pass
+
+            def embed(self, texts):
+                return [[1.0, 0.0, 0.0, 0.0] for _ in texts]
+
+        old_client = ent_mod.EmbeddingClient
+        try:
+            ent_mod.EmbeddingClient = FakeEmbeddingClient
+            with tempfile.TemporaryDirectory() as td:
+                cfg = Config(
+                    data_root=Path(td),
+                    embedding=EmbeddingConfig(api_url="http://embedding", api_key="", model="fake", dim=4),
+                )
+                cfg.ensure_dirs()
+                with storage.sqlite_session(cfg) as conn:
+                    _seed_dataset(conn)
+                    ent_mod.persist_triples(
+                        conn,
+                        chunk_id="doc1:0",
+                        document_id="doc1",
+                        dataset_id="demo",
+                        triples=[Triple("Samsung", "sells", "smartphones")],
+                    )
+                    written = ent_mod.embed_pending_facts(conn, cfg.embedding)
+                    self.assertEqual(written, 1)
+                    count = conn.execute("SELECT COUNT(*) FROM fact_embeddings").fetchone()[0]
+                    self.assertEqual(count, 1)
+        finally:
+            ent_mod.EmbeddingClient = old_client
+
     def test_chunks_ranked_by_mention_weighted_ppr(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             cfg = Config(data_root=Path(td))

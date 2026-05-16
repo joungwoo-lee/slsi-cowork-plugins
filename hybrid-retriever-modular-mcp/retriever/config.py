@@ -89,6 +89,8 @@ class HippoRAGConfig:
     ppr_max_iter: int = 50
     ppr_tol: float = 1e-6
     query_top_entities: int = 5
+    linking_top_k: int = 5
+    passage_node_weight: float = 0.05
     top_chunks: int = 12
     extraction_max_triples: int = 32
 
@@ -269,6 +271,8 @@ def load_config(env_path: str | os.PathLike[str] | None = None) -> Config:
             ppr_max_iter=_int(os.getenv("HIPPORAG_PPR_MAX_ITER"), 50),
             ppr_tol=_float(os.getenv("HIPPORAG_PPR_TOL"), 1e-6),
             query_top_entities=_int(os.getenv("HIPPORAG_QUERY_TOP_ENTITIES"), 5),
+            linking_top_k=_int(os.getenv("HIPPORAG_LINKING_TOP_K"), 5),
+            passage_node_weight=_float(os.getenv("HIPPORAG_PASSAGE_NODE_WEIGHT"), 0.05),
             top_chunks=_int(os.getenv("HIPPORAG_TOP_CHUNKS"), 12),
             extraction_max_triples=_int(os.getenv("HIPPORAG_EXTRACTION_MAX_TRIPLES"), 32),
         ),

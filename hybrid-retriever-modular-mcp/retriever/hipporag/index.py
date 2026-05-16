@@ -119,8 +119,10 @@ def index_chunks(
     sqlite_conn.commit()
 
     embedded = 0
+    facts_embedded = 0
     if cfg.embedding and cfg.embedding.is_configured:
         embedded = ent_mod.embed_pending_entities(sqlite_conn, cfg.embedding)
+        facts_embedded = ent_mod.embed_pending_facts(sqlite_conn, cfg.embedding)
 
     mark_dirty(sqlite_conn)
     set_state(sqlite_conn, "last_index_at", time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
@@ -130,6 +132,7 @@ def index_chunks(
         "chunks_processed": len(chunks),
         "triples_written": written,
         "entities_embedded": embedded,
+        "facts_embedded": facts_embedded,
         "elapsed_sec": round(time.time() - started, 2),
     }
 

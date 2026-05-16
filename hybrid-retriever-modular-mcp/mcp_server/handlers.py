@@ -126,7 +126,7 @@ def _mark_dataset_ingest_profile(
             supported.add("email")
         if hipporag_ready or current.get("has_hipporag"):
             supported.add("hipporag")
-            supported.add("hippo2rag")
+            supported.add("hippo2")
         metadata = {
             **current,
             "first_ingest_pipeline": current.get("first_ingest_pipeline") or pipeline_name,
@@ -136,8 +136,8 @@ def _mark_dataset_ingest_profile(
             "has_hipporag": bool(current.get("has_hipporag") if hipporag_ready is None else hipporag_ready),
             "supported_search_pipelines": sorted(supported),
             "preferred_search_pipeline": (
-                "hippo2rag"
-                if (pipeline_name == "hippo2rag" and (hipporag_ready or current.get("has_hipporag")))
+                "hippo2"
+                if (pipeline_name == "hippo2" and (hipporag_ready or current.get("has_hipporag")))
                 else "hipporag"
                 if (hipporag_ready or current.get("has_hipporag"))
                 else ("email" if pipeline_name == "email" else "default")
@@ -253,7 +253,7 @@ def _run_upload_document(cfg, args: dict, *, job_id: str | None = None) -> dict:
         raise ValueError("file_path is required")
     pipeline_name = _pipeline_name(args)
     metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
-    auto_hipporag = bool(args.get("auto_hipporag", pipeline_name == "hippo2rag"))
+    auto_hipporag = bool(args.get("auto_hipporag", pipeline_name == "hippo2"))
     if job_id:
         _job_progress(cfg, job_id, 5, "indexing document")
     with silenced_stdout():
@@ -315,7 +315,7 @@ def _run_upload_directory(cfg, args: dict, *, job_id: str | None = None) -> dict
     metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
     skip_embedding = bool(args.get("skip_embedding", False))
     use_hierarchical = args.get("use_hierarchical")
-    auto_hipporag = bool(args.get("auto_hipporag", pipeline_name == "hippo2rag"))
+    auto_hipporag = bool(args.get("auto_hipporag", pipeline_name == "hippo2"))
 
     paths: list[Path] = []
     for file_path in dir_path.rglob("*"):
@@ -606,7 +606,7 @@ def tool_search(args: dict) -> dict:
     parent_chunk_replace = args.get("parent_chunk_replace") if isinstance(args.get("parent_chunk_replace"), bool) else None
     metadata_condition = args.get("metadata_condition") if isinstance(args.get("metadata_condition"), dict) else None
 
-    if pipeline_name in {"hipporag", "hippo2rag"}:
+    if pipeline_name in {"hipporag", "hippo2"}:
         try:
             with silenced_stdout():
                 with storage.sqlite_session(cfg) as sconn:

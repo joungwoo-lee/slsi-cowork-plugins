@@ -11,6 +11,7 @@ from ..config import Config, EmbeddingConfig, HippoRAGConfig, LLMConfig
 from ..embedding_client import EmbeddingClient
 from ..graph import unpack_vector
 from ..llm_client import LLMClient
+from .. import storage
 from .entities import canonicalize, entity_id_for
 from .ppr import PPREngine
 
@@ -88,6 +89,35 @@ def _load_all_entity_embeddings(
     return ids, mat, dim
 
 
+def _normalize_matrix(mat: np.ndarray) -> np.ndarray:
+    if mat.size == 0:
+        return mat
+    norms = np.linalg.norm(mat, axis=1, keepdims=True)
+    norms[norms == 0.0] = 1.0
+    return mat / norms
+
+
+def _load_all_fact_embeddings(
+    conn: sqlite3.Connection,
+) -> tuple[list[tuple[str, str, str]], np.ndarray]:
+    rows = conn.execute(
+        """
+        SELECT t.subj_id, t.obj_id, t.triple_id, emb.dim, emb.vector
+        FROM fact_embeddings emb
+        JOIN triples t ON t.triple_id = emb.triple_id
+        """
+    ).fetchall()
+    if not rows:
+        return [], np.zeros((0, 0), dtype=np.float32)
+    dim = int(rows[0][3])
+    facts: list[tuple[str, str, str]] = []
+    mat = np.zeros((len(rows), dim), dtype=np.float32)
+    for i, (subj_id, obj_id, triple_id, _dim, blob) in enumerate(rows):
+        facts.append((subj_id, obj_id, triple_id))
+        mat[i] = np.asarray(unpack_vector(blob, dim), dtype=np.float32)
+    return facts, _normalize_matrix(mat)
+
+
 def link_query_entities(
     conn: sqlite3.Connection,
     embedding_cfg: EmbeddingConfig,
@@ -146,6 +176,68 @@ def link_query_entities(
             eid = ids[int(j)]
             seeds[eid] = max(seeds.get(eid, 0.0), score)
     return seeds
+
+
+def link_query_facts(
+    conn: sqlite3.Connection,
+    embedding_cfg: EmbeddingConfig,
+    query: str,
+    *,
+    top_k: int,
+) -> dict[str, float]:
+    """Retrieve fact embeddings and turn their subject/object entities into seeds."""
+    if not query.strip() or not embedding_cfg or not embedding_cfg.is_configured:
+        return {}
+    facts, mat = _load_all_fact_embeddings(conn)
+    if not facts:
+        return {}
+    [vector] = EmbeddingClient(embedding_cfg).embed([query])
+    q = np.asarray([vector], dtype=np.float32)
+    q = _normalize_matrix(q)
+    sims = (q @ mat.T).ravel()
+    k = min(max(1, int(top_k)), sims.shape[0])
+    top = np.argpartition(-sims, k - 1)[:k]
+    seeds: dict[str, float] = {}
+    for idx in top:
+        score = float(sims[int(idx)])
+        if score <= 0.0:
+            continue
+        subj_id, obj_id, _triple_id = facts[int(idx)]
+        seeds[subj_id] = max(seeds.get(subj_id, 0.0), score)
+        seeds[obj_id] = max(seeds.get(obj_id, 0.0), score)
+    return seeds
+
+
+def dense_passage_chunks(
+    cfg: Config,
+    conn: sqlite3.Connection,
+    query: str,
+    dataset_ids: list[str],
+    top_chunks: int,
+) -> list[dict]:
+    if not cfg.embedding or not cfg.embedding.is_configured or not query.strip():
+        return []
+    [vector] = EmbeddingClient(cfg.embedding).embed([query])
+    qdrant = storage.open_qdrant(cfg)
+    storage.ensure_collection(qdrant, cfg)
+    rows = storage.vector_search(qdrant, cfg, vector, dataset_ids, max(1, int(top_chunks)))
+    chunks = storage.fetch_chunks(conn, [row["chunk_id"] for row in rows])
+    out: list[dict] = []
+    for row in rows:
+        chunk = chunks.get(row["chunk_id"])
+        if not chunk:
+            continue
+        out.append({
+            "chunk_id": chunk["chunk_id"],
+            "dataset_id": chunk["dataset_id"],
+            "document_id": chunk["document_id"],
+            "document_name": chunk["document_name"],
+            "position": chunk["position"],
+            "content": chunk["content"],
+            "score": max(0.0, min(1.0, (float(row["score"]) + 1.0) / 2.0)),
+            "matched_entities": [],
+        })
+    return out
 
 
 def score_chunks(
@@ -223,9 +315,30 @@ def search(
 
     query_terms = extract_query_entities(cfg.llm, cfg.hipporag, query)
     seeds = link_query_entities(sqlite_conn, cfg.embedding, query_terms)
+    fact_seeds = link_query_facts(
+        sqlite_conn,
+        cfg.embedding,
+        query,
+        top_k=max(1, int(cfg.hipporag.linking_top_k)),
+    )
+    for entity_id, score in fact_seeds.items():
+        seeds[entity_id] = max(seeds.get(entity_id, 0.0), score)
     ppr_scores = ppr_engine.run_ppr(sqlite_conn, seeds)
     top_k = top_chunks if top_chunks is not None else cfg.hipporag.top_chunks
     chunks = score_chunks(sqlite_conn, ppr_scores, dataset_ids, top_k)
+    dense_chunks = dense_passage_chunks(cfg, sqlite_conn, query, dataset_ids, top_k)
+    if dense_chunks:
+        merged = {chunk["chunk_id"]: dict(chunk) for chunk in chunks}
+        for chunk in dense_chunks:
+            existing = merged.get(chunk["chunk_id"])
+            dense_score = float(chunk["score"]) * float(cfg.hipporag.passage_node_weight)
+            if existing:
+                existing["score"] = float(existing["score"]) + dense_score
+            else:
+                chunk = dict(chunk)
+                chunk["score"] = dense_score
+                merged[chunk["chunk_id"]] = chunk
+        chunks = sorted(merged.values(), key=lambda item: -float(item["score"]))[:top_k]
 
     top_entities = sorted(ppr_scores.items(), key=lambda kv: -kv[1])[:20]
     return HippoRAGSearchResult(

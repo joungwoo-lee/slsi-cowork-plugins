@@ -150,13 +150,10 @@ class BuiltInProfilesReadDescriptionFromTopologyTest(unittest.TestCase):
             described["keyword_only"]["description"],
         )
 
-    def test_hippo2rag_indexing_topology_excludes_vector_modules(self) -> None:
-        topology_path = Path(__file__).resolve().parent.parent / "retriever" / "pipelines" / "hippo2rag_indexing.json"
-        topology = json.loads(topology_path.read_text("utf-8"))
-        node_names = {node["name"] for node in topology["nodes"]}
-        self.assertEqual(node_names, {"loader", "splitter", "writer"})
-        self.assertNotIn("embedder", node_names)
-        self.assertNotIn("qdrant_writer", node_names)
+    def test_hippo2_profile_uses_passage_embedding_topology(self) -> None:
+        registry_path = Path(__file__).resolve().parent.parent / "retriever" / "pipelines" / "registry.json"
+        registry = json.loads(registry_path.read_text("utf-8"))
+        self.assertEqual(registry["hippo2"]["unified_topology"], "default_unified.json")
 
 
 class BuildToolsEnrichesPipelineParamTest(unittest.TestCase):
@@ -166,10 +163,10 @@ class BuildToolsEnrichesPipelineParamTest(unittest.TestCase):
         tools = {tool["name"]: tool for tool in build_tools()}
         upload = tools["upload"]
         param = upload["inputSchema"]["properties"]["pipeline"]
-        for name in ("default", "keyword_only", "email", "hippo2rag", "rrf_rerank"):
+        for name in ("default", "keyword_only", "email", "hippo2", "rrf_rerank"):
             self.assertIn(name, param["description"])
         self.assertIn("enum", param)
-        for name in ("default", "keyword_only", "email", "hippo2rag"):
+        for name in ("default", "keyword_only", "email", "hippo2"):
             self.assertIn(name, param["enum"])
 
 
