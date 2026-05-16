@@ -1,0 +1,47 @@
+RAG (Retrieval-Augmented Generation) Systems
+
+RAG is an AI framework that combines retrieval-based search with generative language models.
+Instead of relying solely on parametric knowledge stored in model weights, RAG retrieves
+relevant documents from an external knowledge base and feeds them as context to the LLM.
+
+## Core Components
+
+1. Indexing Pipeline
+   - Document loading and chunking (splitting documents into manageable segments)
+   - Embedding generation using models like text-embedding-ada-002 or BGE
+   - Storage in vector databases such as Qdrant, Chroma, or FAISS
+
+2. Retrieval Pipeline
+   - Query embedding for semantic (vector) search
+   - BM25 or TF-IDF for keyword-based (sparse) search
+   - Hybrid retrieval combines both: dense + sparse fusion
+   - Reciprocal Rank Fusion (RRF) merges ranked lists from multiple retrievers
+
+3. Generation Pipeline
+   - Retrieved context is prepended to the user query
+   - LLM generates an answer grounded in retrieved passages
+   - Citations map generated text back to source documents
+
+## Hybrid Search
+
+Hybrid retrieval outperforms pure vector or pure keyword search by capturing both
+semantic similarity and exact term matches. Alpha weighting controls the balance:
+  - alpha=0.0: pure keyword (BM25)
+  - alpha=1.0: pure vector (dense)
+  - alpha=0.5: balanced hybrid
+
+## Parent-Child Chunking
+
+Small chunks are retrieved for precision, but their parent chunks (larger context windows)
+are returned in the final answer to preserve coherence. This technique significantly
+improves answer quality in production RAG systems.
+
+## Advanced Techniques
+
+- HippoRAG: entity-centric memory with Personalized PageRank (PPR) for multi-hop retrieval
+- RAPTOR: recursive summarization tree for hierarchical retrieval
+- Self-RAG: self-reflection mechanism to decide when to retrieve
+- Corrective RAG (CRAG): corrects retrieved documents via relevance evaluation
+
+RAG systems are widely adopted in enterprise knowledge management, customer support,
+legal document review, and medical information retrieval applications.

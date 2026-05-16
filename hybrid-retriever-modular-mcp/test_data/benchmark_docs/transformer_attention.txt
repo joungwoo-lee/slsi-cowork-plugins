@@ -1,0 +1,66 @@
+Transformer Architecture and Attention Mechanism
+
+The Transformer architecture, introduced in "Attention is All You Need" (Vaswani et al., 2017),
+revolutionized natural language processing and became the foundation for modern LLMs.
+
+## Self-Attention Mechanism
+
+Self-attention allows each token in a sequence to attend to every other token,
+capturing long-range dependencies without recurrence.
+
+### Query, Key, Value (QKV)
+For each token, three vectors are computed:
+- Query (Q): what the token is looking for
+- Key (K): what the token offers to others
+- Value (V): the information the token contributes
+
+Attention scores = softmax(QK^T / sqrt(d_k)) * V
+
+The scaling factor sqrt(d_k) prevents gradient vanishing in deep networks.
+
+### Multi-Head Attention
+Multiple attention heads run in parallel, each learning different relationships:
+- Head 1 might capture syntactic dependencies
+- Head 2 might capture semantic relationships
+- Head 3 might capture positional patterns
+
+Outputs from all heads are concatenated and projected.
+
+## Positional Encoding
+
+Since transformers have no recurrence, positional information is injected via:
+- Sinusoidal encoding (original paper): fixed mathematical encoding
+- Learned positional embeddings (BERT, GPT): trainable position vectors
+- Rotary Position Embedding (RoPE): used in LLaMA, relative position encoding
+- ALiBi: attention with linear biases for length extrapolation
+
+## Encoder-Decoder vs Decoder-Only
+
+### Encoder-Only (BERT family)
+- Bidirectional attention: each token attends to all others
+- Masked Language Modeling (MLM) pretraining
+- Best for: classification, NER, semantic search embeddings
+
+### Decoder-Only (GPT family)
+- Causal (autoregressive) attention: tokens attend only to previous tokens
+- Next-token prediction pretraining
+- Best for: text generation, RAG answer synthesis
+
+### Encoder-Decoder (T5, BART)
+- Encoder processes input, decoder generates output
+- Cross-attention bridges the two
+- Best for: translation, summarization, question answering
+
+## Flash Attention
+
+Flash Attention (Dao et al., 2022) is an IO-aware attention implementation:
+- Tiles the attention computation to fit in GPU SRAM
+- Avoids materializing the full N×N attention matrix
+- Achieves 2-4x speedup and O(N) memory vs O(N^2) standard attention
+
+## Modern LLMs Based on Transformers
+
+- GPT-4, Claude, Gemini: decoder-only, RLHF fine-tuned
+- LLaMA, Mistral: open-source decoder-only with GQA and RoPE
+- BERT, RoBERTa: encoder-only for embedding tasks
+- Sentence-BERT (SBERT): modified BERT for semantic similarity

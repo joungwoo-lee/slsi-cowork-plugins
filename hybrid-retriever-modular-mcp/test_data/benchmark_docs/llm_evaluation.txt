@@ -1,0 +1,94 @@
+LLM and RAG Evaluation Metrics
+
+Evaluating LLM systems, especially RAG pipelines, requires specialized metrics that go
+beyond traditional NLP accuracy measures. The goal is to assess both retrieval quality
+and generation quality.
+
+## RAGAS Framework
+
+RAGAS (Retrieval Augmented Generation Assessment) provides automatic evaluation without
+human annotations. Core metrics:
+
+### Faithfulness
+Measures whether the generated answer is supported by the retrieved context.
+- Score: 0.0 (hallucinated) to 1.0 (fully grounded)
+- Each claim in the answer is verified against context passages
+- Catches hallucination and fabrication
+
+### Answer Relevance
+Measures whether the answer addresses the question asked.
+- Generates multiple questions that the answer could have answered
+- Computes similarity between generated questions and original question
+- Low score: answer drifts from the question
+
+### Context Precision
+Measures what fraction of retrieved context is actually relevant to the question.
+- Relevant chunks / Total retrieved chunks
+- High precision: retriever returns focused, relevant passages
+- Low precision: retriever returns noisy, irrelevant documents
+
+### Context Recall
+Measures whether all necessary information was retrieved.
+- Ground truth answer sentences attributed to retrieved context
+- High recall: retriever found all needed evidence
+- Low recall: missing information forces hallucination
+
+## Retrieval-Specific Metrics
+
+### MRR (Mean Reciprocal Rank)
+Average of 1/rank of the first relevant document across queries.
+MRR = (1/N) * sum(1/rank_i)
+Higher is better; perfect retriever has MRR=1.0.
+
+### NDCG (Normalized Discounted Cumulative Gain)
+Measures ranking quality considering position:
+- Relevant documents at rank 1 score higher than at rank 5
+- Normalized against ideal ranking
+- Standard metric in information retrieval benchmarks
+
+### Recall@K
+Fraction of relevant documents retrieved in top-K results.
+Recall@5 = relevant_in_top5 / total_relevant
+
+### Precision@K
+Fraction of top-K results that are relevant.
+Precision@5 = relevant_in_top5 / 5
+
+## Generation Quality Metrics
+
+### BLEU (Bilingual Evaluation Understudy)
+N-gram overlap between generated and reference text.
+Commonly used for translation; less suitable for open-ended QA.
+
+### ROUGE (Recall-Oriented Understudy for Gisting Evaluation)
+Recall-based overlap, popular for summarization:
+- ROUGE-1: unigram overlap
+- ROUGE-2: bigram overlap
+- ROUGE-L: longest common subsequence
+
+### BERTScore
+Uses BERT embeddings to measure semantic similarity:
+- More robust than n-gram metrics
+- Captures paraphrase and synonymy
+
+### G-Eval (LLM-as-judge)
+Uses a powerful LLM (e.g., GPT-4) to score responses on:
+- Coherence, consistency, fluency, relevance
+- Provides scores and explanations
+- Expensive but correlates well with human judgments
+
+## Benchmark Datasets
+
+- TriviaQA: factual questions with Wikipedia evidence
+- Natural Questions (NQ): Google search queries with Wikipedia answers
+- HotpotQA: multi-hop reasoning requiring multiple documents
+- BEIR: diverse IR benchmark covering 18 datasets
+- MMLU: multiple-choice questions across 57 subjects
+
+## RAG Pipeline Evaluation Best Practices
+
+1. Measure retrieval and generation separately
+2. Use end-to-end faithfulness to detect hallucination
+3. Track latency alongside quality (speed-accuracy tradeoff)
+4. Compare pipelines on the same dataset for fair benchmarking
+5. Use human evaluation as ground truth for automated metric calibration

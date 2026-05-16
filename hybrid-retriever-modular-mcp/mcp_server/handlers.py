@@ -1138,6 +1138,14 @@ def tool_admin_help(_args: dict) -> dict:
                 "name": "close_pipeline_editor",
                 "use_when": "Stop the pipeline editor process.",
             },
+            {
+                "name": "benchmark_pipelines",
+                "use_when": (
+                    "Run an end-to-end accuracy and speed benchmark across all (or selected) "
+                    "pipelines. Ingests built-in test docs, runs 5 predefined queries per pipeline, "
+                    "measures hit rate and avg latency, and returns a markdown report table."
+                ),
+            },
         ],
         "note": (
             "These tools are hidden from the default tools/list. Calling admin_help "
@@ -1308,6 +1316,212 @@ def tool_hippo2_stats(_args: dict) -> dict:
     })
 
 
+# ----- benchmark ----------------------------------------------------------
+
+# Test queries with expected keywords per topic document.
+# Each entry: (query, [expected_keywords_any_of_which_counts_as_hit])
+_BENCHMARK_QA: list[tuple[str, list[str]]] = [
+    (
+        "How does RAG retrieval work with hybrid search?",
+        ["retrieval", "hybrid", "BM25", "vector", "RRF", "fusion", "embedding"],
+    ),
+    (
+        "What is the role of vector databases in semantic search?",
+        ["vector", "embedding", "similarity", "Qdrant", "FAISS", "ANN", "HNSW"],
+    ),
+    (
+        "Explain the query key value attention mechanism in transformers",
+        ["attention", "query", "key", "value", "transformer", "QKV", "self-attention"],
+    ),
+    (
+        "What tools and agents does LangChain provide?",
+        ["LangChain", "agent", "chain", "tool", "memory", "LCEL"],
+    ),
+    (
+        "What metrics are used to evaluate RAG pipeline accuracy?",
+        ["RAGAS", "faithfulness", "precision", "recall", "NDCG", "MRR", "relevance"],
+    ),
+]
+
+_BENCHMARK_DOCS_DIR = (
+    Path(__file__).resolve().parent.parent / "test_data" / "benchmark_docs"
+)
+
+# Pipelines that require external models/APIs and are marked as best-effort.
+_EXTERNAL_MODEL_PIPELINES = frozenset({
+    "rrf_rerank", "rrf_llm_rerank", "rrf_graph_rerank", "hippo2_graph_rrf", "hippo2",
+})
+
+
+def _hit_rate(contexts: list[dict], expected_keywords: list[str]) -> bool:
+    """Return True if any expected keyword appears in any retrieved context."""
+    combined = " ".join(c.get("text", "") for c in contexts).lower()
+    return any(kw.lower() in combined for kw in expected_keywords)
+
+
+def tool_benchmark_pipelines(args: dict) -> dict:
+    """Ingest test docs, run 5 queries per pipeline, measure accuracy + speed, return report."""
+    cfg = load_config()
+
+    requested = args.get("pipelines")
+    if isinstance(requested, list) and requested:
+        pipelines_to_test = [str(p) for p in requested if str(p).strip()]
+    else:
+        from retriever.pipelines import profiles as _pp
+        _pp.sync_with_disk(cfg)
+        pipelines_to_test = _pp.names()
+
+    prefix = str(args.get("dataset_id_prefix") or "benchmark").strip() or "benchmark"
+    top_n = _safe_int(args, "top_n", 5, lo=1, hi=20)
+    cleanup = bool(args.get("cleanup", False))
+
+    if not _BENCHMARK_DOCS_DIR.is_dir():
+        return text_result(
+            f"Benchmark docs directory not found: {_BENCHMARK_DOCS_DIR}", is_error=True
+        )
+
+    report: dict[str, Any] = {"pipelines": {}, "summary": []}
+    created_datasets: list[str] = []
+
+    for pipeline in pipelines_to_test:
+        dataset_id = f"{prefix}_{pipeline}"
+        created_datasets.append(dataset_id)
+        entry: dict[str, Any] = {"pipeline": pipeline, "dataset_id": dataset_id}
+
+        # --- ingest ----------------------------------------------------------
+        ingest_start = time.time()
+        try:
+            with storage.sqlite_session(cfg) as conn:
+                storage.ensure_dataset(conn, dataset_id, f"Benchmark [{pipeline}]", "")
+                storage.update_dataset_metadata(
+                    conn, dataset_id, {"preferred_search_pipeline": pipeline}
+                )
+            ingest_result = _run_upload_directory(
+                cfg,
+                {
+                    "dataset_id": dataset_id,
+                    "dir_path": str(_BENCHMARK_DOCS_DIR),
+                    "pipeline": pipeline,
+                    "async": False,
+                },
+            )
+            ingest_elapsed = time.time() - ingest_start
+            entry["ingest_seconds"] = round(ingest_elapsed, 3)
+            entry["ingest_docs"] = ingest_result.get("processed_count", 0)
+            entry["ingest_errors"] = ingest_result.get("error_count", 0)
+            if ingest_result.get("error_count", 0) > 0 and ingest_result.get("processed_count", 0) == 0:
+                entry["status"] = "ingest_failed"
+                entry["error"] = str(ingest_result.get("errors", [])[:1])
+                report["pipelines"][pipeline] = entry
+                continue
+        except Exception as exc:  # noqa: BLE001
+            entry["status"] = "ingest_failed"
+            entry["error"] = str(exc)[:200]
+            report["pipelines"][pipeline] = entry
+            continue
+
+        # --- search ----------------------------------------------------------
+        query_results: list[dict[str, Any]] = []
+        for query, expected_kws in _BENCHMARK_QA:
+            q_start = time.time()
+            try:
+                with silenced_stdout():
+                    raw = retriever_api.hybrid_search(
+                        cfg,
+                        query,
+                        [dataset_id],
+                        pipeline=pipeline,
+                        top=top_n,
+                        top_k=max(top_n * 10, 50),
+                    )
+                q_elapsed = time.time() - q_start
+                contexts = [
+                    {"text": item["content"]} for item in raw.get("items", [])
+                ]
+                hit = _hit_rate(contexts, expected_kws)
+                query_results.append({
+                    "query": query,
+                    "latency_ms": round(q_elapsed * 1000, 1),
+                    "result_count": len(contexts),
+                    "hit": hit,
+                    "expected_keywords": expected_kws,
+                })
+            except Exception as exc:  # noqa: BLE001
+                query_results.append({
+                    "query": query,
+                    "latency_ms": None,
+                    "result_count": 0,
+                    "hit": False,
+                    "error": str(exc)[:120],
+                })
+
+        hits = sum(1 for q in query_results if q.get("hit"))
+        latencies = [q["latency_ms"] for q in query_results if q.get("latency_ms") is not None]
+        avg_latency = round(sum(latencies) / len(latencies), 1) if latencies else None
+        hit_rate_pct = round(hits / len(_BENCHMARK_QA) * 100, 1)
+
+        entry.update({
+            "status": "ok",
+            "hit_rate_pct": hit_rate_pct,
+            "hits": hits,
+            "total_queries": len(_BENCHMARK_QA),
+            "avg_latency_ms": avg_latency,
+            "queries": query_results,
+        })
+        report["pipelines"][pipeline] = entry
+
+    # --- cleanup -------------------------------------------------------------
+    if cleanup:
+        for ds in created_datasets:
+            try:
+                with storage.sqlite_session(cfg) as conn:
+                    conn.execute("DELETE FROM chunk_fts WHERE dataset_id = ?", (ds,))
+                    conn.execute("DELETE FROM chunks WHERE dataset_id = ?", (ds,))
+                    conn.execute("DELETE FROM documents WHERE dataset_id = ?", (ds,))
+                    conn.execute("DELETE FROM datasets WHERE dataset_id = ?", (ds,))
+                import shutil
+                shutil.rmtree(cfg.dataset_dir(ds), ignore_errors=True)
+            except Exception:  # noqa: BLE001
+                pass
+        report["cleanup"] = "datasets removed"
+    else:
+        report["cleanup"] = "datasets retained (pass cleanup=true to remove)"
+
+    # --- markdown report -----------------------------------------------------
+    lines = ["# RAG Pipeline Benchmark Report", ""]
+    lines.append(f"Benchmark docs: {_BENCHMARK_DOCS_DIR}")
+    lines.append(f"Queries per pipeline: {len(_BENCHMARK_QA)}, top_n={top_n}")
+    lines.append("")
+    lines.append("| Pipeline | Status | Ingest(s) | Avg Latency(ms) | Hit Rate |")
+    lines.append("|----------|--------|-----------|-----------------|----------|")
+    for pipeline, e in report["pipelines"].items():
+        status = e.get("status", "?")
+        ingest = f"{e['ingest_seconds']:.2f}" if "ingest_seconds" in e else "—"
+        latency = f"{e['avg_latency_ms']:.0f}" if e.get("avg_latency_ms") is not None else "—"
+        hit = f"{e['hit_rate_pct']}% ({e.get('hits', 0)}/{e.get('total_queries', len(_BENCHMARK_QA))})" if status == "ok" else "—"
+        lines.append(f"| {pipeline} | {status} | {ingest} | {latency} | {hit} |")
+
+    lines.append("")
+    lines.append("## Per-Query Results")
+    for pipeline, e in report["pipelines"].items():
+        if e.get("status") != "ok":
+            continue
+        lines.append(f"\n### {pipeline}")
+        for q in e.get("queries", []):
+            mark = "✓" if q.get("hit") else "✗"
+            lat = f"{q['latency_ms']}ms" if q.get("latency_ms") is not None else "ERROR"
+            lines.append(f"- [{mark}] {q['query']} ({lat}, {q['result_count']} results)")
+
+    report["markdown"] = "\n".join(lines)
+    report["summary"] = {
+        "total_pipelines": len(pipelines_to_test),
+        "ok": sum(1 for e in report["pipelines"].values() if e.get("status") == "ok"),
+        "failed": sum(1 for e in report["pipelines"].values() if e.get("status") != "ok"),
+    }
+
+    return text_result(report)
+
+
 HANDLERS = {
     "search": tool_search,
     "list_datasets": tool_list_datasets,
@@ -1337,4 +1551,5 @@ HANDLERS = {
     "hippo2_search": tool_hippo2_search,
     "hippo2_stats": tool_hippo2_stats,
     "pipeline_tutorial": tool_pipeline_tutorial,
+    "benchmark_pipelines": tool_benchmark_pipelines,
 }

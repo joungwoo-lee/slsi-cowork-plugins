@@ -36,6 +36,7 @@ _FLOW_REVEALED_TOOLS = {
 }
 
 _ADMIN_ONLY_TOOLS = {
+    "benchmark_pipelines",
     "create_dataset",
     "delete_dataset",
     "delete_document",
@@ -549,6 +550,45 @@ _BASE_TOOLS: list[dict[str, Any]] = [
         "name": "pipeline_tutorial",
         "description": "[Admin] Show a step-by-step guide on how to create and register a new RAG pipeline.",
         "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "benchmark_pipelines",
+        "description": (
+            "[Admin] Ingest built-in test documents into each pipeline, run 5 predefined queries, "
+            "and measure hit rate and latency per pipeline. Returns a JSON report with per-query "
+            "results and a markdown summary table. Pipelines requiring external models are "
+            "attempted but failures are recorded gracefully."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "pipelines": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Pipeline names to benchmark. Defaults to all registered pipelines. "
+                        "Example: [\"default\", \"keyword_only\"]"
+                    ),
+                },
+                "dataset_id_prefix": {
+                    "type": "string",
+                    "default": "benchmark",
+                    "description": "Prefix for ephemeral benchmark dataset IDs (e.g. 'benchmark' → 'benchmark_default').",
+                },
+                "top_n": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 20,
+                    "default": 5,
+                    "description": "Number of results to retrieve per query.",
+                },
+                "cleanup": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Delete benchmark datasets after the run. Set true to avoid leaving test data.",
+                },
+            },
+        },
     },
 ]
 

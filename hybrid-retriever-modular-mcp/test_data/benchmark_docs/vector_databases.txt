@@ -1,0 +1,61 @@
+Vector Databases and Embedding Storage
+
+Vector databases are specialized storage systems optimized for high-dimensional vector
+similarity search. They power semantic search, recommendation systems, and RAG pipelines.
+
+## Key Concepts
+
+### Embeddings
+Text, images, and other data are converted to dense numerical vectors (embeddings)
+by neural network models. Semantically similar items produce geometrically close vectors.
+
+### Similarity Metrics
+- Cosine similarity: angle between vectors (most common for NLP)
+- Dot product: inner product, efficient for normalized vectors
+- Euclidean distance: L2 distance in vector space
+
+### Approximate Nearest Neighbor (ANN)
+Exact search over millions of vectors is too slow. ANN algorithms approximate the nearest
+neighbors with tunable accuracy/speed tradeoffs:
+- HNSW (Hierarchical Navigable Small World): graph-based, state-of-the-art speed
+- IVF (Inverted File Index): cluster-based partitioning
+- Product Quantization (PQ): vector compression for memory efficiency
+
+## Popular Vector Databases
+
+### Qdrant
+Open-source vector database written in Rust. Features:
+- HNSW index with payload filtering
+- On-disk storage for large datasets
+- Sparse vector support for hybrid search
+- gRPC and REST APIs
+
+### FAISS (Facebook AI Similarity Search)
+Library by Meta for efficient similarity search:
+- CPU and GPU support
+- Multiple index types (Flat, IVF, HNSW, PQ)
+- Used as an in-memory index
+
+### Chroma
+Embedded vector database popular in LangChain applications:
+- Simple Python API
+- Persistent and in-memory modes
+
+### Pinecone
+Managed cloud vector database:
+- Serverless architecture
+- Built-in metadata filtering
+
+## Hybrid Sparse-Dense Search
+
+Modern vector databases support sparse vectors alongside dense vectors.
+Sparse vectors (like BM25 weights) handle exact keyword matches while
+dense vectors handle semantic similarity. Qdrant's sparse vector support
+enables native hybrid search without a separate keyword search engine.
+
+## Filtering and Metadata
+
+Vector search can be combined with metadata filters to restrict results:
+- Date ranges, author filters, category filters
+- Pre-filtering (filter before ANN) vs post-filtering (filter after ANN)
+- Qdrant uses HNSW with payload index for efficient filtered search

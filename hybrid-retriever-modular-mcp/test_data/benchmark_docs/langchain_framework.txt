@@ -1,0 +1,69 @@
+LangChain Framework for LLM Applications
+
+LangChain is an open-source framework for building applications powered by large language
+models. It provides abstractions and integrations for chaining LLM calls with tools,
+memory, and data sources.
+
+## Core Abstractions
+
+### Chains
+Chains link multiple LLM calls or operations in sequence:
+- LLMChain: single prompt + LLM call
+- SequentialChain: chains where output of one feeds the next
+- RouterChain: routes to different chains based on input classification
+- RetrievalQA: retrieval + QA chain for RAG
+
+### Agents
+Agents use LLMs as reasoning engines to decide which tools to call:
+- ReAct (Reason + Act): alternates between thinking and tool use
+- OpenAI Function Calling agent: structured tool invocation
+- Tool-use agents browse web, run code, query databases
+
+### Tools
+Tools give agents capabilities:
+- Search tools (Tavily, SerpAPI, DuckDuckGo)
+- Code execution (Python REPL)
+- Database query (SQLDatabaseTool)
+- Custom tools via @tool decorator
+
+### Memory
+Memory components persist conversation context:
+- ConversationBufferMemory: stores full conversation history
+- ConversationSummaryMemory: summarizes older messages
+- VectorStoreRetrieverMemory: retrieves relevant past exchanges
+
+## LangChain Expression Language (LCEL)
+
+LCEL uses pipe operators to compose chains declaratively:
+```python
+chain = prompt | llm | output_parser
+result = chain.invoke({"question": "What is RAG?"})
+```
+LCEL supports streaming, async execution, and parallel branches.
+
+## LangGraph
+
+LangGraph extends LangChain for stateful, multi-actor applications:
+- Graph-based workflow definition
+- Persistent state between steps
+- Conditional edges for branching logic
+- Supports complex agent orchestration patterns
+
+## Integrations
+
+LangChain integrates with:
+- LLM providers: OpenAI, Anthropic, Cohere, Hugging Face
+- Vector stores: Qdrant, Chroma, FAISS, Pinecone, Weaviate
+- Document loaders: PDF, Word, HTML, CSV, Notion, Slack
+- Embedding models: OpenAI, Sentence Transformers, Cohere
+
+## LangSmith
+
+LangSmith is LangChain's observability platform:
+- Traces every LLM call, tool invocation, and chain step
+- Evaluation datasets for measuring RAG pipeline accuracy
+- Prompt management and versioning
+- Production monitoring and alerting
+
+LangChain is widely used for building chatbots, document QA systems,
+autonomous agents, and multi-modal AI applications.
