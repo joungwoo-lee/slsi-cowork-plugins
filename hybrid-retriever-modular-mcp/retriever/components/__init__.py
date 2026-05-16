@@ -15,6 +15,8 @@ from .vector_retriever import LocalQdrantRetriever, LocalQdrantWriter
 from .hybrid_joiner import HybridJoiner
 from .parent_replace import ParentChunkReplacer
 from .bge_reranker import BgeReranker
+from .hipporag_retriever import HippoRAGRetriever
+from .hippo_graph_retriever import HippoGraphRetriever
 
 __all__ = [
     "EmailSourceLoader",
@@ -31,4 +33,6 @@ __all__ = [
     "HybridJoiner",
     "ParentChunkReplacer",
     "BgeReranker",
+    "HippoRAGRetriever",
+    "HippoGraphRetriever",
 ]

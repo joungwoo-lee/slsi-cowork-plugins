@@ -60,9 +60,23 @@
       "reranker_model": "BAAI/bge-reranker-v2-m3",
       "rerank_top_n": 12
     },
-    "search_kwargs": {
-      "fusion": "rrf"
+      "search_kwargs": {
+        "fusion": "rrf"
+      },
+      "unified_topology": "rrf_graph_rerank_unified.json"
     },
-    "unified_topology": "rrf_graph_rerank_unified.json"
+    "hippo_graph_rrf": {
+      "indexing_overrides": {},
+      "retrieval_overrides": {
+        "fusion": "rrf",
+        "use_reranker": true,
+        "reranker_model": "BAAI/bge-reranker-v2-m3",
+        "rerank_top_n": 12
+      },
+      "search_kwargs": {
+        "fusion": "rrf"
+      },
+      "unified_topology": "hippo_graph_rrf_unified.json"
+    }
   }
-}
+
