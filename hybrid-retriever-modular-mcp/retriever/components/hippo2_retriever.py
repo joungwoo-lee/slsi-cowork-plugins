@@ -10,7 +10,7 @@ from typing import List
 from haystack import Document, component
 
 from .. import storage
-from ..config import Config
+from ..config import load_config
 from ..hippo2 import query as hippo2_query
 from ..hippo2 import ppr as hippo2_ppr
 
@@ -23,7 +23,7 @@ class Hippo2Retriever:
         self.data_root = data_root
         self._ppr_engine = None
 
-    def _get_ppr_engine(self, cfg: Config) -> hippo2_ppr.PPREngine:
+    def _get_ppr_engine(self, cfg) -> hippo2_ppr.PPREngine:
         if self._ppr_engine is None:
             self._ppr_engine = hippo2_ppr.PPREngine(cfg, cfg.hippo2)
         return self._ppr_engine
@@ -39,7 +39,8 @@ class Hippo2Retriever:
         if not enabled or not query or not dataset_ids or not self.data_root:
             return {"documents": []}
 
-        cfg = Config(data_root=Path(self.data_root))
+        cfg = load_config()
+        cfg.data_root = Path(self.data_root)
         if not cfg.llm or not cfg.llm.is_configured:
             return {"documents": []}
 
@@ -67,7 +68,16 @@ class Hippo2Retriever:
                 "position": int(chunk["position"]),
                 "hippo_rank": rank,
                 "hippo_score": float(chunk["score"]),
+                "graph_score": float(chunk["score"]),
+                "passage_node_score": float(chunk.get("passage_node_score", 0.0)),
+                "entity_ppr_score": float(chunk.get("entity_ppr_score", 0.0)),
                 "matched_entities": chunk.get("matched_entities", []),
+                "metadata": {
+                    "matched_entities": chunk.get("matched_entities", []),
+                    "passage_node_score": float(chunk.get("passage_node_score", 0.0)),
+                    "entity_ppr_score": float(chunk.get("entity_ppr_score", 0.0)),
+                    "online_filter": chunk.get("online_filter", ""),
+                },
             }
             docs.append(
                 Document(

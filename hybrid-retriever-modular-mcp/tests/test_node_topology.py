@@ -84,6 +84,7 @@ class NodeTopologyTest(unittest.TestCase):
         for name in [
             "default_unified.json",
             "email_unified.json",
+            "hippo2_unified.json",
             "hippo2_graph_rrf_unified.json",
             "keyword_only_unified.json",
             "rrf_graph_rerank_unified.json",

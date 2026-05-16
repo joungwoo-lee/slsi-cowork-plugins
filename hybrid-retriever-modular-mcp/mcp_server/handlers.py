@@ -17,7 +17,6 @@ from retriever import graph as retriever_graph
 from retriever import storage
 from retriever.config import load_config
 from retriever.hippo2 import index as hippo2_index
-from retriever.hippo2 import query as hippo2_query
 from retriever.hippo2 import ppr as hippo2_ppr
 from retriever.hippo2 import synonyms as hippo2_synonyms
 from retriever.pipelines import editor_store
@@ -172,54 +171,6 @@ def _answer_instructions_for(pipeline_name: str) -> str:
     return _pipeline_answer_template(profile)
 
 
-def _hippo2_to_search_payload(query: str, dataset_ids: list[str], result, *, pipeline_name: str = "hippo2") -> dict:
-    contexts: list[dict[str, Any]] = []
-    citations: list[dict[str, Any]] = []
-    for c in result.chunks:
-        contexts.append({
-            "text": c["content"],
-            "source": {
-                "dataset_id": c["dataset_id"],
-                "document_id": c["document_id"],
-                "document_name": c["document_name"],
-                "position": c["position"],
-                "chunk_id": c["chunk_id"],
-                "similarity": c["score"],
-                "vector_similarity": 0.0,
-                "term_similarity": 0.0,
-                "metadata": {},
-                "search_pipeline": pipeline_name,
-                "matched_entities": c.get("matched_entities", []),
-                "passage_node_score": c.get("passage_node_score", 0.0),
-                "entity_ppr_score": c.get("entity_ppr_score", 0.0),
-                "online_filter": c.get("online_filter", ""),
-            },
-        })
-        citations.append({
-            "document_name": c["document_name"],
-            "position": c["position"],
-            "score": c["score"],
-            "chunk_id": c["chunk_id"],
-        })
-    return {
-        "query": query,
-        "dataset_ids": dataset_ids,
-        "total": len(result.chunks),
-        "contexts": contexts,
-        "citations": citations,
-        "search_pipeline": pipeline_name,
-        "query_entities": getattr(result, "query_entities", []),
-        "seed_passages": getattr(result, "seed_passages", []),
-        "matched_triples": getattr(result, "matched_triples", []),
-        "top_ppr_passages": [
-            {"chunk_id": chunk_id, "score": round(score, 6)}
-            for chunk_id, score in getattr(result, "ppr_passages_top", [])
-        ],
-        "online_filter": getattr(result, "online_filter", {"enabled": False}),
-        "answer_instructions": _answer_instructions_for(pipeline_name),
-    }
-
-
 def _upload_args_from_unified(args: dict) -> dict:
     ds = _require_str(args, "dataset_id")
     path_str = _require_str(args, "path")
@@ -230,6 +181,8 @@ def _upload_args_from_unified(args: dict) -> dict:
     path = Path(path_str)
     if path.is_file():
         pipeline_name = _pipeline_name(args)
+        if bool(args.get("auto_hippo2", False)):
+            pipeline_name = "hippo2"
         return {
             "dataset_id": ds,
             "file_path": str(path),
@@ -237,10 +190,11 @@ def _upload_args_from_unified(args: dict) -> dict:
             "skip_embedding": bool(args.get("skip_embedding", False)),
             "metadata": args.get("metadata") if isinstance(args.get("metadata"), dict) else None,
             "pipeline": pipeline_name,
-            "auto_hippo2": bool(args.get("auto_hippo2", pipeline_name == "hippo2")),
         }
     if path.is_dir():
         pipeline_name = _pipeline_name(args)
+        if bool(args.get("auto_hippo2", False)):
+            pipeline_name = "hippo2"
         # Email-MCP converted directories (mail_*/meta.json + body.md) are
         # one email per directory, not a bulk folder. Route them through the
         # single-document path so email_loader sees the directory it expects.
@@ -252,7 +206,6 @@ def _upload_args_from_unified(args: dict) -> dict:
                 "skip_embedding": bool(args.get("skip_embedding", False)),
                 "metadata": args.get("metadata") if isinstance(args.get("metadata"), dict) else None,
                 "pipeline": pipeline_name,
-                "auto_hippo2": bool(args.get("auto_hippo2", pipeline_name == "hippo2")),
             }
         payload = {
             "dataset_id": ds,
@@ -261,7 +214,6 @@ def _upload_args_from_unified(args: dict) -> dict:
             "skip_embedding": bool(args.get("skip_embedding", False)),
             "metadata": args.get("metadata") if isinstance(args.get("metadata"), dict) else None,
             "pipeline": pipeline_name,
-            "auto_hippo2": bool(args.get("auto_hippo2", pipeline_name == "hippo2")),
         }
         if isinstance(args.get("file_extension"), str) and args.get("file_extension"):
             payload["file_extension"] = args.get("file_extension")
@@ -278,7 +230,8 @@ def _run_upload_document(cfg, args: dict, *, job_id: str | None = None) -> dict:
         raise ValueError("file_path is required")
     pipeline_name = _pipeline_name(args)
     metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
-    auto_hippo2 = bool(args.get("auto_hippo2", pipeline_name == "hippo2"))
+    if bool(args.get("auto_hippo2", False)):
+        pipeline_name = "hippo2"
     if job_id:
         _job_progress(cfg, job_id, 5, "indexing document")
     with silenced_stdout():
@@ -291,27 +244,13 @@ def _run_upload_document(cfg, args: dict, *, job_id: str | None = None) -> dict:
             use_hierarchical=args.get("use_hierarchical"),
             metadata=metadata,
         )
-    hippo2_summary: dict | None = None
-    if auto_hippo2:
-        doc_id = isinstance(out, dict) and out.get("document_id") or ""
-        if doc_id:
-            try:
-                if job_id:
-                    _job_progress(cfg, job_id, 70, "running hippo2")
-                with silenced_stdout():
-                    with storage.sqlite_session(cfg) as sconn:
-                        hippo2_summary = hippo2_index.index_document(
-                            cfg, sconn, doc_id, rebuild_synonyms_after=False
-                        )
-            except Exception as exc:  # noqa: BLE001
-                hippo2_summary = {"error": str(exc)}
     _mark_dataset_ingest_profile(
         cfg,
         ds,
         pipeline_name=pipeline_name,
         content_kind="email" if pipeline_name == "email" else "document",
         has_vectors=bool(isinstance(out, dict) and out.get("has_vector")),
-        hippo2_ready=bool(hippo2_summary and not hippo2_summary.get("error")),
+        hippo2_ready=(pipeline_name == "hippo2"),
     )
     if job_id:
         _job_progress(cfg, job_id, 95, "finalizing")
@@ -319,7 +258,6 @@ def _run_upload_document(cfg, args: dict, *, job_id: str | None = None) -> dict:
         "dataset_id": ds,
         "file": fp,
         "response": out,
-        **({"hippo2": hippo2_summary} if hippo2_summary is not None else {}),
     }
 
 
@@ -337,10 +275,11 @@ def _run_upload_directory(cfg, args: dict, *, job_id: str | None = None) -> dict
     if ext and not ext.startswith("."):
         ext = "." + ext
     pipeline_name = _pipeline_name(args)
+    if bool(args.get("auto_hippo2", False)):
+        pipeline_name = "hippo2"
     metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
     skip_embedding = bool(args.get("skip_embedding", False))
     use_hierarchical = args.get("use_hierarchical")
-    auto_hippo2 = bool(args.get("auto_hippo2", pipeline_name == "hippo2"))
 
     paths: list[Path] = []
     for file_path in dir_path.rglob("*"):
@@ -375,25 +314,13 @@ def _run_upload_directory(cfg, args: dict, *, job_id: str | None = None) -> dict
             except Exception as exc:  # noqa: BLE001
                 errors.append({"file": str(file_path), "error": str(exc)})
 
-    hippo2_summary: dict | None = None
-    if auto_hippo2 and results:
-        try:
-            if job_id:
-                _job_progress(cfg, job_id, 85, "running hippo2")
-            with silenced_stdout():
-                with storage.sqlite_session(cfg) as sconn:
-                    hippo2_summary = hippo2_index.index_dataset(
-                        cfg, sconn, ds, rebuild_synonyms_after=True
-                    )
-        except Exception as exc:  # noqa: BLE001
-            hippo2_summary = {"error": str(exc)}
     _mark_dataset_ingest_profile(
         cfg,
         ds,
         pipeline_name=pipeline_name,
         content_kind="email" if pipeline_name == "email" else "document",
         has_vectors=any(bool((item.get("response") or {}).get("has_vector")) for item in results),
-        hippo2_ready=bool(hippo2_summary and not hippo2_summary.get("error")),
+        hippo2_ready=(pipeline_name == "hippo2" and bool(results)),
     )
     if job_id:
         _job_progress(cfg, job_id, 95, "finalizing")
@@ -404,7 +331,6 @@ def _run_upload_directory(cfg, args: dict, *, job_id: str | None = None) -> dict
         "error_count": len(errors),
         "results": results,
         "errors": errors,
-        **({"hippo2": hippo2_summary} if hippo2_summary is not None else {}),
     }
 
 
@@ -655,29 +581,6 @@ def tool_search(args: dict) -> dict:
     except (TypeError, ValueError):
         similarity_threshold = 0.0
     similarity_threshold = max(0.0, min(1.0, similarity_threshold))
-
-    if pipeline_name == "hippo2":
-        try:
-            with silenced_stdout():
-                with storage.sqlite_session(cfg) as sconn:
-                    engine = _ppr_engine(cfg)
-                    result = hippo2_query.search(
-                        cfg,
-                        sconn,
-                        engine,
-                        query.strip(),
-                        datasets,
-                        top_chunks=_safe_int(args, "top_n", cfg.hippo2.top_chunks, lo=1, hi=100),
-                    )
-            if similarity_threshold > 0.0:
-                # Hippo2 returns a dataclass-like result; filter its chunks
-                # in place so the payload builder sees only chunks at/above
-                # the floor.
-                result.chunks = [c for c in result.chunks
-                                 if float(c.get("score") or 0.0) >= similarity_threshold]
-            return text_result(_hippo2_to_search_payload(query.strip(), datasets, result, pipeline_name=pipeline_name))
-        except Exception as exc:  # noqa: BLE001
-            return text_result(f"search failed: {exc}", is_error=True)
 
     with silenced_stdout():
         data = retriever_api.hybrid_search(
@@ -1362,30 +1265,22 @@ def tool_hippo2_search(args: dict) -> dict:
     top = _safe_int(args, "top_n", cfg.hippo2.top_chunks, lo=1, hi=100)
     try:
         with silenced_stdout():
-            with storage.sqlite_session(cfg) as sconn:
-                engine = _ppr_engine(cfg)
-                result = hippo2_query.search(
-                    cfg, sconn, engine, q, dataset_ids, top_chunks=top,
-                )
+            data = retriever_api.hybrid_search(
+                cfg,
+                q,
+                dataset_ids,
+                pipeline="hippo2",
+                top=top,
+                top_k=max(top, _safe_int(args, "top_k", 200, lo=1, hi=500)),
+            )
     except Exception as exc:  # noqa: BLE001
         return text_result(f"hippo2_search failed: {exc}", is_error=True)
     return text_result({
         "query": q,
         "dataset_ids": dataset_ids,
-        "query_entities": result.query_entities,
-        "seed_entities": result.seed_entities,
-        "seed_passages": result.seed_passages,
-        "top_ppr_entities": [
-            {"entity_id": eid, "score": round(score, 6)}
-            for eid, score in result.ppr_entities_top
-        ],
-        "top_ppr_passages": [
-            {"chunk_id": chunk_id, "score": round(score, 6)}
-            for chunk_id, score in result.ppr_passages_top
-        ],
-        "matched_triples": result.matched_triples,
-        "online_filter": result.online_filter,
-        "chunks": result.chunks,
+        "pipeline": "hippo2",
+        "total": data["total"],
+        "chunks": data["items"],
     })
 
 

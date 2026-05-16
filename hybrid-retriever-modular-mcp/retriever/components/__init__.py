@@ -17,6 +17,7 @@ from .rrf_joiner import RrfJoiner
 from .hybrid_joiner import HybridJoiner
 from .parent_replace import ParentChunkReplacer
 from .bge_reranker import BgeReranker
+from .hippo2_indexer import Hippo2Indexer
 from .hippo2_retriever import Hippo2Retriever
 from .hippo2_graph_retriever import Hippo2GraphRetriever
 
@@ -37,6 +38,7 @@ __all__ = [
     "HybridJoiner",
     "ParentChunkReplacer",
     "BgeReranker",
+    "Hippo2Indexer",
     "Hippo2Retriever",
     "Hippo2GraphRetriever",
 ]

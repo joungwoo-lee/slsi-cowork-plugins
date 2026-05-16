@@ -232,7 +232,11 @@ _BASE_TOOLS: list[dict[str, Any]] = [
                     "default": "default",
                     "description": "Named ingest pipeline profile used to define the dataset's indexing behavior.",
                 },
-                "auto_hippo2": {"type": "boolean", "default": False},
+                "auto_hippo2": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Compatibility alias for pipeline='hippo2'. Hippo2 indexing still runs via hippo2_unified.json components.",
+                },
             },
             "required": ["dataset_id", "path"],
         },

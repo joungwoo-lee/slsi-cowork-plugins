@@ -29,6 +29,7 @@ SHIPPED_TOPOLOGIES = [
     "rrf_rerank_unified.json",
     "rrf_llm_rerank_unified.json",
     "rrf_graph_rerank_unified.json",
+    "hippo2_unified.json",
     "hippo2_graph_rrf_unified.json",
     "rrf_rerank_retrieval.json",
     "rrf_llm_rerank_retrieval.json",
