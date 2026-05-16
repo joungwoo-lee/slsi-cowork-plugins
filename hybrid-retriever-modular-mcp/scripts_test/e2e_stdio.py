@@ -138,8 +138,7 @@ def main() -> int:
         sample.write_text(
             "# 모듈러 RAG 노트\n\n"
             "이 문서는 Haystack 파이프라인과 Hypster 설정 공간을 합쳐 "
-            "검색 엔진을 모듈러로 분해한 사례입니다. RRF fusion과 linear "
-            "fusion 두 가지 모드를 모두 지원합니다.\n\n"
+            "검색 엔진을 모듈러로 분해한 사례입니다. 기본 제공 파이프라인은 RRF fusion을 사용합니다.\n\n"
             "Modular RAG decomposes retrieval into reusable components.",
             encoding="utf-8",
         )
@@ -194,7 +193,7 @@ def main() -> int:
         assert chunks["payload"], "expected chunks"
         print(f"[ok] list_chunks ({len(chunks['payload'])})")
 
-        # 7. search — Korean keyword, linear fusion (default)
+        # 7. search — Korean keyword, RRF fusion (default)
         s1 = call_tool(
             "search",
             {
@@ -202,7 +201,7 @@ def main() -> int:
                 "dataset_ids": [dataset_id],
                 "top_n": 5,
                 "vector_similarity_weight": 0.0,
-                "fusion": "linear",
+                "fusion": "rrf",
             },
         )
         assert not s1["isError"], s1
@@ -210,7 +209,7 @@ def main() -> int:
         first_ctx = s1["payload"]["contexts"][0]
         assert first_ctx["source"]["chunk_id"].startswith(document_id), first_ctx
         print(
-            "[ok] search linear/korean: "
+            "[ok] search rrf/korean: "
             f"total={s1['payload']['total']}, top_score={first_ctx['source']['similarity']}"
         )
 
@@ -246,7 +245,7 @@ def main() -> int:
                 "dataset_ids": [dataset_id],
                 "top_n": 5,
                 "vector_similarity_weight": 0.0,
-                "fusion": "linear",
+                "fusion": "rrf",
                 "pipeline": "default",
             },
         )
@@ -268,7 +267,7 @@ def main() -> int:
                 "top_n": 5,
                 # Try to enable vectors -- the profile must override and force them off.
                 "vector_similarity_weight": 0.9,
-                "fusion": "linear",
+                "fusion": "rrf",
                 "pipeline": "keyword_only",
             },
         )
@@ -312,7 +311,7 @@ def main() -> int:
         long_para = (
             "Haystack 컴포넌트는 입력과 출력 타입이 정해진 작은 블록입니다. "
             "Hypster는 이런 블록을 모듈러하게 조합하기 위한 설정 공간을 제공합니다. "
-            "RRF fusion, linear fusion, parent-child chunking은 모두 독립 컴포넌트로 분해됩니다.\n\n"
+            "RRF fusion과 parent-child chunking은 모두 독립 컴포넌트로 분해됩니다.\n\n"
         )
         large_path.write_text((long_para * 12) + "End of doc.", encoding="utf-8")
         up2 = call_tool(
@@ -342,7 +341,7 @@ def main() -> int:
                 "dataset_ids": [dataset_id],
                 "top_n": 3,
                 "vector_similarity_weight": 0.0,
-                "fusion": "linear",
+                "fusion": "rrf",
                 "parent_chunk_replace": True,
             },
         )

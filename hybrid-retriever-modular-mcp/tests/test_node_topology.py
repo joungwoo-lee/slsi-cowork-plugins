@@ -79,6 +79,23 @@ class NodeTopologyTest(unittest.TestCase):
         self.assertNotIn("query_embedder", pipeline.graph.nodes)
         self.assertNotIn("vector", pipeline.graph.nodes)
 
+    def test_all_shipped_pipelines_use_rrf_joiner(self) -> None:
+        pipelines_dir = Path(__file__).resolve().parent.parent / "retriever" / "pipelines"
+        for name in [
+            "default_unified.json",
+            "email_unified.json",
+            "hippo_graph_rrf_unified.json",
+            "keyword_only_unified.json",
+            "rrf_graph_rerank_unified.json",
+            "rrf_llm_rerank_retrieval.json",
+            "rrf_llm_rerank_unified.json",
+            "rrf_rerank_retrieval.json",
+            "rrf_rerank_unified.json",
+        ]:
+            raw = json.loads((pipelines_dir / name).read_text("utf-8"))
+            joiner = next(node for node in raw["nodes"] if node["name"] == "joiner")
+            self.assertEqual(joiner["module"], "retriever.components.rrf_joiner.RrfJoiner", name)
+
 
 if __name__ == "__main__":
     unittest.main()

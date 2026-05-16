@@ -12,6 +12,8 @@ from .fts5_retriever import Fts5Retriever
 from .fts5_writer import SqliteFts5Writer
 from .graph_retriever import GraphChunkRetriever
 from .vector_retriever import LocalQdrantRetriever, LocalQdrantWriter
+from .linear_joiner import LinearJoiner
+from .rrf_joiner import RrfJoiner
 from .hybrid_joiner import HybridJoiner
 from .parent_replace import ParentChunkReplacer
 from .bge_reranker import BgeReranker
@@ -30,6 +32,8 @@ __all__ = [
     "GraphChunkRetriever",
     "LocalQdrantRetriever",
     "LocalQdrantWriter",
+    "LinearJoiner",
+    "RrfJoiner",
     "HybridJoiner",
     "ParentChunkReplacer",
     "BgeReranker",

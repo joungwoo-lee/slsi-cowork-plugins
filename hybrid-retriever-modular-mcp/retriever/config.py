@@ -115,7 +115,7 @@ class IngestConfig:
 @dataclass
 class SearchConfig:
     hybrid_alpha: float = 0.5
-    fusion: str = "linear"
+    fusion: str = "rrf"
     rrf_k: int = 60
     parent_chunk_replace: bool = True
 
@@ -260,7 +260,7 @@ def load_config(env_path: str | os.PathLike[str] | None = None) -> Config:
         ),
         search=SearchConfig(
             hybrid_alpha=_float(os.getenv("HYBRID_ALPHA"), 0.5),
-            fusion=os.getenv("RETRIEVER_FUSION", "linear").strip().lower(),
+            fusion=os.getenv("RETRIEVER_FUSION", "rrf").strip().lower(),
             rrf_k=_int(os.getenv("RRF_K"), 60),
             parent_chunk_replace=_bool(os.getenv("ENABLE_PARENT_CHILD_CHUNKING"), True),
         ),

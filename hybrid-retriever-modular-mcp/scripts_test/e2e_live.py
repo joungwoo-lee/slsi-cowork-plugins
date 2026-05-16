@@ -145,7 +145,7 @@ def main() -> int:
                 "dataset_ids": [dataset_id],
                 "top_n": 5,
                 "vector_similarity_weight": 0.0,
-                "fusion": "linear",
+                "fusion": "rrf",
             },
         )
         assert not s_kw["isError"], s_kw
@@ -165,7 +165,7 @@ def main() -> int:
                 "dataset_ids": [dataset_id],
                 "top_n": 5,
                 "vector_similarity_weight": 0.6,
-                "fusion": "linear",
+                "fusion": "rrf",
                 "parent_chunk_replace": True,
             },
         )
@@ -225,7 +225,7 @@ def main() -> int:
                 "top_n": 3,
                 # Try to enable vectors -- profile must force them off.
                 "vector_similarity_weight": 0.9,
-                "fusion": "linear",
+                "fusion": "rrf",
                 "pipeline": "keyword_only",
             },
         )
@@ -249,7 +249,7 @@ def main() -> int:
                 "dataset_ids": [dataset_id],
                 "top_n": 3,
                 "vector_similarity_weight": 0.6,
-                "fusion": "linear",
+                "fusion": "rrf",
                 "pipeline": "default",
             },
         )

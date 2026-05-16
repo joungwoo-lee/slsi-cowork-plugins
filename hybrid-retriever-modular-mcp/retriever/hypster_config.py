@@ -36,7 +36,7 @@ def compose_defaults(cfg: Config) -> dict[str, dict[str, Any]]:
             "skip_embedding": False,
         },
         "retrieval": {
-            "fusion": cfg.search.fusion or "linear",
+            "fusion": cfg.search.fusion or "rrf",
             "hybrid_alpha": cfg.search.hybrid_alpha,
             "rrf_k": cfg.search.rrf_k,
             "parent_chunk_replace": cfg.search.parent_chunk_replace,
@@ -66,7 +66,7 @@ def indexing_config(hp) -> dict[str, Any]:
 
 def retrieval_config(hp) -> dict[str, Any]:
     """Hypster retrieval space. Returns fusion / weighting / paging knobs."""
-    fusion = hp.select(["linear", "rrf"], default="linear", name="fusion")
+    fusion = hp.select(["linear", "rrf"], default="rrf", name="fusion")
     hybrid_alpha = hp.float(0.5, name="hybrid_alpha", min=0.0, max=1.0)
     rrf_k = hp.int(60, name="rrf_k", min=1)
     parent_chunk_replace = hp.bool(True, name="parent_chunk_replace")

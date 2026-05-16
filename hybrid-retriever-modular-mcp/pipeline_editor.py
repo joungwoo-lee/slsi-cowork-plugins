@@ -213,20 +213,32 @@ CATALOG: list[dict] = [
         "outputs": [{"name": "documents", "type": "List[Document]"}],
     },
     {
-        "name": "HybridJoiner",
-        "cls": "retriever.components.hybrid_joiner.HybridJoiner",
+        "name": "LinearJoiner",
+        "cls": "retriever.components.linear_joiner.LinearJoiner",
         "stage": "fuse",
         "params": [
-            {"name": "fusion", "type": "str", "default": "linear"},
-            {"name": "vector_weight", "type": "float", "default": 0.5},
-            {"name": "rrf_k", "type": "int", "default": 60},
+            {"name": "vector_weight", "type": "float", "default": 0.5}
         ],
         "inputs": [
             {"name": "keyword_documents", "type": "List[Document]"},
             {"name": "semantic_documents", "type": "List[Document]"},
             {"name": "graph_documents", "type": "List[Document]"},
-            {"name": "fusion", "type": "str"},
             {"name": "vector_weight", "type": "float"},
+            {"name": "metadata_condition", "type": "dict"},
+        ],
+        "outputs": [{"name": "documents", "type": "List[Document]"}],
+    },
+    {
+        "name": "RrfJoiner",
+        "cls": "retriever.components.rrf_joiner.RrfJoiner",
+        "stage": "fuse",
+        "params": [
+            {"name": "rrf_k", "type": "int", "default": 60}
+        ],
+        "inputs": [
+            {"name": "keyword_documents", "type": "List[Document]"},
+            {"name": "semantic_documents", "type": "List[Document]"},
+            {"name": "graph_documents", "type": "List[Document]"},
             {"name": "rrf_k", "type": "int"},
             {"name": "metadata_condition", "type": "dict"},
         ],

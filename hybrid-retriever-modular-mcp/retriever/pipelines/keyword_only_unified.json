@@ -52,7 +52,7 @@
     },
     {
       "name": "joiner",
-      "module": "retriever.components.hybrid_joiner.HybridJoiner",
+      "module": "retriever.components.rrf_joiner.RrfJoiner",
       "params": {},
       "inputs": [
         {

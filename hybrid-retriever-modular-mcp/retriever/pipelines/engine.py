@@ -403,7 +403,7 @@ def run_retrieval(
     if cfg.embedding is None or not cfg.embedding.is_configured:
         weight = 0.0
 
-    effective_fusion = (fusion or retrieval_opts.get("fusion") or "linear").lower()
+    effective_fusion = (fusion or retrieval_opts.get("fusion") or "rrf").lower()
     effective_parent = bool(
         parent_chunk_replace if parent_chunk_replace is not None
         else retrieval_opts.get("parent_chunk_replace", True)

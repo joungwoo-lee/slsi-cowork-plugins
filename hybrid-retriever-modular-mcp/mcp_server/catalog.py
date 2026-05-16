@@ -132,7 +132,7 @@ _BASE_TOOLS: list[dict[str, Any]] = [
                     "default": 0.0,
                 },
                 "keyword": {"type": "boolean", "default": True},
-                "fusion": {"type": "string", "enum": ["linear", "rrf"], "default": "linear"},
+                "fusion": {"type": "string", "enum": ["linear", "rrf"], "default": "rrf"},
                 "parent_chunk_replace": {"type": "boolean", "default": True},
                 "metadata_condition": {
                     "type": "object",

@@ -1,13 +1,20 @@
 {
   "default": {
     "indexing_overrides": {},
-    "retrieval_overrides": {},
-    "search_kwargs": {},
+    "retrieval_overrides": {
+      "fusion": "rrf"
+    },
+    "search_kwargs": {
+      "fusion": "rrf"
+    },
     "unified_topology": "default_unified.json"
   },
   "keyword_only": {
     "indexing_overrides": {
       "skip_embedding": true
+    },
+    "retrieval_overrides": {
+      "fusion": "rrf"
     },
     "search_kwargs": {
       "vector_similarity_weight": 0.0,
@@ -19,13 +26,23 @@
     "indexing_overrides": {
       "use_hierarchical": "false"
     },
+    "retrieval_overrides": {
+      "fusion": "rrf"
+    },
+    "search_kwargs": {
+      "fusion": "rrf"
+    },
     "unified_topology": "email_unified.json"
   },
   "hippo2": {
     "description": "Use when: you want HippoRAG2-style memory retrieval. Ingest keeps passage embeddings/Qdrant, then runs OpenIE plus entity/fact embeddings; search combines fact/entity seeding, dense passage fallback, and PPR scoring.",
     "indexing_overrides": {},
-    "retrieval_overrides": {},
-    "search_kwargs": {},
+    "retrieval_overrides": {
+      "fusion": "rrf"
+    },
+    "search_kwargs": {
+      "fusion": "rrf"
+    },
     "unified_topology": "default_unified.json"
   },
   "rrf_rerank": {
@@ -60,23 +77,22 @@
       "reranker_model": "BAAI/bge-reranker-v2-m3",
       "rerank_top_n": 12
     },
-      "search_kwargs": {
-        "fusion": "rrf"
-      },
-      "unified_topology": "rrf_graph_rerank_unified.json"
+    "search_kwargs": {
+      "fusion": "rrf"
     },
-    "hippo_graph_rrf": {
-      "indexing_overrides": {},
-      "retrieval_overrides": {
-        "fusion": "rrf",
-        "use_reranker": true,
-        "reranker_model": "BAAI/bge-reranker-v2-m3",
-        "rerank_top_n": 12
-      },
-      "search_kwargs": {
-        "fusion": "rrf"
-      },
-      "unified_topology": "hippo_graph_rrf_unified.json"
-    }
+    "unified_topology": "rrf_graph_rerank_unified.json"
+  },
+  "hippo_graph_rrf": {
+    "indexing_overrides": {},
+    "retrieval_overrides": {
+      "fusion": "rrf",
+      "use_reranker": true,
+      "reranker_model": "BAAI/bge-reranker-v2-m3",
+      "rerank_top_n": 12
+    },
+    "search_kwargs": {
+      "fusion": "rrf"
+    },
+    "unified_topology": "hippo_graph_rrf_unified.json"
   }
-
+}
