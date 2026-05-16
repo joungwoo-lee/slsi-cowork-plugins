@@ -31,15 +31,13 @@ Claude / 다른 MCP 클라이언트
 | 도구 | 설명 |
 |---|---|
 | `search` | dataset metadata를 보고 자동으로 검색 경로를 선택해 chunk를 검색. 일반 hybrid / email / HippoRAG 경로를 서버가 내부적으로 결정 |
-| `list_datasets`, `get_dataset`, `create_dataset`, `delete_dataset` | 데이터셋 관리 |
+| `list_datasets`, `get_dataset` | 데이터셋 목록/상세 조회. `use_when`과 dataset metadata 확인 |
 | `upload` | 파일/폴더 경로를 자동 판별해 ingest. 기본 `async=true`; 오래 걸리는 작업은 `job_id`와 다음 단계 안내를 반환 |
-| `list_documents`, `get_document`, `list_chunks`, `delete_document` | 문서·청크 관리 |
+| `list_documents` | dataset 안의 문서 목록 브라우징 |
 | `get_document_content` | 저장된 원문 텍스트 조회 (data_root 외부 경로 차단) |
-| `health` | DB, 데이터 루트, 임베딩 설정, 인덱스 카운트 확인 |
-| `graph_query` | Kùzu 그래프 위 read-only Cypher 질의 |
 | `admin_help` | 기본 `tools/list`에서 숨겨진 관리용 도구와 사용 시점 안내 |
 
-기본 `tools/list`에 **노출되지 않는 관리용 도구**는 `admin_help`에서 확인합니다. 예: `get_job`, `graph_rebuild`, `hipporag_index`, `hipporag_refresh_synonyms`, `list_pipelines`, `save_pipeline`, pipeline editor 관련 도구 등.
+기본 `tools/list`에는 검색/업로드/브라우징에 필요한 최소 도구만 노출합니다. 그 외 관리/진단/고급 그래프 도구는 `admin_help`에서 확인합니다. 예: `create_dataset`, `delete_dataset`, `get_job`, `get_document`, `list_chunks`, `delete_document`, `health`, `graph_query`, `graph_rebuild`, `hipporag_index`, `hipporag_refresh_synonyms`, `list_pipelines`, `save_pipeline`, pipeline editor 관련 도구 등.
 
 ## Dataset Metadata 중심 설계
 

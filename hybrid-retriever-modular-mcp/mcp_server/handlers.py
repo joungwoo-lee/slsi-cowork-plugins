@@ -1049,12 +1049,44 @@ def tool_admin_help(_args: dict) -> dict:
     return text_result({
         "admin_tools": [
             {
+                "name": "create_dataset",
+                "use_when": "Pre-create a dataset or record its use_when note before the first ingest.",
+            },
+            {
+                "name": "delete_dataset",
+                "use_when": "Permanently remove a dataset and all of its files/chunks/vectors.",
+            },
+            {
+                "name": "get_document",
+                "use_when": "Inspect one document's metadata in detail.",
+            },
+            {
+                "name": "list_chunks",
+                "use_when": "Inspect how a document was chunked after ingest.",
+            },
+            {
+                "name": "delete_document",
+                "use_when": "Permanently remove one document from a dataset.",
+            },
+            {
+                "name": "health",
+                "use_when": "Diagnose data paths, embedding configuration, and index counts.",
+            },
+            {
                 "name": "get_job",
                 "use_when": "Poll a background job returned by upload or other long-running start responses.",
             },
             {
+                "name": "graph_query",
+                "use_when": "Run advanced relationship queries directly against the embedded graph.",
+            },
+            {
                 "name": "graph_rebuild",
                 "use_when": "The embedded graph is missing or badly stale and automatic sync is not enough.",
+            },
+            {
+                "name": "start_hipporag_index",
+                "use_when": "Start a long-running dataset HippoRAG indexing job without blocking the MCP request.",
             },
             {
                 "name": "hipporag_index",

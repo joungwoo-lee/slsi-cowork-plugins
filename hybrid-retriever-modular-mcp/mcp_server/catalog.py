@@ -20,7 +20,15 @@ logger = logging.getLogger(__name__)
 
 _PIPELINE_AWARE_TOOLS = {"upload"}
 _ADMIN_ONLY_TOOLS = {
+    "create_dataset",
+    "delete_dataset",
+    "delete_document",
     "get_job",
+    "get_document",
+    "list_chunks",
+    "health",
+    "graph_query",
+    "start_hipporag_index",
     "list_pipelines",
     "save_pipeline",
     "open_pipeline_editor",

@@ -138,6 +138,9 @@ class DatasetRoutingTest(unittest.TestCase):
         tools = {tool["name"]: tool for tool in build_tools()}
         self.assertIn("admin_help", tools)
         self.assertNotIn("get_job", tools)
+        self.assertNotIn("create_dataset", tools)
+        self.assertNotIn("health", tools)
+        self.assertNotIn("graph_query", tools)
         self.assertNotIn("list_pipelines", tools)
         self.assertNotIn("graph_rebuild", tools)
         self.assertNotIn("hipporag_index", tools)
