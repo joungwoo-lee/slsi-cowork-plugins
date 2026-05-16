@@ -52,6 +52,8 @@ def test_json_pipeline_e2e():
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         env=env
     )
     
@@ -84,7 +86,8 @@ def test_json_pipeline_e2e():
         call_tool(proc, "create_dataset", {"name": "test_ds"})
         doc_path = data_root / "test.txt"
         doc_path.write_text("This is a test document for JSON pipeline.", encoding="utf-8")
-        call_tool(proc, "upload_document", {"dataset_id": "test_ds", "file_path": str(doc_path)})
+        upload_res = call_tool(proc, "upload", {"dataset_id": "test_ds", "path": str(doc_path), "async": False})
+        assert not upload_res["isError"], upload_res
         
         res = call_tool(proc, "search", {
             "query": "document",

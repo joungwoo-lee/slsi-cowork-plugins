@@ -99,13 +99,19 @@ def _normalize_matrix(mat: np.ndarray) -> np.ndarray:
 
 def _load_all_fact_embeddings(
     conn: sqlite3.Connection,
+    dataset_ids: list[str],
 ) -> tuple[list[tuple[str, str, str]], np.ndarray]:
+    if not dataset_ids:
+        return [], np.zeros((0, 0), dtype=np.float32)
+    placeholders = ",".join("?" * len(dataset_ids))
     rows = conn.execute(
-        """
+        f"""
         SELECT t.subj_id, t.obj_id, t.triple_id, emb.dim, emb.vector
         FROM fact_embeddings emb
         JOIN triples t ON t.triple_id = emb.triple_id
-        """
+        WHERE t.dataset_id IN ({placeholders})
+        """,
+        dataset_ids,
     ).fetchall()
     if not rows:
         return [], np.zeros((0, 0), dtype=np.float32)
@@ -182,13 +188,14 @@ def link_query_facts(
     conn: sqlite3.Connection,
     embedding_cfg: EmbeddingConfig,
     query: str,
+    dataset_ids: list[str],
     *,
     top_k: int,
 ) -> dict[str, float]:
     """Retrieve fact embeddings and turn their subject/object entities into seeds."""
     if not query.strip() or not embedding_cfg or not embedding_cfg.is_configured:
         return {}
-    facts, mat = _load_all_fact_embeddings(conn)
+    facts, mat = _load_all_fact_embeddings(conn, dataset_ids)
     if not facts:
         return {}
     [vector] = EmbeddingClient(embedding_cfg).embed([query])
@@ -319,6 +326,7 @@ def search(
         sqlite_conn,
         cfg.embedding,
         query,
+        dataset_ids,
         top_k=max(1, int(cfg.hipporag.linking_top_k)),
     )
     for entity_id, score in fact_seeds.items():

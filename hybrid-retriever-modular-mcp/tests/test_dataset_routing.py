@@ -143,6 +143,24 @@ class DatasetRoutingTest(unittest.TestCase):
             handlers.hipporag_query.search = old_hippo
             handlers.retriever_api.hybrid_search = old_hybrid
 
+    def test_search_omitted_keyword_keeps_keyword_enabled(self) -> None:
+        with storage.sqlite_session(self.cfg) as conn:
+            storage.ensure_dataset(conn, "demo", "demo")
+
+        old_hybrid = handlers.retriever_api.hybrid_search
+        try:
+            captured = {}
+
+            def fake_hybrid(*args, **kwargs):
+                captured.update(kwargs)
+                return {"items": [], "total": 0}
+
+            handlers.retriever_api.hybrid_search = fake_hybrid
+            handlers.tool_search({"query": "hello", "dataset_ids": ["demo"]})
+            self.assertIsNone(captured["keyword"])
+        finally:
+            handlers.retriever_api.hybrid_search = old_hybrid
+
     def test_create_dataset_records_use_when(self) -> None:
         result = handlers.tool_create_dataset({
             "name": "demo dataset",

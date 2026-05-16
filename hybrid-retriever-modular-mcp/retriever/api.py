@@ -61,7 +61,7 @@ def hybrid_search(
     top: int = 12,
     top_k: int = 200,
     vector_similarity_weight: float | None = None,
-    keyword: bool = True,
+    keyword: bool | None = True,
     fusion: str | None = None,
     parent_chunk_replace: bool | None = None,
     metadata_condition: dict | None = None,
@@ -80,7 +80,7 @@ def hybrid_search(
         **profile.retrieval_overrides,
         "top_n": int(top),
         "top_k": int(top_k),
-        "keyword": bool(keyword),
+        "keyword": True if keyword is None else bool(keyword),
     }
     if fusion is not None:
         overrides["fusion"] = fusion

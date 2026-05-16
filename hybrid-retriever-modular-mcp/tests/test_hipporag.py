@@ -232,6 +232,56 @@ class QueryScoringTest(unittest.TestCase):
         finally:
             ent_mod.EmbeddingClient = old_client
 
+    def test_fact_linking_filters_by_dataset(self) -> None:
+        class FakeEmbeddingClient:
+            def __init__(self, _cfg):
+                pass
+
+            def embed(self, texts):
+                return [[1.0, 0.0, 0.0, 0.0] for _ in texts]
+
+        old_client = ent_mod.EmbeddingClient
+        old_query_client = query_mod.EmbeddingClient
+        try:
+            ent_mod.EmbeddingClient = FakeEmbeddingClient
+            query_mod.EmbeddingClient = FakeEmbeddingClient
+            with tempfile.TemporaryDirectory() as td:
+                cfg = Config(
+                    data_root=Path(td),
+                    embedding=EmbeddingConfig(api_url="http://embedding", api_key="", model="fake", dim=4),
+                )
+                cfg.ensure_dirs()
+                with storage.sqlite_session(cfg) as conn:
+                    storage.ensure_dataset(conn, "a", "a")
+                    storage.ensure_dataset(conn, "b", "b")
+                    for ds, doc_id, chunk_id, entity in [
+                        ("a", "doc_a", "doc_a:0", "Samsung"),
+                        ("b", "doc_b", "doc_b:0", "Apple"),
+                    ]:
+                        conn.execute(
+                            "INSERT INTO documents(document_id, dataset_id, name, source_path, content_path) VALUES(?,?,?,?,?)",
+                            (doc_id, ds, f"{doc_id}.txt", "/tmp/x", "/tmp/x"),
+                        )
+                        conn.execute(
+                            "INSERT INTO chunks(chunk_id, document_id, dataset_id, position, content) VALUES(?,?,?,?,?)",
+                            (chunk_id, doc_id, ds, 0, entity),
+                        )
+                        ent_mod.persist_triples(
+                            conn,
+                            chunk_id=chunk_id,
+                            document_id=doc_id,
+                            dataset_id=ds,
+                            triples=[Triple(entity, "sells", "phones")],
+                        )
+                    ent_mod.embed_pending_facts(conn, cfg.embedding)
+                    seeds = query_mod.link_query_facts(conn, cfg.embedding, "phones", ["a"], top_k=10)
+                    canon = ent_mod.canonicalize("Samsung")
+                    self.assertIn(ent_mod.entity_id_for(canon), seeds)
+                    self.assertNotIn(ent_mod.entity_id_for(ent_mod.canonicalize("Apple")), seeds)
+        finally:
+            ent_mod.EmbeddingClient = old_client
+            query_mod.EmbeddingClient = old_query_client
+
     def test_chunks_ranked_by_mention_weighted_ppr(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             cfg = Config(data_root=Path(td))
