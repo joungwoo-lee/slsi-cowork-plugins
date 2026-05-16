@@ -28,20 +28,15 @@ DEFAULT_OPENAI_LLM_MODEL = "gpt-4o-mini"
 
 
 def _default_data_root() -> Path:
-    """Resolve a platform-appropriate default data directory.
+    """Resolve the data directory.
 
-    Honors ``RETRIEVER_DATA_ROOT`` if already in env. Otherwise:
-    - Windows: ``%LOCALAPPDATA%\\Retriever_Data`` (or ``~/AppData/Local`` fallback)
-    - POSIX:   ``$XDG_DATA_HOME/retriever`` or ``~/.local/share/retriever``
+    Uses ``RETRIEVER_DATA_ROOT`` if set; otherwise falls back to
+    ``.retriever_data/`` inside the project root (parent of this package).
     """
     explicit = os.getenv("RETRIEVER_DATA_ROOT")
     if explicit:
         return Path(explicit)
-    if os.name == "nt":
-        base = os.getenv("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-        return Path(base) / "Retriever_Data"
-    base = os.getenv("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
-    return Path(base) / "retriever"
+    return Path(__file__).parent.parent / ".retriever_data"
 
 
 @dataclass
@@ -244,8 +239,11 @@ def load_config(env_path: str | os.PathLike[str] | None = None) -> Config:
             max_tokens=_int(os.getenv("LLM_MAX_TOKENS"), 1024),
         )
 
+    data_root = _default_data_root()
+    os.environ.setdefault("RETRIEVER_DATA_ROOT", str(data_root))
+
     return Config(
-        data_root=_default_data_root(),
+        data_root=data_root,
         embedding=embedding,
         llm=llm,
         qdrant=QdrantConfig(
