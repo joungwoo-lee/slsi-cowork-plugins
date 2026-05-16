@@ -1139,6 +1139,10 @@ def tool_admin_help(_args: dict) -> dict:
                 "use_when": "Stop the pipeline editor process.",
             },
             {
+                "name": "start_benchmark_pipelines",
+                "use_when": "Start a long-running benchmark job asynchronously without blocking.",
+            },
+            {
                 "name": "benchmark_pipelines",
                 "use_when": (
                     "Run an end-to-end accuracy and speed benchmark across all (or selected) "
@@ -1359,10 +1363,8 @@ def _hit_rate(contexts: list[dict], expected_keywords: list[str]) -> bool:
     return any(kw.lower() in combined for kw in expected_keywords)
 
 
-def tool_benchmark_pipelines(args: dict) -> dict:
-    """Ingest test docs, run 5 queries per pipeline, measure accuracy + speed, return report."""
-    cfg = load_config()
-
+def _run_benchmark_pipelines(cfg, args: dict, job_id: str | None = None) -> dict:
+    """Ingest BEIR NFCorpus, run queries, measure accuracy + speed, return report."""
     requested = args.get("pipelines")
     if isinstance(requested, list) and requested:
         pipelines_to_test = [str(p) for p in requested if str(p).strip()]
@@ -1371,24 +1373,53 @@ def tool_benchmark_pipelines(args: dict) -> dict:
         _pp.sync_with_disk(cfg)
         pipelines_to_test = _pp.names()
 
-    prefix = str(args.get("dataset_id_prefix") or "benchmark").strip() or "benchmark"
-    top_n = _safe_int(args, "top_n", 5, lo=1, hi=20)
-    cleanup = bool(args.get("cleanup", False))
+    prefix = str(args.get("dataset_id_prefix") or "beir_nf").strip() or "beir_nf"
+    top_n = _safe_int(args, "top_n", 10, lo=1, hi=100)
+    cleanup = bool(args.get("cleanup", True))
 
-    if not _BENCHMARK_DOCS_DIR.is_dir():
-        return text_result(
-            f"Benchmark docs directory not found: {_BENCHMARK_DOCS_DIR}", is_error=True
-        )
+    import tempfile
+    import os
+    import time
+    from beir import util
+    from beir.datasets.data_loader import GenericDataLoader
+    from pytrec_eval import RelevanceEvaluator
 
-    report: dict[str, Any] = {"pipelines": {}, "summary": []}
-    created_datasets: list[str] = []
+    report = {"pipelines": {}, "summary": []}
+    created_datasets = []
 
-    for pipeline in pipelines_to_test:
+    if job_id:
+        _job_progress(cfg, job_id, 2, "Downloading BEIR dataset...")
+
+    # 1. Download BEIR dataset
+    dataset = "nfcorpus"
+    url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(dataset)
+    out_dir = os.path.join(tempfile.gettempdir(), "beir_datasets")
+    data_path = util.download_and_unzip(url, out_dir)
+    corpus, queries, qrels = GenericDataLoader(data_path).load(split="test")
+    
+    if job_id:
+        _job_progress(cfg, job_id, 10, "Extracting text files for upload...")
+
+    # 2. Generate text files for upload
+    docs_dir = Path(tempfile.gettempdir()) / "nfcorpus_docs"
+    if not docs_dir.exists():
+        docs_dir.mkdir(parents=True)
+        for doc_id, doc in corpus.items():
+            text = f"{doc.get('title', '')}\n\n{doc.get('text', '')}"
+            file_path_doc = docs_dir / f"{doc_id}.txt"
+            file_path_doc.write_text(text, encoding="utf-8")
+
+    total_pipelines = len(pipelines_to_test)
+    for idx, pipeline in enumerate(pipelines_to_test):
+        if job_id:
+            base_prog = 10 + (80 * idx // total_pipelines)
+            _job_progress(cfg, job_id, base_prog, f"Pipeline {idx+1}/{total_pipelines}: Ingesting {pipeline}...")
+
         dataset_id = f"{prefix}_{pipeline}"
         created_datasets.append(dataset_id)
-        entry: dict[str, Any] = {"pipeline": pipeline, "dataset_id": dataset_id}
+        entry = {"pipeline": pipeline, "dataset_id": dataset_id}
 
-        # --- ingest ----------------------------------------------------------
+        # --- ingest ---
         ingest_start = time.time()
         try:
             with storage.sqlite_session(cfg) as conn:
@@ -1400,7 +1431,7 @@ def tool_benchmark_pipelines(args: dict) -> dict:
                 cfg,
                 {
                     "dataset_id": dataset_id,
-                    "dir_path": str(_BENCHMARK_DOCS_DIR),
+                    "dir_path": str(docs_dir),
                     "pipeline": pipeline,
                     "async": False,
                 },
@@ -1411,66 +1442,76 @@ def tool_benchmark_pipelines(args: dict) -> dict:
             entry["ingest_errors"] = ingest_result.get("error_count", 0)
             if ingest_result.get("error_count", 0) > 0 and ingest_result.get("processed_count", 0) == 0:
                 entry["status"] = "ingest_failed"
-                entry["error"] = str(ingest_result.get("errors", [])[:1])
                 report["pipelines"][pipeline] = entry
                 continue
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             entry["status"] = "ingest_failed"
             entry["error"] = str(exc)[:200]
             report["pipelines"][pipeline] = entry
             continue
 
-        # --- search ----------------------------------------------------------
-        query_results: list[dict[str, Any]] = []
-        for query, expected_kws in _BENCHMARK_QA:
+        if job_id:
+            _job_progress(cfg, job_id, base_prog + (80 // total_pipelines // 2), f"Pipeline {idx+1}/{total_pipelines}: Searching {pipeline}...")
+
+        # --- search ---
+        pipeline_run = {}
+        q_latencies = []
+        for query_id, query_text in queries.items():
+            if query_id not in qrels:
+                continue
             q_start = time.time()
             try:
                 with silenced_stdout():
                     raw = retriever_api.hybrid_search(
                         cfg,
-                        query,
+                        query_text,
                         [dataset_id],
                         pipeline=pipeline,
                         top=top_n,
                         top_k=max(top_n * 10, 50),
                     )
                 q_elapsed = time.time() - q_start
-                contexts = [
-                    {"text": item["content"]} for item in raw.get("items", [])
-                ]
-                hit = _hit_rate(contexts, expected_kws)
-                query_results.append({
-                    "query": query,
-                    "latency_ms": round(q_elapsed * 1000, 1),
-                    "result_count": len(contexts),
-                    "hit": hit,
-                    "expected_keywords": expected_kws,
-                })
-            except Exception as exc:  # noqa: BLE001
-                query_results.append({
-                    "query": query,
-                    "latency_ms": None,
-                    "result_count": 0,
-                    "hit": False,
-                    "error": str(exc)[:120],
-                })
-
-        hits = sum(1 for q in query_results if q.get("hit"))
-        latencies = [q["latency_ms"] for q in query_results if q.get("latency_ms") is not None]
-        avg_latency = round(sum(latencies) / len(latencies), 1) if latencies else None
-        hit_rate_pct = round(hits / len(_BENCHMARK_QA) * 100, 1)
+                q_latencies.append(q_elapsed)
+                
+                res = {}
+                for rank, item in enumerate(raw.get("items", [])):
+                    doc_name = item.get("document_name", "")
+                    doc_id_match = doc_name.replace(".txt", "")
+                    if doc_id_match not in res:
+                        res[doc_id_match] = item.get("similarity", 0.0)
+                pipeline_run[query_id] = res
+            except Exception as exc:
+                pass
+        
+        # --- Evaluation ---
+        evaluator = RelevanceEvaluator(qrels, {'ndcg_cut.10', 'map_cut.10', 'recall.10', 'P.10'})
+        metrics = evaluator.evaluate(pipeline_run)
+        
+        if metrics:
+            ndcg_10 = sum(q.get('ndcg_cut_10', 0) for q in metrics.values()) / len(metrics)
+            map_10 = sum(q.get('map_cut_10', 0) for q in metrics.values()) / len(metrics)
+            recall_10 = sum(q.get('recall_10', 0) for q in metrics.values()) / len(metrics)
+            p_10 = sum(q.get('P_10', 0) for q in metrics.values()) / len(metrics)
+        else:
+            ndcg_10 = map_10 = recall_10 = p_10 = 0.0
+            
+        avg_latency = round(sum(q_latencies) / len(q_latencies) * 1000, 1) if q_latencies else None
 
         entry.update({
             "status": "ok",
-            "hit_rate_pct": hit_rate_pct,
-            "hits": hits,
-            "total_queries": len(_BENCHMARK_QA),
+            "ndcg_10": round(ndcg_10, 4),
+            "map_10": round(map_10, 4),
+            "recall_10": round(recall_10, 4),
+            "p_10": round(p_10, 4),
             "avg_latency_ms": avg_latency,
-            "queries": query_results,
+            "total_queries": len(pipeline_run),
         })
         report["pipelines"][pipeline] = entry
 
-    # --- cleanup -------------------------------------------------------------
+    if job_id:
+        _job_progress(cfg, job_id, 95, "Cleaning up...")
+
+    # --- cleanup ---
     if cleanup:
         for ds in created_datasets:
             try:
@@ -1481,36 +1522,30 @@ def tool_benchmark_pipelines(args: dict) -> dict:
                     conn.execute("DELETE FROM datasets WHERE dataset_id = ?", (ds,))
                 import shutil
                 shutil.rmtree(cfg.dataset_dir(ds), ignore_errors=True)
-            except Exception:  # noqa: BLE001
+            except Exception:
                 pass
         report["cleanup"] = "datasets removed"
     else:
         report["cleanup"] = "datasets retained (pass cleanup=true to remove)"
 
-    # --- markdown report -----------------------------------------------------
-    lines = ["# RAG Pipeline Benchmark Report", ""]
-    lines.append(f"Benchmark docs: {_BENCHMARK_DOCS_DIR}")
-    lines.append(f"Queries per pipeline: {len(_BENCHMARK_QA)}, top_n={top_n}")
+    # --- markdown report ---
+    lines = ["# BEIR NFCorpus RAG Benchmark Report", ""]
+    lines.append(f"Queries per pipeline: {len(qrels)}, top_n={top_n}")
     lines.append("")
-    lines.append("| Pipeline | Status | Ingest(s) | Avg Latency(ms) | Hit Rate |")
-    lines.append("|----------|--------|-----------|-----------------|----------|")
+    lines.append("| Pipeline | Status | Ingest(s) | Avg Latency(ms) | NDCG@10 | MAP@10 | Recall@10 | P@10 |")
+    lines.append("|----------|--------|-----------|-----------------|---------|--------|-----------|------|")
     for pipeline, e in report["pipelines"].items():
         status = e.get("status", "?")
         ingest = f"{e['ingest_seconds']:.2f}" if "ingest_seconds" in e else "—"
         latency = f"{e['avg_latency_ms']:.0f}" if e.get("avg_latency_ms") is not None else "—"
-        hit = f"{e['hit_rate_pct']}% ({e.get('hits', 0)}/{e.get('total_queries', len(_BENCHMARK_QA))})" if status == "ok" else "—"
-        lines.append(f"| {pipeline} | {status} | {ingest} | {latency} | {hit} |")
-
-    lines.append("")
-    lines.append("## Per-Query Results")
-    for pipeline, e in report["pipelines"].items():
-        if e.get("status") != "ok":
-            continue
-        lines.append(f"\n### {pipeline}")
-        for q in e.get("queries", []):
-            mark = "✓" if q.get("hit") else "✗"
-            lat = f"{q['latency_ms']}ms" if q.get("latency_ms") is not None else "ERROR"
-            lines.append(f"- [{mark}] {q['query']} ({lat}, {q['result_count']} results)")
+        if status == "ok":
+            ndcg = f"{e['ndcg_10']:.4f}"
+            map_val = f"{e['map_10']:.4f}"
+            recall = f"{e['recall_10']:.4f}"
+            p10 = f"{e['p_10']:.4f}"
+            lines.append(f"| {pipeline} | {status} | {ingest} | {latency} | {ndcg} | {map_val} | {recall} | {p10} |")
+        else:
+            lines.append(f"| {pipeline} | {status} | {ingest} | {latency} | — | — | — | — |")
 
     report["markdown"] = "\n".join(lines)
     report["summary"] = {
@@ -1519,7 +1554,24 @@ def tool_benchmark_pipelines(args: dict) -> dict:
         "failed": sum(1 for e in report["pipelines"].values() if e.get("status") != "ok"),
     }
 
-    return text_result(report)
+    return report
+
+def tool_start_benchmark_pipelines(args: dict) -> dict:
+    cfg = load_config()
+    job = job_manager.start_job(
+        cfg,
+        job_type="benchmark_pipelines",
+        args=args,
+        runner=lambda job_id: _run_benchmark_pipelines(cfg, args, job_id=job_id),
+    )
+    return text_result(job)
+
+def tool_benchmark_pipelines(args: dict) -> dict:
+    cfg = load_config()
+    run_async = bool(args.get("async", True))
+    if run_async:
+        return tool_start_benchmark_pipelines(args)
+    return text_result(_run_benchmark_pipelines(cfg, args))
 
 
 HANDLERS = {
@@ -1551,5 +1603,6 @@ HANDLERS = {
     "hippo2_search": tool_hippo2_search,
     "hippo2_stats": tool_hippo2_stats,
     "pipeline_tutorial": tool_pipeline_tutorial,
+    "start_benchmark_pipelines": tool_start_benchmark_pipelines,
     "benchmark_pipelines": tool_benchmark_pipelines,
 }
