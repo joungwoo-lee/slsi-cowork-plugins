@@ -1395,23 +1395,24 @@ def _run_benchmark_pipelines(cfg, args: dict, job_id: str | None = None) -> dict
 
     if setup:
         if job_id:
-            _job_progress(cfg, job_id, 2, "Downloading BEIR dataset...")
+            _job_progress(cfg, job_id, 2, "Checking/Downloading BEIR dataset...")
 
-        # 1. Download BEIR dataset
-        url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(dataset)
-        data_path = util.download_and_unzip(url, out_dir)
+        # 1. Download BEIR dataset (skip if already exists)
+        if not os.path.exists(data_path):
+            url = "https://public.ukp.informatik.tu-darmstadt.de/thakur/BEIR/datasets/{}.zip".format(dataset)
+            data_path = util.download_and_unzip(url, out_dir)
         corpus, queries, qrels = GenericDataLoader(data_path).load(split="test")
         
         if job_id:
             _job_progress(cfg, job_id, 10, "Extracting text files for upload...")
 
-        # 2. Generate text files for upload
-        if not docs_dir.exists():
-            docs_dir.mkdir(parents=True)
-        for doc_id, doc in corpus.items():
-            text = f"{doc.get('title', '')}\n\n{doc.get('text', '')}"
-            file_path_doc = docs_dir / f"{doc_id}.txt"
-            file_path_doc.write_text(text, encoding="utf-8")
+        # 2. Generate text files for upload (skip if already generated)
+        if not docs_dir.exists() or not any(docs_dir.iterdir()):
+            docs_dir.mkdir(parents=True, exist_ok=True)
+            for doc_id, doc in corpus.items():
+                text = f"{doc.get('title', '')}\n\n{doc.get('text', '')}"
+                file_path_doc = docs_dir / f"{doc_id}.txt"
+                file_path_doc.write_text(text, encoding="utf-8")
     else:
         if not os.path.exists(data_path):
             return {"error": f"Dataset not found at {data_path}. Please run with setup=True first."}
