@@ -221,6 +221,11 @@ def _resolve_env_vars(data: Any) -> Any:
             resolved = os.environ.get(m.group(1))
             if resolved is None:
                 return data  # var not set — keep placeholder
+            lower = resolved.lower()
+            if lower in ('true', 'yes', 'on'):
+                return True
+            if lower in ('false', 'no', 'off'):
+                return False
             try:
                 return int(resolved)
             except ValueError:

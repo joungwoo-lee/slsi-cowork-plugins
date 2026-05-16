@@ -13,9 +13,9 @@
         "dim": "${EMBEDDING_DIM}",
         "x_dep_ticket": "${EMBEDDING_API_X_DEP_TICKET}",
         "x_system_name": "hybrid-retriever-modular-mcp",
-        "batch_size": 16,
-        "timeout_sec": 60,
-        "verify_ssl": false
+        "batch_size": "${EMBEDDING_BATCH_SIZE}",
+        "timeout_sec": "${EMBEDDING_TIMEOUT_SEC}",
+        "verify_ssl": "${EMBEDDING_VERIFY_SSL}"
       },
       "inputs": []
     },
