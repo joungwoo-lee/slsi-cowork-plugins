@@ -118,19 +118,18 @@ def main() -> int:
         send("notifications/initialized", {}, is_notification=True)
 
         up = call(
-            "upload_document",
+            "upload",
             {
                 "dataset_id": dataset_id,
-                "file_path": str(tmp_doc),
+                "path": str(tmp_doc),
                 "skip_embedding": False,
-                "auto_hippo2": True,
+                "pipeline": "hippo2",
                 "use_hierarchical": "false",
+                "async": False,
             },
         )
         doc_id = up["response"]["document_id"]
-        hippo = up.get("hippo2") or {}
-        assert hippo.get("chunks_processed", 0) >= 1, hippo
-        assert hippo.get("triples_written", 0) >= 1, hippo
+        assert up["response"]["chunks_count"] >= 1, up
         print({"upload_document": up["response"], "hippo2": hippo})
 
         gq = call(

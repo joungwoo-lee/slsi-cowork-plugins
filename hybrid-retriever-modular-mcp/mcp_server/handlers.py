@@ -181,8 +181,6 @@ def _upload_args_from_unified(args: dict) -> dict:
     path = Path(path_str)
     if path.is_file():
         pipeline_name = _pipeline_name(args)
-        if bool(args.get("auto_hippo2", False)):
-            pipeline_name = "hippo2"
         return {
             "dataset_id": ds,
             "file_path": str(path),
@@ -193,8 +191,6 @@ def _upload_args_from_unified(args: dict) -> dict:
         }
     if path.is_dir():
         pipeline_name = _pipeline_name(args)
-        if bool(args.get("auto_hippo2", False)):
-            pipeline_name = "hippo2"
         # Email-MCP converted directories (mail_*/meta.json + body.md) are
         # one email per directory, not a bulk folder. Route them through the
         # single-document path so email_loader sees the directory it expects.
@@ -230,8 +226,6 @@ def _run_upload_document(cfg, args: dict, *, job_id: str | None = None) -> dict:
         raise ValueError("file_path is required")
     pipeline_name = _pipeline_name(args)
     metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
-    if bool(args.get("auto_hippo2", False)):
-        pipeline_name = "hippo2"
     if job_id:
         _job_progress(cfg, job_id, 5, "indexing document")
     with silenced_stdout():
@@ -275,8 +269,6 @@ def _run_upload_directory(cfg, args: dict, *, job_id: str | None = None) -> dict
     if ext and not ext.startswith("."):
         ext = "." + ext
     pipeline_name = _pipeline_name(args)
-    if bool(args.get("auto_hippo2", False)):
-        pipeline_name = "hippo2"
     metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
     skip_embedding = bool(args.get("skip_embedding", False))
     use_hierarchical = args.get("use_hierarchical")

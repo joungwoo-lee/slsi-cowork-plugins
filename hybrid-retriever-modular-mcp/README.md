@@ -84,7 +84,7 @@ EMBEDDING_DIM=1536
 
 - `graph_query`: 실행 전 자동 sync. `LIMIT` 미지정 시 안전 한도 부착. 파괴적 키워드(CREATE/DELETE/MERGE/SET/DROP/ALTER/REMOVE) 거부.
 - `graph_rebuild`: Kùzu **COPY FROM 벌크 로더** — 청크 1만+엔티티 5천 규모도 수 초.
-- Hippo2: `upload(..., auto_hippo2=true)` 또는 `upload(..., pipeline="hippo2")` → `retriever/pipelines/hippo2_unified.json`의 `Hippo2Indexer` 컴포넌트가 passage embedding/Qdrant 이후 LLM OpenIE → entity/fact embeddings → entity+passage 융합 그래프를 구축. 검색은 같은 topology의 `Hippo2Retriever` 컴포넌트가 query-to-triple 매칭과 dense passage 매칭으로 entity/passage 노드를 함께 seed → scipy.sparse PPR(`data_root/ppr_matrix.npz` 캐시) → LLM 온라인 필터링 → 청크 랭킹.
+- Hippo2: `upload(..., pipeline="hippo2")` → `retriever/pipelines/hippo2_unified.json`의 `Hippo2Indexer` 컴포넌트가 passage embedding/Qdrant 이후 LLM OpenIE → entity/fact embeddings → entity+passage 융합 그래프를 구축. 검색은 같은 topology의 `Hippo2Retriever` 컴포넌트가 query-to-triple 매칭과 dense passage 매칭으로 entity/passage 노드를 함께 seed → scipy.sparse PPR(`data_root/ppr_matrix.npz` 캐시) → LLM 온라인 필터링 → 청크 랭킹.
 
 ## 테스트
 
