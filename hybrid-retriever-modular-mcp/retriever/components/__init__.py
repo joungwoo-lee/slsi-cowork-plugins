@@ -17,8 +17,9 @@ from .rrf_joiner import RrfJoiner
 from .hybrid_joiner import HybridJoiner
 from .parent_replace import ParentChunkReplacer
 from .bge_reranker import BgeReranker
-from .hipporag_retriever import HippoRAGRetriever
-from .hippo_graph_retriever import HippoGraphRetriever
+from .hippo2_indexer import Hippo2Indexer
+from .hippo2_retriever import Hippo2Retriever
+from .hippo2_graph_retriever import Hippo2GraphRetriever
 
 __all__ = [
     "EmailSourceLoader",
@@ -37,6 +38,7 @@ __all__ = [
     "HybridJoiner",
     "ParentChunkReplacer",
     "BgeReranker",
-    "HippoRAGRetriever",
-    "HippoGraphRetriever",
+    "Hippo2Indexer",
+    "Hippo2Retriever",
+    "Hippo2GraphRetriever",
 ]

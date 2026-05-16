@@ -16,10 +16,9 @@ from retriever import api as retriever_api
 from retriever import graph as retriever_graph
 from retriever import storage
 from retriever.config import load_config
-from retriever.hipporag import index as hipporag_index
-from retriever.hipporag import query as hipporag_query
-from retriever.hipporag import ppr as hipporag_ppr
-from retriever.hipporag import synonyms as hipporag_synonyms
+from retriever.hippo2 import index as hippo2_index
+from retriever.hippo2 import ppr as hippo2_ppr
+from retriever.hippo2 import synonyms as hippo2_synonyms
 from retriever.pipelines import editor_store
 from retriever.pipelines import get_answer_template as _pipeline_answer_template
 from retriever.pipelines import profiles as pipeline_profiles
@@ -52,13 +51,13 @@ def _reveal_admin_and_notify() -> None:
 
 # Process-wide PPR engine. ``warm()`` is lazy and re-checks the SQLite
 # checksum on every call, so reloading after ingest happens automatically.
-_PPR_ENGINE: hipporag_ppr.PPREngine | None = None
+_PPR_ENGINE: hippo2_ppr.PPREngine | None = None
 
 
-def _ppr_engine(cfg) -> hipporag_ppr.PPREngine:
+def _ppr_engine(cfg) -> hippo2_ppr.PPREngine:
     global _PPR_ENGINE
     if _PPR_ENGINE is None:
-        _PPR_ENGINE = hipporag_ppr.PPREngine(cfg, cfg.hipporag)
+        _PPR_ENGINE = hippo2_ppr.PPREngine(cfg, cfg.hippo2)
     return _PPR_ENGINE
 
 # Supported document extensions for upload_directory bulk ingest.
@@ -117,7 +116,7 @@ def _mark_dataset_ingest_profile(
     pipeline_name: str,
     content_kind: str,
     has_vectors: bool,
-    hipporag_ready: bool | None = None,
+    hippo2_ready: bool | None = None,
 ) -> None:
     with storage.sqlite_session(cfg) as conn:
         current = storage.get_dataset_metadata(conn, dataset_id)
@@ -125,8 +124,7 @@ def _mark_dataset_ingest_profile(
         supported.add("default")
         if pipeline_name == "email":
             supported.add("email")
-        if hipporag_ready or current.get("has_hipporag"):
-            supported.add("hipporag")
+        if hippo2_ready or current.get("has_hippo2"):
             supported.add("hippo2")
         metadata = {
             **current,
@@ -134,13 +132,13 @@ def _mark_dataset_ingest_profile(
             "last_ingest_pipeline": pipeline_name,
             "content_kind": content_kind,
             "has_vectors": bool(has_vectors or current.get("has_vectors")),
-            "has_hipporag": bool(current.get("has_hipporag") if hipporag_ready is None else hipporag_ready),
+            "has_hippo2": bool(current.get("has_hippo2") if hippo2_ready is None else hippo2_ready),
             "supported_search_pipelines": sorted(supported),
             "preferred_search_pipeline": (
                 "hippo2"
-                if (pipeline_name == "hippo2" and (hipporag_ready or current.get("has_hipporag")))
-                else "hipporag"
-                if (hipporag_ready or current.get("has_hipporag"))
+                if (pipeline_name == "hippo2" and (hippo2_ready or current.get("has_hippo2")))
+                else "hippo2"
+                if (hippo2_ready or current.get("has_hippo2"))
                 else ("email" if pipeline_name == "email" else "default")
             ),
         }
@@ -173,44 +171,6 @@ def _answer_instructions_for(pipeline_name: str) -> str:
     return _pipeline_answer_template(profile)
 
 
-def _hipporag_to_search_payload(query: str, dataset_ids: list[str], result, *, pipeline_name: str = "hipporag") -> dict:
-    contexts: list[dict[str, Any]] = []
-    citations: list[dict[str, Any]] = []
-    for c in result.chunks:
-        contexts.append({
-            "text": c["content"],
-            "source": {
-                "dataset_id": c["dataset_id"],
-                "document_id": c["document_id"],
-                "document_name": c["document_name"],
-                "position": c["position"],
-                "chunk_id": c["chunk_id"],
-                "similarity": c["score"],
-                "vector_similarity": 0.0,
-                "term_similarity": 0.0,
-                "metadata": {},
-                "search_pipeline": pipeline_name,
-                "matched_entities": c.get("matched_entities", []),
-            },
-        })
-        citations.append({
-            "document_name": c["document_name"],
-            "position": c["position"],
-            "score": c["score"],
-            "chunk_id": c["chunk_id"],
-        })
-    return {
-        "query": query,
-        "dataset_ids": dataset_ids,
-        "total": len(result.chunks),
-        "contexts": contexts,
-        "citations": citations,
-        "search_pipeline": pipeline_name,
-        "query_entities": result.query_entities,
-        "answer_instructions": _answer_instructions_for(pipeline_name),
-    }
-
-
 def _upload_args_from_unified(args: dict) -> dict:
     ds = _require_str(args, "dataset_id")
     path_str = _require_str(args, "path")
@@ -220,14 +180,14 @@ def _upload_args_from_unified(args: dict) -> dict:
         raise ValueError("path is required")
     path = Path(path_str)
     if path.is_file():
+        pipeline_name = _pipeline_name(args)
         return {
             "dataset_id": ds,
             "file_path": str(path),
             "use_hierarchical": args.get("use_hierarchical"),
             "skip_embedding": bool(args.get("skip_embedding", False)),
             "metadata": args.get("metadata") if isinstance(args.get("metadata"), dict) else None,
-            "pipeline": _pipeline_name(args),
-            "auto_hipporag": bool(args.get("auto_hipporag", False)),
+            "pipeline": pipeline_name,
         }
     if path.is_dir():
         pipeline_name = _pipeline_name(args)
@@ -242,7 +202,6 @@ def _upload_args_from_unified(args: dict) -> dict:
                 "skip_embedding": bool(args.get("skip_embedding", False)),
                 "metadata": args.get("metadata") if isinstance(args.get("metadata"), dict) else None,
                 "pipeline": pipeline_name,
-                "auto_hipporag": bool(args.get("auto_hipporag", False)),
             }
         payload = {
             "dataset_id": ds,
@@ -251,7 +210,6 @@ def _upload_args_from_unified(args: dict) -> dict:
             "skip_embedding": bool(args.get("skip_embedding", False)),
             "metadata": args.get("metadata") if isinstance(args.get("metadata"), dict) else None,
             "pipeline": pipeline_name,
-            "auto_hipporag": bool(args.get("auto_hipporag", False)),
         }
         if isinstance(args.get("file_extension"), str) and args.get("file_extension"):
             payload["file_extension"] = args.get("file_extension")
@@ -268,7 +226,6 @@ def _run_upload_document(cfg, args: dict, *, job_id: str | None = None) -> dict:
         raise ValueError("file_path is required")
     pipeline_name = _pipeline_name(args)
     metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
-    auto_hipporag = bool(args.get("auto_hipporag", pipeline_name == "hippo2"))
     if job_id:
         _job_progress(cfg, job_id, 5, "indexing document")
     with silenced_stdout():
@@ -281,27 +238,13 @@ def _run_upload_document(cfg, args: dict, *, job_id: str | None = None) -> dict:
             use_hierarchical=args.get("use_hierarchical"),
             metadata=metadata,
         )
-    hipporag_summary: dict | None = None
-    if auto_hipporag:
-        doc_id = isinstance(out, dict) and out.get("document_id") or ""
-        if doc_id:
-            try:
-                if job_id:
-                    _job_progress(cfg, job_id, 70, "running hipporag")
-                with silenced_stdout():
-                    with storage.sqlite_session(cfg) as sconn:
-                        hipporag_summary = hipporag_index.index_document(
-                            cfg, sconn, doc_id, rebuild_synonyms_after=False
-                        )
-            except Exception as exc:  # noqa: BLE001
-                hipporag_summary = {"error": str(exc)}
     _mark_dataset_ingest_profile(
         cfg,
         ds,
         pipeline_name=pipeline_name,
         content_kind="email" if pipeline_name == "email" else "document",
         has_vectors=bool(isinstance(out, dict) and out.get("has_vector")),
-        hipporag_ready=bool(hipporag_summary and not hipporag_summary.get("error")),
+        hippo2_ready=(pipeline_name == "hippo2"),
     )
     if job_id:
         _job_progress(cfg, job_id, 95, "finalizing")
@@ -309,7 +252,6 @@ def _run_upload_document(cfg, args: dict, *, job_id: str | None = None) -> dict:
         "dataset_id": ds,
         "file": fp,
         "response": out,
-        **({"hipporag": hipporag_summary} if hipporag_summary is not None else {}),
     }
 
 
@@ -330,7 +272,6 @@ def _run_upload_directory(cfg, args: dict, *, job_id: str | None = None) -> dict
     metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
     skip_embedding = bool(args.get("skip_embedding", False))
     use_hierarchical = args.get("use_hierarchical")
-    auto_hipporag = bool(args.get("auto_hipporag", pipeline_name == "hippo2"))
 
     paths: list[Path] = []
     for file_path in dir_path.rglob("*"):
@@ -365,25 +306,13 @@ def _run_upload_directory(cfg, args: dict, *, job_id: str | None = None) -> dict
             except Exception as exc:  # noqa: BLE001
                 errors.append({"file": str(file_path), "error": str(exc)})
 
-    hipporag_summary: dict | None = None
-    if auto_hipporag and results:
-        try:
-            if job_id:
-                _job_progress(cfg, job_id, 85, "running hipporag")
-            with silenced_stdout():
-                with storage.sqlite_session(cfg) as sconn:
-                    hipporag_summary = hipporag_index.index_dataset(
-                        cfg, sconn, ds, rebuild_synonyms_after=True
-                    )
-        except Exception as exc:  # noqa: BLE001
-            hipporag_summary = {"error": str(exc)}
     _mark_dataset_ingest_profile(
         cfg,
         ds,
         pipeline_name=pipeline_name,
         content_kind="email" if pipeline_name == "email" else "document",
         has_vectors=any(bool((item.get("response") or {}).get("has_vector")) for item in results),
-        hipporag_ready=bool(hipporag_summary and not hipporag_summary.get("error")),
+        hippo2_ready=(pipeline_name == "hippo2" and bool(results)),
     )
     if job_id:
         _job_progress(cfg, job_id, 95, "finalizing")
@@ -394,7 +323,6 @@ def _run_upload_directory(cfg, args: dict, *, job_id: str | None = None) -> dict
         "error_count": len(errors),
         "results": results,
         "errors": errors,
-        **({"hipporag": hipporag_summary} if hipporag_summary is not None else {}),
     }
 
 
@@ -406,7 +334,7 @@ def _run_graph_rebuild(cfg) -> dict:
     return {"status": "ok", **counts}
 
 
-def _run_hipporag_index(cfg, args: dict, *, document: bool) -> dict:
+def _run_hippo2_index(cfg, args: dict, *, document: bool) -> dict:
     rebuild_syn = bool(args.get("rebuild_synonyms", not document))
     max_workers = _safe_int(args, "max_workers", 4, lo=1, hi=16)
     with silenced_stdout():
@@ -419,7 +347,7 @@ def _run_hipporag_index(cfg, args: dict, *, document: bool) -> dict:
                     "SELECT dataset_id FROM documents WHERE document_id = ?",
                     (doc_id,),
                 ).fetchone()
-                result = hipporag_index.index_document(
+                result = hippo2_index.index_document(
                     cfg, sconn, doc_id, rebuild_synonyms_after=rebuild_syn, max_workers=max_workers,
                 )
                 payload = {"status": "ok", "document_id": doc_id, **result}
@@ -430,13 +358,13 @@ def _run_hipporag_index(cfg, args: dict, *, document: bool) -> dict:
                         pipeline_name="default",
                         content_kind="document",
                         has_vectors=True,
-                        hipporag_ready=True,
+                        hippo2_ready=True,
                     )
             else:
                 ds = _require_str(args, "dataset_id")
                 if not ds:
                     raise ValueError("dataset_id is required")
-                result = hipporag_index.index_dataset(
+                result = hippo2_index.index_dataset(
                     cfg, sconn, ds, rebuild_synonyms_after=rebuild_syn, max_workers=max_workers,
                 )
                 payload = {"status": "ok", "dataset_id": ds, **result}
@@ -446,7 +374,7 @@ def _run_hipporag_index(cfg, args: dict, *, document: bool) -> dict:
                     pipeline_name="default",
                     content_kind="document",
                     has_vectors=True,
-                    hipporag_ready=True,
+                    hippo2_ready=True,
                 )
     _ppr_engine(cfg).invalidate()
     return payload
@@ -645,29 +573,6 @@ def tool_search(args: dict) -> dict:
     except (TypeError, ValueError):
         similarity_threshold = 0.0
     similarity_threshold = max(0.0, min(1.0, similarity_threshold))
-
-    if pipeline_name in {"hipporag", "hippo2"}:
-        try:
-            with silenced_stdout():
-                with storage.sqlite_session(cfg) as sconn:
-                    engine = _ppr_engine(cfg)
-                    result = hipporag_query.search(
-                        cfg,
-                        sconn,
-                        engine,
-                        query.strip(),
-                        datasets,
-                        top_chunks=_safe_int(args, "top_n", cfg.hipporag.top_chunks, lo=1, hi=100),
-                    )
-            if similarity_threshold > 0.0:
-                # HippoRAG returns a dataclass-like result; filter its chunks
-                # in place so the payload builder sees only chunks at/above
-                # the floor.
-                result.chunks = [c for c in result.chunks
-                                 if float(c.get("score") or 0.0) >= similarity_threshold]
-            return text_result(_hipporag_to_search_payload(query.strip(), datasets, result, pipeline_name=pipeline_name))
-        except Exception as exc:  # noqa: BLE001
-            return text_result(f"search failed: {exc}", is_error=True)
 
     with silenced_stdout():
         data = retriever_api.hybrid_search(
@@ -1190,28 +1095,28 @@ def tool_admin_help(_args: dict) -> dict:
                 "use_when": "The embedded graph is missing or badly stale and automatic sync is not enough.",
             },
             {
-                "name": "start_hipporag_index",
-                "use_when": "Start a long-running dataset HippoRAG indexing job without blocking the MCP request.",
+                "name": "start_hippo2_index",
+                "use_when": "Start a long-running dataset Hippo2 indexing job without blocking the MCP request.",
             },
             {
-                "name": "hipporag_index",
-                "use_when": "A dataset needs entity/triple extraction or full HippoRAG refresh after bulk ingest.",
+                "name": "hippo2_index",
+                "use_when": "A dataset needs entity/triple extraction or full Hippo2 refresh after bulk ingest.",
             },
             {
-                "name": "hipporag_index_document",
-                "use_when": "Re-index one document's HippoRAG state only.",
+                "name": "hippo2_index_document",
+                "use_when": "Re-index one document's Hippo2 state only.",
             },
             {
-                "name": "hipporag_refresh_synonyms",
-                "use_when": "Rebuild synonym edges after a batch of HippoRAG indexing jobs.",
+                "name": "hippo2_refresh_synonyms",
+                "use_when": "Rebuild synonym edges after a batch of Hippo2 indexing jobs.",
             },
             {
-                "name": "hipporag_search",
-                "use_when": "Directly test HippoRAG retrieval without normal search auto-routing.",
+                "name": "hippo2_search",
+                "use_when": "Directly test Hippo2 retrieval without normal search auto-routing.",
             },
             {
-                "name": "hipporag_stats",
-                "use_when": "Inspect HippoRAG entity/triple/synonym counts and PPR cache warmth.",
+                "name": "hippo2_stats",
+                "use_when": "Inspect Hippo2 entity/triple/synonym counts and PPR cache warmth.",
             },
             {
                 "name": "list_pipelines",
@@ -1284,105 +1189,106 @@ def tool_start_graph_rebuild(_args: dict) -> dict:
     )
 
 
-# ----- HippoRAG ----------------------------------------------------------
+# ----- Hippo2 ----------------------------------------------------------
 
-def tool_hipporag_index(args: dict) -> dict:
+def tool_hippo2_index(args: dict) -> dict:
     cfg = load_config()
     try:
-        return text_result(_run_hipporag_index(cfg, args, document=False))
+        return text_result(_run_hippo2_index(cfg, args, document=False))
     except Exception as exc:  # noqa: BLE001
-        return text_result(f"hipporag_index failed: {exc}", is_error=True)
+        return text_result(f"hippo2_index failed: {exc}", is_error=True)
 
 
-def tool_start_hipporag_index(args: dict) -> dict:
+def tool_start_hippo2_index(args: dict) -> dict:
     cfg = load_config()
     ds = _require_str(args, "dataset_id") or ""
     return text_result(
         job_manager.start_job(
             cfg,
-            job_type="hipporag_index",
+            job_type="hippo2_index",
             args=args,
             dataset_id=ds,
-            runner=lambda _job_id: _run_hipporag_index(cfg, args, document=False),
+            runner=lambda _job_id: _run_hippo2_index(cfg, args, document=False),
         )
     )
 
 
-def tool_hipporag_index_document(args: dict) -> dict:
+def tool_hippo2_index_document(args: dict) -> dict:
     cfg = load_config()
     try:
-        return text_result(_run_hipporag_index(cfg, args, document=True))
+        return text_result(_run_hippo2_index(cfg, args, document=True))
     except Exception as exc:  # noqa: BLE001
-        return text_result(f"hipporag_index_document failed: {exc}", is_error=True)
+        return text_result(f"hippo2_index_document failed: {exc}", is_error=True)
 
 
-def tool_start_hipporag_index_document(args: dict) -> dict:
+def tool_start_hippo2_index_document(args: dict) -> dict:
     cfg = load_config()
     doc_id = _require_str(args, "document_id") or ""
     return text_result(
         job_manager.start_job(
             cfg,
-            job_type="hipporag_index_document",
+            job_type="hippo2_index_document",
             args=args,
             document_id=doc_id,
-            runner=lambda _job_id: _run_hipporag_index(cfg, args, document=True),
+            runner=lambda _job_id: _run_hippo2_index(cfg, args, document=True),
         )
     )
 
 
-def tool_hipporag_refresh_synonyms(_args: dict) -> dict:
+def tool_hippo2_refresh_synonyms(_args: dict) -> dict:
     cfg = load_config()
     try:
         with silenced_stdout():
             with storage.sqlite_session(cfg) as sconn:
-                result = hipporag_synonyms.rebuild_synonyms(sconn, cfg.hipporag)
+                result = hippo2_synonyms.rebuild_synonyms(sconn, cfg.hippo2)
                 retriever_graph.mark_dirty(sconn)
         _ppr_engine(cfg).invalidate()
     except Exception as exc:  # noqa: BLE001
-        return text_result(f"hipporag_refresh_synonyms failed: {exc}", is_error=True)
+        return text_result(f"hippo2_refresh_synonyms failed: {exc}", is_error=True)
     return text_result({"status": "ok", **result})
 
 
-def tool_hipporag_search(args: dict) -> dict:
+def tool_hippo2_search(args: dict) -> dict:
     cfg = load_config()
     q = _require_str(args, "query")
     if not q:
         return text_result("query is required", is_error=True)
     dataset_ids = _resolve_datasets(args.get("dataset_ids"))
-    top = _safe_int(args, "top_n", cfg.hipporag.top_chunks, lo=1, hi=100)
+    top = _safe_int(args, "top_n", cfg.hippo2.top_chunks, lo=1, hi=100)
     try:
         with silenced_stdout():
-            with storage.sqlite_session(cfg) as sconn:
-                engine = _ppr_engine(cfg)
-                result = hipporag_query.search(
-                    cfg, sconn, engine, q, dataset_ids, top_chunks=top,
-                )
+            data = retriever_api.hybrid_search(
+                cfg,
+                q,
+                dataset_ids,
+                pipeline="hippo2",
+                top=top,
+                top_k=max(top, _safe_int(args, "top_k", 200, lo=1, hi=500)),
+            )
     except Exception as exc:  # noqa: BLE001
-        return text_result(f"hipporag_search failed: {exc}", is_error=True)
+        return text_result(f"hippo2_search failed: {exc}", is_error=True)
     return text_result({
         "query": q,
         "dataset_ids": dataset_ids,
-        "query_entities": result.query_entities,
-        "seed_entities": result.seed_entities,
-        "top_ppr_entities": [
-            {"entity_id": eid, "score": round(score, 6)}
-            for eid, score in result.ppr_entities_top
-        ],
-        "chunks": result.chunks,
+        "pipeline": "hippo2",
+        "total": data["total"],
+        "chunks": data["items"],
     })
 
 
-def tool_hipporag_stats(_args: dict) -> dict:
+def tool_hippo2_stats(_args: dict) -> dict:
     cfg = load_config()
     try:
         with silenced_stdout():
             with storage.sqlite_session(cfg) as sconn:
                 counts = {
+                    "passages": sconn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0],
                     "entities": sconn.execute("SELECT COUNT(*) FROM entities").fetchone()[0],
                     "triples": sconn.execute("SELECT COUNT(*) FROM triples").fetchone()[0],
                     "mentions": sconn.execute("SELECT COUNT(*) FROM chunk_mentions").fetchone()[0],
                     "synonyms": sconn.execute("SELECT COUNT(*) FROM entity_synonyms").fetchone()[0],
-                    "embeddings": sconn.execute("SELECT COUNT(*) FROM entity_embeddings").fetchone()[0],
+                    "entity_embeddings": sconn.execute("SELECT COUNT(*) FROM entity_embeddings").fetchone()[0],
+                    "fact_embeddings": sconn.execute("SELECT COUNT(*) FROM fact_embeddings").fetchone()[0],
                     "cached_extractions": sconn.execute("SELECT COUNT(*) FROM extraction_cache").fetchone()[0],
                 }
                 dirty = retriever_graph.is_dirty(sconn)
@@ -1391,7 +1297,7 @@ def tool_hipporag_stats(_args: dict) -> dict:
                 checksum = retriever_graph.graph_checksum(sconn)
                 warm = _ppr_engine(cfg).warm(sconn)
     except Exception as exc:  # noqa: BLE001
-        return text_result(f"hipporag_stats failed: {exc}", is_error=True)
+        return text_result(f"hippo2_stats failed: {exc}", is_error=True)
     return text_result({
         "counts": counts,
         "graph_dirty": dirty,
@@ -1424,11 +1330,11 @@ HANDLERS = {
     "admin_help": tool_admin_help,
     "graph_query": tool_graph_query,
     "graph_rebuild": tool_graph_rebuild,
-    "hipporag_index": tool_hipporag_index,
-    "start_hipporag_index": tool_start_hipporag_index,
-    "hipporag_index_document": tool_hipporag_index_document,
-    "hipporag_refresh_synonyms": tool_hipporag_refresh_synonyms,
-    "hipporag_search": tool_hipporag_search,
-    "hipporag_stats": tool_hipporag_stats,
+    "hippo2_index": tool_hippo2_index,
+    "start_hippo2_index": tool_start_hippo2_index,
+    "hippo2_index_document": tool_hippo2_index_document,
+    "hippo2_refresh_synonyms": tool_hippo2_refresh_synonyms,
+    "hippo2_search": tool_hippo2_search,
+    "hippo2_stats": tool_hippo2_stats,
     "pipeline_tutorial": tool_pipeline_tutorial,
 }

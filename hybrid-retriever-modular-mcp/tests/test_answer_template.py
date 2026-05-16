@@ -29,7 +29,8 @@ SHIPPED_TOPOLOGIES = [
     "rrf_rerank_unified.json",
     "rrf_llm_rerank_unified.json",
     "rrf_graph_rerank_unified.json",
-    "hippo_graph_rrf_unified.json",
+    "hippo2_unified.json",
+    "hippo2_graph_rrf_unified.json",
     "rrf_rerank_retrieval.json",
     "rrf_llm_rerank_retrieval.json",
 ]
@@ -79,7 +80,7 @@ class EngineGetAnswerTemplateTest(unittest.TestCase):
         templates = {
             name: get_answer_template(engine.get_profile(name))
             for name in ("default", "email", "keyword_only", "rrf_rerank",
-                         "rrf_llm_rerank", "rrf_graph_rerank", "hippo_graph_rrf")
+                         "rrf_llm_rerank", "rrf_graph_rerank", "hippo2_graph_rrf")
         }
         # Each pipeline should expose a non-empty template
         for name, t in templates.items():

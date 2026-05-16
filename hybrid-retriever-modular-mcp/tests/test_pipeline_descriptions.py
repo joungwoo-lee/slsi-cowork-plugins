@@ -153,7 +153,7 @@ class BuiltInProfilesReadDescriptionFromTopologyTest(unittest.TestCase):
     def test_hippo2_profile_uses_passage_embedding_topology(self) -> None:
         registry_path = Path(__file__).resolve().parent.parent / "retriever" / "pipelines" / "registry.json"
         registry = json.loads(registry_path.read_text("utf-8"))
-        self.assertEqual(registry["hippo2"]["unified_topology"], "default_unified.json")
+        self.assertEqual(registry["hippo2"]["unified_topology"], "hippo2_unified.json")
 
 
 class BuildToolsEnrichesPipelineParamTest(unittest.TestCase):

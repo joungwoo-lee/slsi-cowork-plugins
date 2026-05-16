@@ -73,7 +73,7 @@ CREATE VIRTUAL TABLE IF NOT EXISTS chunk_fts USING fts5(
     tokenize='unicode61'
 );
 
--- HippoRAG knowledge-graph tables. These mirror what's projected into the
+-- Hippo2 knowledge-graph tables. These mirror what's projected into the
 -- Kùzu property graph but SQLite is the source of truth: rebuild_from_sqlite
 -- drops the graph and replays from here. Embeddings are stored as raw little-
 -- endian float32 BLOBs so we can stream into a numpy/scipy matrix without
@@ -181,7 +181,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_submitted_at ON jobs(submitted_at DESC);
 
 def open_sqlite(cfg: Config) -> sqlite3.Connection:
     cfg.ensure_dirs()
-    # HippoRAG OpenIE uses a small thread pool and shares one connection while
+    # Hippo2 OpenIE uses a small thread pool and shares one connection while
     # serializing cache writes with a lock, so the connection must be usable
     # across threads.
     conn = sqlite3.connect(cfg.db_path, check_same_thread=False)
@@ -233,7 +233,7 @@ def _migrate_kuzu_synced(conn: sqlite3.Connection) -> None:
         try:
             cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
         except sqlite3.OperationalError:
-            # Table not yet created (e.g. fresh DB before HippoRAG bootstrap).
+            # Table not yet created (e.g. fresh DB before Hippo2 bootstrap).
             continue
         if not cols or "kuzu_synced" in cols:
             continue

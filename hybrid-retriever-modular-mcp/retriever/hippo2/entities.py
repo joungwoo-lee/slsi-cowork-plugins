@@ -240,7 +240,7 @@ def embed_pending_facts(
     *,
     batch_size: int | None = None,
 ) -> int:
-    """Embed OpenIE triples for HippoRAG2 fact retrieval."""
+    """Embed OpenIE triples for Hippo2 fact retrieval."""
     if not embedding_cfg or not embedding_cfg.is_configured:
         log.info("embedding endpoint not configured — skipping fact embeddings")
         return 0

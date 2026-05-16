@@ -1,8 +1,8 @@
 """External chat-completions LLM client.
 
 Mirrors :class:`EmbeddingClient`: URL + bearer key + optional x-dep-ticket /
-x-system-name headers + verify_ssl toggle. Used by the HippoRAG OpenIE
-extractor (offline ingest) and the query-entity extractor (online search).
+x-system-name headers + verify_ssl toggle. Used by the Hippo2 OpenIE
+extractor (offline ingest), query-entity extractor, and online filter.
 
 The wire shape is the OpenAI ``/v1/chat/completions`` contract — both
 OpenAI and any compatible self-hosted endpoint (vLLM, Together, internal

@@ -4,7 +4,7 @@ Nodes  : Dataset, Document, Chunk, Entity
 Edges  : (Document)-[:IN_DATASET]->(Dataset)
          (Document)-[:HAS_CHUNK]->(Chunk)
          (Chunk)-[:NEXT]->(Chunk)
-         (Chunk)-[:MENTIONS]->(Entity)        — HippoRAG passage-entity link
+         (Chunk)-[:MENTIONS]->(Entity)        — Hippo2 passage-entity link
          (Entity)-[:RELATION]->(Entity)        — OpenIE triples (predicate prop)
          (Entity)-[:SYNONYM]->(Entity)         — embedding-similarity edges
 
@@ -130,6 +130,7 @@ def graph_checksum(conn: sqlite3.Connection) -> str:
         "SELECT COUNT(*), COALESCE(SUM(LENGTH(chunk_id)),0) FROM chunks",
         "SELECT COUNT(*), COALESCE(SUM(LENGTH(entity_id)),0) FROM entities",
         "SELECT COUNT(*), COALESCE(SUM(LENGTH(triple_id)),0) FROM triples",
+        "SELECT COUNT(*), COALESCE(SUM(LENGTH(chunk_id) + LENGTH(entity_id) + count),0) FROM chunk_mentions",
         "SELECT COUNT(*) FROM entity_synonyms",
     ):
         for row in conn.execute(sql):

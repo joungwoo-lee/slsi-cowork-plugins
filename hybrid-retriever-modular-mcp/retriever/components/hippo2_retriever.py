@@ -1,6 +1,6 @@
-"""HippoRAG retriever component.
+"""Hippo2 retriever component.
 
-Wraps ``hipporag_query.search`` so it slots into a Haystack Pipeline.
+Wraps ``hippo2_query.search`` so it slots into a Haystack Pipeline.
 """
 from __future__ import annotations
 
@@ -10,22 +10,22 @@ from typing import List
 from haystack import Document, component
 
 from .. import storage
-from ..config import Config
-from ..hipporag import query as hipporag_query
-from ..hipporag import ppr as hipporag_ppr
+from ..config import load_config
+from ..hippo2 import query as hippo2_query
+from ..hippo2 import ppr as hippo2_ppr
 
 
 @component
-class HippoRAGRetriever:
-    """Retrieval using HippoRAG PPR scoring."""
+class Hippo2Retriever:
+    """Retrieval using Hippo2 PPR scoring."""
 
     def __init__(self, data_root: str = "") -> None:
         self.data_root = data_root
         self._ppr_engine = None
 
-    def _get_ppr_engine(self, cfg: Config) -> hipporag_ppr.PPREngine:
+    def _get_ppr_engine(self, cfg) -> hippo2_ppr.PPREngine:
         if self._ppr_engine is None:
-            self._ppr_engine = hipporag_ppr.PPREngine(cfg, cfg.hipporag)
+            self._ppr_engine = hippo2_ppr.PPREngine(cfg, cfg.hippo2)
         return self._ppr_engine
 
     @component.output_types(documents=List[Document])
@@ -39,14 +39,15 @@ class HippoRAGRetriever:
         if not enabled or not query or not dataset_ids or not self.data_root:
             return {"documents": []}
 
-        cfg = Config(data_root=Path(self.data_root))
+        cfg = load_config()
+        cfg.data_root = Path(self.data_root)
         if not cfg.llm or not cfg.llm.is_configured:
             return {"documents": []}
 
         try:
             with storage.sqlite_session(cfg) as conn:
                 engine = self._get_ppr_engine(cfg)
-                result = hipporag_query.search(
+                result = hippo2_query.search(
                     cfg,
                     conn,
                     engine,
@@ -55,7 +56,7 @@ class HippoRAGRetriever:
                     top_chunks=top_k,
                 )
         except Exception:
-            # If HippoRAG fails (e.g. no entities found), return empty
+            # If Hippo2 fails (e.g. no entities found), return empty
             return {"documents": []}
 
         docs: list[Document] = []
@@ -67,7 +68,16 @@ class HippoRAGRetriever:
                 "position": int(chunk["position"]),
                 "hippo_rank": rank,
                 "hippo_score": float(chunk["score"]),
+                "graph_score": float(chunk["score"]),
+                "passage_node_score": float(chunk.get("passage_node_score", 0.0)),
+                "entity_ppr_score": float(chunk.get("entity_ppr_score", 0.0)),
                 "matched_entities": chunk.get("matched_entities", []),
+                "metadata": {
+                    "matched_entities": chunk.get("matched_entities", []),
+                    "passage_node_score": float(chunk.get("passage_node_score", 0.0)),
+                    "entity_ppr_score": float(chunk.get("entity_ppr_score", 0.0)),
+                    "online_filter": chunk.get("online_filter", ""),
+                },
             }
             docs.append(
                 Document(

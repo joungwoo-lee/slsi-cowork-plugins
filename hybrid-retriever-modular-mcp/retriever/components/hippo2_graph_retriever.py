@@ -1,6 +1,6 @@
-"""HippoGraph hybrid retriever component.
+"""Hippo2Graph hybrid retriever component.
 
-Combines HippoRAG and Graph Neighborhood search into one list.
+Combines Hippo2 and Graph Neighborhood search into one list.
 Can be named 'graph' in the topology to receive 'query' and 'dataset_ids'
 from the existing engine.py without modifying module code.
 """
@@ -12,17 +12,17 @@ from typing import List
 from haystack import Document, component
 
 from .graph_retriever import GraphChunkRetriever
-from .hipporag_retriever import HippoRAGRetriever
+from .hippo2_retriever import Hippo2Retriever
 
 
 @component
-class HippoGraphRetriever:
+class Hippo2GraphRetriever:
     """Expansion + PPR hybrid retriever."""
 
     def __init__(self, data_root: str = "") -> None:
         self.data_root = data_root
         self._graph_retriever = GraphChunkRetriever(data_root=data_root)
-        self._hippo_retriever = HippoRAGRetriever(data_root=data_root)
+        self._hippo_retriever = Hippo2Retriever(data_root=data_root)
 
     @component.output_types(documents=List[Document])
     def run(
@@ -43,7 +43,7 @@ class HippoGraphRetriever:
         graph_out = self._graph_retriever.run(query, dataset_ids, top_k=top_k, enabled=True)
         graph_docs = graph_out.get("documents", [])
 
-        # 2. Run HippoRAG
+        # 2. Run Hippo2
         hippo_out = self._hippo_retriever.run(query, dataset_ids, top_k=top_k, enabled=True)
         hippo_docs = hippo_out.get("documents", [])
 

@@ -14,7 +14,7 @@
 
 `search`는 의도적으로 후속 노출이 없습니다. 리턴이 이미 **리랭크된 청크 + citation** 이라 그 자체가 답입니다. `get_document_content`(원문 전체)는 사후 디버깅용이라 `admin_help` 뒤로 둡니다. `get_dataset`도 `list_datasets`가 같은 metadata를 다 돌려주므로 잉여 → admin 뒤.
 
-`admin_help` 게이트 뒤 도구군: **파괴적**(`create_dataset`, `delete_dataset`, `delete_document`) · **잉여/디버깅**(`get_dataset`, `get_document`, `get_document_content`, `list_chunks`, `health`) · **그래프**(`graph_query`, `graph_rebuild`) · **HippoRAG**(`hipporag_index`, `hipporag_search`, `hipporag_stats`, …) · **파이프라인**(`list_pipelines`, `save_pipeline`, `open_pipeline_editor`, …).
+`admin_help` 게이트 뒤 도구군: **파괴적**(`create_dataset`, `delete_dataset`, `delete_document`) · **잉여/디버깅**(`get_dataset`, `get_document`, `get_document_content`, `list_chunks`, `health`) · **그래프**(`graph_query`, `graph_rebuild`) · **Hippo2**(`hippo2_index`, `hippo2_search`, `hippo2_stats`, …) · **파이프라인**(`list_pipelines`, `save_pipeline`, `open_pipeline_editor`, …).
 
 부모 응답에는 구조화된 `next_action`/`next_actions`(`{tool, arguments, use_when}`)이 포함되어, 클라이언트가 `tools/list_changed`를 무시하는 경우에도 다음 호출 모양을 그대로 받아쓸 수 있습니다.
 
@@ -54,7 +54,7 @@ EMBEDDING_MODEL=text-embedding-3-small
 EMBEDDING_DIM=1536
 ```
 
-`EMBEDDING_API_URL`을 비우면 FTS5 키워드 전용. HippoRAG는 `EMBEDDING_*` + `LLM_*` 필요(LLM 값 비면 EMBEDDING 값 자동 재사용).
+`EMBEDDING_API_URL`을 비우면 FTS5 키워드 전용. Hippo2는 `EMBEDDING_*` + `LLM_*` 필요(LLM 값 비면 EMBEDDING 값 자동 재사용).
 
 > `load_dotenv(override=True)`: `.env`가 OS 환경변수를 항상 이깁니다(만료 키 silent 우선 사고 방지).
 
@@ -69,7 +69,7 @@ EMBEDDING_DIM=1536
 | `default` | 하이브리드(FTS5 + Qdrant, linear fusion, parent-replace) |
 | `keyword_only` | FTS5 + RRF만, 임베딩 API 우회 |
 | `email` | `.pst` / 변환된 이메일 디렉토리 |
-| `hippo2` | HippoRAG2 스타일: passage embedding/Qdrant + OpenIE entity/fact embedding 인덱싱 후, 검색은 fact/entity seed + dense passage fallback + PPR 경로로 자동 라우팅 |
+| `hippo2` | `hippo2_unified.json` 기반 모듈러 파이프라인. passage embedding/Qdrant + OpenIE entity/fact embedding 인덱싱 후, 검색은 query-to-triple 정렬 + entity/passage node seed + PPR + LLM 온라인 필터링 |
 | `rrf_rerank` | RRF + BGE cross-encoder rerank |
 | `rrf_llm_rerank` | RRF + LLM rerank |
 | `rrf_graph_rerank` | RRF + 그래프 이웃 + BGE rerank |
@@ -78,13 +78,13 @@ EMBEDDING_DIM=1536
 
 `upload`와 `search`는 파이프라인별로 다른 로직을 하드코딩하지 않습니다. 둘 다 공통 엔트리포인트가 선택된 profile의 topology JSON을 로드하고, 그 안의 `nodes`/`inputs`로 정의된 연결 순서대로 모듈을 실행합니다. profile 차이는 결국 어떤 JSON을 쓰는지와 어떤 override를 주입하는지입니다.
 
-## 그래프 / HippoRAG
+## 그래프 / Hippo2
 
 임베디드 Kùzu(`GraphDB/`)에 Document/Chunk/Dataset 노드 + IN_DATASET/HAS_CHUNK/NEXT/MENTIONS/SYNONYM 엣지를 투영합니다. SQLite가 source of truth, Kùzu는 derived.
 
 - `graph_query`: 실행 전 자동 sync. `LIMIT` 미지정 시 안전 한도 부착. 파괴적 키워드(CREATE/DELETE/MERGE/SET/DROP/ALTER/REMOVE) 거부.
 - `graph_rebuild`: Kùzu **COPY FROM 벌크 로더** — 청크 1만+엔티티 5천 규모도 수 초.
-- HippoRAG: `upload(..., auto_hipporag=true)` 또는 `upload(..., pipeline="hippo2")` → passage embedding/Qdrant → LLM OpenIE → entity/fact embeddings → entities/triples/mentions. 검색 시 fact/entity seed + dense passage fallback → scipy.sparse PPR(`data_root/ppr_matrix.npz` 캐시) → 청크 랭킹.
+- Hippo2: `upload(..., pipeline="hippo2")` → `retriever/pipelines/hippo2_unified.json`의 `Hippo2Indexer` 컴포넌트가 passage embedding/Qdrant 이후 LLM OpenIE → entity/fact embeddings → entity+passage 융합 그래프를 구축. 검색은 같은 topology의 `Hippo2Retriever` 컴포넌트가 query-to-triple 매칭과 dense passage 매칭으로 entity/passage 노드를 함께 seed → scipy.sparse PPR(`data_root/ppr_matrix.npz` 캐시) → LLM 온라인 필터링 → 청크 랭킹.
 
 ## 테스트
 

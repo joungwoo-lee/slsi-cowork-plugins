@@ -1,11 +1,11 @@
-"""HippoRAG indexing orchestrator.
+"""Hippo2 indexing orchestrator.
 
 Two entry points:
 
 - ``index_dataset(cfg, dataset_id)`` — full re-index of every chunk in a
   dataset. Idempotent: re-running with an unchanged corpus is a no-op
   beyond cache hits. Use after a fresh bulk upload, or to backfill an
-  existing dataset that pre-dates HippoRAG.
+  existing dataset that pre-dates Hippo2.
 
 - ``index_document(cfg, dataset_id, document_id)`` — incremental: only
   re-extracts triples for one document's chunks, then rebuilds synonyms
@@ -30,7 +30,7 @@ log = logging.getLogger(__name__)
 def _require_llm(cfg: Config) -> None:
     if not cfg.llm or not cfg.llm.is_configured:
         raise RuntimeError(
-            "HippoRAG requires an LLM endpoint. Set LLM_API_URL and LLM_MODEL "
+            "Hippo2 requires an LLM endpoint. Set LLM_API_URL and LLM_MODEL "
             "in .env, then restart the MCP server."
         )
 
@@ -38,7 +38,7 @@ def _require_llm(cfg: Config) -> None:
 def _require_embedding(cfg: Config) -> None:
     if not cfg.embedding or not cfg.embedding.is_configured:
         raise RuntimeError(
-            "HippoRAG requires an embedding endpoint for entity vectors. "
+            "Hippo2 requires an embedding endpoint for entity vectors. "
             "Set EMBEDDING_API_URL and EMBEDDING_DIM in .env."
         )
 
@@ -87,7 +87,7 @@ def index_chunks(
         return {"chunks_processed": 0, "triples_written": 0, "entities_embedded": 0}
 
     started = time.time()
-    extractor = OpenIEExtractor(cfg.llm, cfg.hipporag)
+    extractor = OpenIEExtractor(cfg.llm, cfg.hippo2)
 
     chunk_ids = [c[0] for c in chunks]
     # Wipe old mentions/triples for these chunks so re-indexing doesn't
@@ -150,7 +150,7 @@ def index_dataset(
     chunks = _fetch_chunks(sqlite_conn, dataset_id=dataset_id)
     result = index_chunks(cfg, sqlite_conn, chunks, max_workers=max_workers)
     if rebuild_synonyms_after and result["chunks_processed"] > 0:
-        syn = rebuild_synonyms(sqlite_conn, cfg.hipporag)
+        syn = rebuild_synonyms(sqlite_conn, cfg.hippo2)
         sqlite_conn.commit()
         result["synonyms"] = syn
     return result
@@ -169,13 +169,13 @@ def index_document(
     ``rebuild_synonyms_after`` defaults False because synonyms are an
     all-pairs operation; running per-document during a bulk
     ``upload_directory`` would be wasteful. Schedule a synonym refresh
-    explicitly at the end of a batch via ``hipporag_refresh_synonyms``.
+    explicitly at the end of a batch via ``hippo2_refresh_synonyms``.
     """
     _require_llm(cfg)
     chunks = _fetch_chunks(sqlite_conn, document_id=document_id)
     result = index_chunks(cfg, sqlite_conn, chunks, max_workers=max_workers)
     if rebuild_synonyms_after and result["chunks_processed"] > 0 and cfg.embedding and cfg.embedding.is_configured:
-        syn = rebuild_synonyms(sqlite_conn, cfg.hipporag)
+        syn = rebuild_synonyms(sqlite_conn, cfg.hippo2)
         sqlite_conn.commit()
         result["synonyms"] = syn
     return result

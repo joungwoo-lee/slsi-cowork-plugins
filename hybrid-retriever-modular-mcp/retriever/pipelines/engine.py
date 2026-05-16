@@ -398,7 +398,10 @@ def run_indexing(
     if skip_embedding and "embedder" in pipeline.graph.nodes and "documents" in graph_inputs.get("embedder", {}):
         run_inputs.setdefault("embedder", {})["documents"] = []
 
-    result = pipeline.run(run_inputs, include_outputs_from={"loader", "splitter", "embedder", "writer", "qdrant_writer"})
+    include_outputs = {"loader", "splitter", "embedder", "writer", "qdrant_writer"}
+    if "hippo2_indexer" in pipeline.graph.nodes:
+        include_outputs.add("hippo2_indexer")
+    result = pipeline.run(run_inputs, include_outputs_from=include_outputs)
 
 
     loader_out = result.get("loader", {})

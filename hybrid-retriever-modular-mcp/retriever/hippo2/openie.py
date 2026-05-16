@@ -24,7 +24,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from typing import Iterable
 
-from ..config import HippoRAGConfig, LLMConfig
+from ..config import Hippo2Config, LLMConfig
 from ..llm_client import LLMClient
 
 log = logging.getLogger(__name__)
@@ -124,10 +124,10 @@ def _parse_response(body: dict, max_triples: int) -> list[Triple]:
 class OpenIEExtractor:
     """Stateless-ish extractor. The LLM client is reused across calls."""
 
-    def __init__(self, llm_cfg: LLMConfig, hipporag_cfg: HippoRAGConfig) -> None:
+    def __init__(self, llm_cfg: LLMConfig, hippo2_cfg: Hippo2Config) -> None:
         self.llm = LLMClient(llm_cfg)
         self.model = llm_cfg.model
-        self.max_triples = max(1, int(hipporag_cfg.extraction_max_triples))
+        self.max_triples = max(1, int(hippo2_cfg.extraction_max_triples))
         self._cache_lock = threading.Lock()
 
     def extract_chunk(
