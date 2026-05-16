@@ -150,6 +150,14 @@ class BuiltInProfilesReadDescriptionFromTopologyTest(unittest.TestCase):
             described["keyword_only"]["description"],
         )
 
+    def test_hippo2rag_indexing_topology_excludes_vector_modules(self) -> None:
+        topology_path = Path(__file__).resolve().parent.parent / "retriever" / "pipelines" / "hippo2rag_indexing.json"
+        topology = json.loads(topology_path.read_text("utf-8"))
+        node_names = {node["name"] for node in topology["nodes"]}
+        self.assertEqual(node_names, {"loader", "splitter", "writer"})
+        self.assertNotIn("embedder", node_names)
+        self.assertNotIn("qdrant_writer", node_names)
+
 
 class BuildToolsEnrichesPipelineParamTest(unittest.TestCase):
     def test_upload_pipeline_param_lists_registered_profiles(self) -> None:

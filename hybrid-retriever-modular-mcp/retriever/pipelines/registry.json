@@ -22,11 +22,11 @@
     "unified_topology": "email_unified.json"
   },
   "hippo2rag": {
-    "description": "Use when: you want upload-time HippoRAG indexing and later search queries should automatically route through the HippoRAG entity graph + PPR scorer for that dataset.",
+    "description": "Use when: you want upload-time HippoRAG indexing and later search queries should automatically route through the HippoRAG entity graph + PPR scorer for that dataset. Its ingest topology excludes document embedding and Qdrant upsert modules.",
     "indexing_overrides": {},
     "retrieval_overrides": {},
     "search_kwargs": {},
-    "unified_topology": "default_unified.json"
+    "indexing_topology": "hippo2rag_indexing.json"
   },
   "rrf_rerank": {
     "indexing_overrides": {},
