@@ -69,6 +69,7 @@ EMBEDDING_DIM=1536
 | `default` | 하이브리드(FTS5 + Qdrant, linear fusion, parent-replace) |
 | `keyword_only` | FTS5 + RRF만, 임베딩 API 우회 |
 | `email` | `.pst` / 변환된 이메일 디렉토리 |
+| `hippo2rag` | 업로드 직후 HippoRAG 인덱싱을 자동 수행하고, 이후 `search`가 해당 데이터셋을 HippoRAG PPR 경로로 자동 라우팅 |
 | `rrf_rerank` | RRF + BGE cross-encoder rerank |
 | `rrf_llm_rerank` | RRF + LLM rerank |
 | `rrf_graph_rerank` | RRF + 그래프 이웃 + BGE rerank |
@@ -81,7 +82,7 @@ EMBEDDING_DIM=1536
 
 - `graph_query`: 실행 전 자동 sync. `LIMIT` 미지정 시 안전 한도 부착. 파괴적 키워드(CREATE/DELETE/MERGE/SET/DROP/ALTER/REMOVE) 거부.
 - `graph_rebuild`: Kùzu **COPY FROM 벌크 로더** — 청크 1만+엔티티 5천 규모도 수 초.
-- HippoRAG: `upload(..., auto_hipporag=true)` → LLM OpenIE → entities/triples/mentions. 검색 시 쿼리 엔티티 → seed → scipy.sparse PPR(`data_root/ppr_matrix.npz` 캐시) → 청크 랭킹.
+- HippoRAG: `upload(..., auto_hipporag=true)` 또는 `upload(..., pipeline="hippo2rag")` → LLM OpenIE → entities/triples/mentions. 검색 시 쿼리 엔티티 → seed → scipy.sparse PPR(`data_root/ppr_matrix.npz` 캐시) → 청크 랭킹.
 
 ## 테스트
 

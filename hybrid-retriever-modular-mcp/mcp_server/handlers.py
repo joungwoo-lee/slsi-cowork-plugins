@@ -29,7 +29,6 @@ from . import job_manager
 from .protocol import text_result, write_message
 from .runtime import log, silenced_stdout
 
-
 def _reveal_and_notify(*names: str) -> None:
     """Reveal follow-up tools and tell the client to re-fetch tools/list.
 
@@ -127,6 +126,7 @@ def _mark_dataset_ingest_profile(
             supported.add("email")
         if hipporag_ready or current.get("has_hipporag"):
             supported.add("hipporag")
+            supported.add("hippo2rag")
         metadata = {
             **current,
             "first_ingest_pipeline": current.get("first_ingest_pipeline") or pipeline_name,
@@ -136,7 +136,9 @@ def _mark_dataset_ingest_profile(
             "has_hipporag": bool(current.get("has_hipporag") if hipporag_ready is None else hipporag_ready),
             "supported_search_pipelines": sorted(supported),
             "preferred_search_pipeline": (
-                "hipporag"
+                "hippo2rag"
+                if (pipeline_name == "hippo2rag" and (hipporag_ready or current.get("has_hipporag")))
+                else "hipporag"
                 if (hipporag_ready or current.get("has_hipporag"))
                 else ("email" if pipeline_name == "email" else "default")
             ),
@@ -157,7 +159,7 @@ def _dataset_search_pipeline(cfg, dataset_ids: list[str], requested: str | None)
     return preferred.pop() if len(preferred) == 1 else "default"
 
 
-def _hipporag_to_search_payload(query: str, dataset_ids: list[str], result) -> dict:
+def _hipporag_to_search_payload(query: str, dataset_ids: list[str], result, *, pipeline_name: str = "hipporag") -> dict:
     contexts: list[dict[str, Any]] = []
     citations: list[dict[str, Any]] = []
     for c in result.chunks:
@@ -173,7 +175,7 @@ def _hipporag_to_search_payload(query: str, dataset_ids: list[str], result) -> d
                 "vector_similarity": 0.0,
                 "term_similarity": 0.0,
                 "metadata": {},
-                "search_pipeline": "hipporag",
+                "search_pipeline": pipeline_name,
                 "matched_entities": c.get("matched_entities", []),
             },
         })
@@ -189,7 +191,7 @@ def _hipporag_to_search_payload(query: str, dataset_ids: list[str], result) -> d
         "total": len(result.chunks),
         "contexts": contexts,
         "citations": citations,
-        "search_pipeline": "hipporag",
+        "search_pipeline": pipeline_name,
         "query_entities": result.query_entities,
     }
 
@@ -251,7 +253,7 @@ def _run_upload_document(cfg, args: dict, *, job_id: str | None = None) -> dict:
         raise ValueError("file_path is required")
     pipeline_name = _pipeline_name(args)
     metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
-    auto_hipporag = bool(args.get("auto_hipporag", False))
+    auto_hipporag = bool(args.get("auto_hipporag", pipeline_name == "hippo2rag"))
     if job_id:
         _job_progress(cfg, job_id, 5, "indexing document")
     with silenced_stdout():
@@ -313,7 +315,7 @@ def _run_upload_directory(cfg, args: dict, *, job_id: str | None = None) -> dict
     metadata = args.get("metadata") if isinstance(args.get("metadata"), dict) else None
     skip_embedding = bool(args.get("skip_embedding", False))
     use_hierarchical = args.get("use_hierarchical")
-    auto_hipporag = bool(args.get("auto_hipporag", False))
+    auto_hipporag = bool(args.get("auto_hipporag", pipeline_name == "hippo2rag"))
 
     paths: list[Path] = []
     for file_path in dir_path.rglob("*"):
@@ -604,7 +606,7 @@ def tool_search(args: dict) -> dict:
     parent_chunk_replace = args.get("parent_chunk_replace") if isinstance(args.get("parent_chunk_replace"), bool) else None
     metadata_condition = args.get("metadata_condition") if isinstance(args.get("metadata_condition"), dict) else None
 
-    if pipeline_name == "hipporag":
+    if pipeline_name in {"hipporag", "hippo2rag"}:
         try:
             with silenced_stdout():
                 with storage.sqlite_session(cfg) as sconn:
@@ -617,7 +619,7 @@ def tool_search(args: dict) -> dict:
                         datasets,
                         top_chunks=_safe_int(args, "top_n", cfg.hipporag.top_chunks, lo=1, hi=100),
                     )
-            return text_result(_hipporag_to_search_payload(query.strip(), datasets, result))
+            return text_result(_hipporag_to_search_payload(query.strip(), datasets, result, pipeline_name=pipeline_name))
         except Exception as exc:  # noqa: BLE001
             return text_result(f"search failed: {exc}", is_error=True)
 
@@ -629,8 +631,8 @@ def tool_search(args: dict) -> dict:
             pipeline=pipeline_name,
             top=_safe_int(args, "top_n", 12, lo=1, hi=50),
             top_k=_safe_int(args, "top_k", 200, lo=1, hi=500),
-            vector_similarity_weight=float(args.get("vector_similarity_weight", 0.5)),
-            keyword=bool(args.get("keyword", True)),
+            vector_similarity_weight=float(args["vector_similarity_weight"]) if args.get("vector_similarity_weight") is not None else None,
+            keyword=bool(args["keyword"]) if args.get("keyword") is not None else None,
             fusion=fusion,
             parent_chunk_replace=parent_chunk_replace,
             metadata_condition=metadata_condition,
@@ -648,6 +650,7 @@ def tool_search(args: dict) -> dict:
                 "position": c["position"],
                 "chunk_id": c["chunk_id"],
                 "similarity": c["similarity"],
+                "graph_similarity": c.get("graph_similarity", 0.0),
                 "vector_similarity": c["vector_similarity"],
                 "term_similarity": c["term_similarity"],
                 "metadata": c.get("metadata", {}),

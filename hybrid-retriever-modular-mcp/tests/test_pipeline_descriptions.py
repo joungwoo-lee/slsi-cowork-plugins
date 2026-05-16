@@ -158,10 +158,10 @@ class BuildToolsEnrichesPipelineParamTest(unittest.TestCase):
         tools = {tool["name"]: tool for tool in build_tools()}
         upload = tools["upload"]
         param = upload["inputSchema"]["properties"]["pipeline"]
-        for name in ("default", "keyword_only", "email", "rrf_rerank"):
+        for name in ("default", "keyword_only", "email", "hippo2rag", "rrf_rerank"):
             self.assertIn(name, param["description"])
         self.assertIn("enum", param)
-        for name in ("default", "keyword_only", "email"):
+        for name in ("default", "keyword_only", "email", "hippo2rag"):
             self.assertIn(name, param["enum"])
 
 
