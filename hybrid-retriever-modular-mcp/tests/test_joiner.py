@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from retriever.components.linear_joiner import LinearJoiner
 from retriever.components.rrf_joiner import RrfJoiner
+from retriever.pipelines.engine import _doc_to_item
 
 
 def _kw_doc(chunk_id: str, score: float, meta: dict | None = None) -> Document:
@@ -95,6 +96,28 @@ class LinearJoinerTest(unittest.TestCase):
             metadata_condition={"dataset_id": "ds2"},
         )
         self.assertEqual([d.id for d in out["documents"]], ["b"])
+
+
+class SearchItemFormattingTest(unittest.TestCase):
+    def test_doc_to_item_preserves_graph_similarity(self) -> None:
+        doc = Document(
+            id="chunk-1",
+            content="Graph-backed answer",
+            meta={
+                "dataset_id": "demo",
+                "document_id": "doc-1",
+                "document_name": "doc.txt",
+                "position": 1,
+                "term_similarity": 0.2,
+                "vector_similarity": 0.3,
+                "graph_similarity": 0.8,
+            },
+            score=0.9,
+        )
+
+        item = _doc_to_item(doc, parent_replace=True)
+
+        self.assertEqual(item["graph_similarity"], 0.8)
 
 
 if __name__ == "__main__":
