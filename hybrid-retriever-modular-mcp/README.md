@@ -76,6 +76,8 @@ EMBEDDING_DIM=1536
 
 토폴로지는 모두 node-centric JSON(`retriever/pipelines/<name>_unified.json`). `open_pipeline_editor`로 비주얼 편집 가능.
 
+`upload`와 `search`는 파이프라인별로 다른 로직을 하드코딩하지 않습니다. 둘 다 공통 엔트리포인트가 선택된 profile의 topology JSON을 로드하고, 그 안의 `nodes`/`inputs`로 정의된 연결 순서대로 모듈을 실행합니다. profile 차이는 결국 어떤 JSON을 쓰는지와 어떤 override를 주입하는지입니다.
+
 ## 그래프 / HippoRAG
 
 임베디드 Kùzu(`GraphDB/`)에 Document/Chunk/Dataset 노드 + IN_DATASET/HAS_CHUNK/NEXT/MENTIONS/SYNONYM 엣지를 투영합니다. SQLite가 source of truth, Kùzu는 derived.
