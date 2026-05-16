@@ -1495,7 +1495,7 @@ def _run_benchmark_pipelines(cfg, args: dict, job_id: str | None = None) -> dict
                 pass
         
         # --- Evaluation ---
-        evaluator = RelevanceEvaluator(qrels, {'ndcg_cut.10', 'map_cut.10', 'recall.10', 'P.10'})
+        evaluator = RelevanceEvaluator(qrels, {'ndcg_cut.10', 'map_cut.10', 'recall.10', 'P.10', 'success.1', 'success.5'})
         metrics = evaluator.evaluate(pipeline_run)
         
         if metrics:
@@ -1503,8 +1503,10 @@ def _run_benchmark_pipelines(cfg, args: dict, job_id: str | None = None) -> dict
             map_10 = sum(q.get('map_cut_10', 0) for q in metrics.values()) / len(metrics)
             recall_10 = sum(q.get('recall_10', 0) for q in metrics.values()) / len(metrics)
             p_10 = sum(q.get('P_10', 0) for q in metrics.values()) / len(metrics)
+            hr_1 = sum(q.get('success_1', 0) for q in metrics.values()) / len(metrics)
+            hr_5 = sum(q.get('success_5', 0) for q in metrics.values()) / len(metrics)
         else:
-            ndcg_10 = map_10 = recall_10 = p_10 = 0.0
+            ndcg_10 = map_10 = recall_10 = p_10 = hr_1 = hr_5 = 0.0
             
         avg_latency = round(sum(q_latencies) / len(q_latencies) * 1000, 1) if q_latencies else None
 
@@ -1514,6 +1516,8 @@ def _run_benchmark_pipelines(cfg, args: dict, job_id: str | None = None) -> dict
             "map_10": round(map_10, 4),
             "recall_10": round(recall_10, 4),
             "p_10": round(p_10, 4),
+            "hr_1": round(hr_1, 4),
+            "hr_5": round(hr_5, 4),
             "avg_latency_ms": avg_latency,
             "total_queries": len(pipeline_run),
         })
@@ -1547,11 +1551,13 @@ def _run_benchmark_pipelines(cfg, args: dict, job_id: str | None = None) -> dict
     lines.append("| **Recall@10** | \"전체 정답 중에서 몇 개나 안 놓치고 가져왔어?\" | ❌ 고려 안 함 (개수만 중요) |")
     lines.append("| **MAP@10** | \"정답 문서들을 최대한 상위권에 잘 모아뒀어?\" | ⭕ 고려함 (O/X 정답용) |")
     lines.append("| **NDCG@10** | \"진짜 중요한 문서를 찰떡같이 1~2등에 배치했어?\" | ⭕ 아주 강력하게 고려함 (점수형 정답용) |")
+    lines.append("| **HR@1** | \"가장 먼저 나온(1등) 결과가 정답이야?\" | ⭕ 고려함 (가장 높은 순위) |")
+    lines.append("| **HR@5** | \"상위 5개 안에 정답이 하나라도 있어?\" | ❌ 고려 안 함 (개수만 중요) |")
     lines.append("")
     lines.append(f"Queries per pipeline: {len(qrels)}, top_n={top_n}")
     lines.append("")
-    lines.append("| Pipeline | Status | Ingest(s) | Avg Latency(ms) | NDCG@10 | MAP@10 | Recall@10 | P@10 |")
-    lines.append("|----------|--------|-----------|-----------------|---------|--------|-----------|------|")
+    lines.append("| Pipeline | Status | Ingest(s) | Avg Latency(ms) | NDCG@10 | MAP@10 | Recall@10 | P@10 | HR@1 | HR@5 |")
+    lines.append("|----------|--------|-----------|-----------------|---------|--------|-----------|------|------|------|")
     for pipeline, e in report["pipelines"].items():
         status = e.get("status", "?")
         ingest = f"{e['ingest_seconds']:.2f}" if "ingest_seconds" in e else "—"
@@ -1561,9 +1567,11 @@ def _run_benchmark_pipelines(cfg, args: dict, job_id: str | None = None) -> dict
             map_val = f"{e['map_10']:.4f}"
             recall = f"{e['recall_10']:.4f}"
             p10 = f"{e['p_10']:.4f}"
-            lines.append(f"| {pipeline} | {status} | {ingest} | {latency} | {ndcg} | {map_val} | {recall} | {p10} |")
+            hr_1 = f"{e['hr_1']:.4f}"
+            hr_5 = f"{e['hr_5']:.4f}"
+            lines.append(f"| {pipeline} | {status} | {ingest} | {latency} | {ndcg} | {map_val} | {recall} | {p10} | {hr_1} | {hr_5} |")
         else:
-            lines.append(f"| {pipeline} | {status} | {ingest} | {latency} | — | — | — | — |")
+            lines.append(f"| {pipeline} | {status} | {ingest} | {latency} | — | — | — | — | — | — |")
 
     report["markdown"] = "\n".join(lines)
     report["summary"] = {
