@@ -24,6 +24,7 @@ class JobManagerTest(unittest.TestCase):
                 runner=lambda _job_id: {"ok": True},
             )
             result = self._wait(cfg, job["job_id"])
+            self.assertIn("next_step", job)
             self.assertEqual(result["status"], "completed")
             self.assertEqual(result["result"], {"ok": True})
             self.assertEqual(result["args"], {"x": 1})

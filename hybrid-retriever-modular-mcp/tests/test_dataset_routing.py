@@ -137,6 +137,7 @@ class DatasetRoutingTest(unittest.TestCase):
     def test_admin_tools_are_hidden_from_public_catalog(self) -> None:
         tools = {tool["name"]: tool for tool in build_tools()}
         self.assertIn("admin_help", tools)
+        self.assertNotIn("get_job", tools)
         self.assertNotIn("list_pipelines", tools)
         self.assertNotIn("graph_rebuild", tools)
         self.assertNotIn("hipporag_index", tools)

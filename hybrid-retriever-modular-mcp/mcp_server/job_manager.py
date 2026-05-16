@@ -53,7 +53,13 @@ def start_job(
     with _LOCK:
         _ACTIVE_JOBS[job_id] = thread
     thread.start()
-    return {"job_id": job_id, "job_type": job_type, "status": "queued", "submitted_at": submitted_at}
+    return {
+        "job_id": job_id,
+        "job_type": job_type,
+        "status": "queued",
+        "submitted_at": submitted_at,
+        "next_step": f"Call get_job with job_id='{job_id}' to poll progress.",
+    }
 
 
 def _run_job(cfg, job_id: str, runner: Callable[[str], Any]) -> None:

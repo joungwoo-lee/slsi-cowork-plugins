@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 _PIPELINE_AWARE_TOOLS = {"upload"}
 _ADMIN_ONLY_TOOLS = {
+    "get_job",
     "list_pipelines",
     "save_pipeline",
     "open_pipeline_editor",

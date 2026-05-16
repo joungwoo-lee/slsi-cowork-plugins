@@ -30,39 +30,77 @@ Claude / 다른 MCP 클라이언트
 
 | 도구 | 설명 |
 |---|---|
-| `search` | dataset의 chunk를 키워드/하이브리드 검색. `linear`/`rrf` fusion, metadata 필터, parent chunk replace 지원 |
+| `search` | dataset metadata를 보고 자동으로 검색 경로를 선택해 chunk를 검색. 일반 hybrid / email / HippoRAG 경로를 서버가 내부적으로 결정 |
 | `list_datasets`, `get_dataset`, `create_dataset`, `delete_dataset` | 데이터셋 관리 |
-| `upload_document`, `upload_directory` | 로컬 TXT/MD/PDF/DOCX/XLSX/CSV 파일을 복사·청킹·SQLite 색인·선택적 임베딩 |
+| `upload` | 파일/폴더 경로를 자동 판별해 ingest. 기본 `async=true`; 오래 걸리는 작업은 `job_id`와 다음 단계 안내를 반환 |
 | `list_documents`, `get_document`, `list_chunks`, `delete_document` | 문서·청크 관리 |
 | `get_document_content` | 저장된 원문 텍스트 조회 (data_root 외부 경로 차단) |
-| `list_pipelines`, `save_pipeline` | 등록된 파이프라인 프로파일 조회·저장 |
-| `open_pipeline_editor`, `get_pipeline_editor`, `close_pipeline_editor` | 비주얼 파이프라인 편집기 실행/상태 조회/종료 |
 | `health` | DB, 데이터 루트, 임베딩 설정, 인덱스 카운트 확인 |
-| `graph_query`, `graph_rebuild` | Kùzu 그래프 위 Cypher 질의 (read-only) / 재빌드 |
-| `hipporag_index`, `hipporag_index_document`, `hipporag_refresh_synonyms` | HippoRAG 지식 그래프 (전체 / 증분 / synonym 갱신) |
-| `hipporag_search` | LLM 쿼리 엔티티 추출 → 임베딩 링크 → Personalized PageRank → 청크 스코어링 |
-| `hipporag_stats` | 엔티티/트리플/멘션/시노님 카운트 + PPR 매트릭스 상태 |
+| `graph_query` | Kùzu 그래프 위 read-only Cypher 질의 |
+| `admin_help` | 기본 `tools/list`에서 숨겨진 관리용 도구와 사용 시점 안내 |
+
+기본 `tools/list`에 **노출되지 않는 관리용 도구**는 `admin_help`에서 확인합니다. 예: `get_job`, `graph_rebuild`, `hipporag_index`, `hipporag_refresh_synonyms`, `list_pipelines`, `save_pipeline`, pipeline editor 관련 도구 등.
+
+## Dataset Metadata 중심 설계
+
+이 서버는 **파이프라인 설명을 직접 고르게 하는 방식** 대신, dataset metadata를 source of truth로 사용합니다.
+
+첫 ingest 시 dataset metadata에 다음을 기록합니다.
+
+- `use_when`: 이 dataset을 언제 검색해야 하는지
+- `first_ingest_pipeline`, `last_ingest_pipeline`
+- `content_kind`
+- `has_vectors`
+- `has_hipporag`
+- `supported_search_pipelines`
+- `preferred_search_pipeline`
+
+이후 검색 시에는 `search(dataset_ids=...)`만 호출하면 서버가 dataset metadata를 보고 자동으로 검색 경로를 선택합니다.
+
+- 일반 문서 dataset: 기본 hybrid search
+- email dataset: email profile 기반 search
+- HippoRAG 준비 완료 dataset: HippoRAG 경로
+
+여러 dataset을 한 번에 검색하는데 선호 경로가 다르면 안전하게 `default` 경로로 내립니다.
+
+`tools/list` 응답의 dataset 관련 파라미터(`dataset_id`, `dataset_ids`)에는 **현재 등록된 dataset 목록과 각 dataset의 `use_when`** 이 동적으로 노출됩니다. 즉 에이전트는 pipeline 설명이 아니라 dataset 설명을 보고 dataset을 고르면 됩니다.
+
+## 장기 작업
+
+`upload`는 기본적으로 `async=true`입니다. 오래 걸리는 작업은 즉시 background job으로 시작하고, 응답에 다음이 포함됩니다.
+
+- `job_id`
+- `status`
+- `next_step`: `get_job(job_id=...)` 호출 안내
+
+`get_job` 자체는 관리용 도구로 숨겨져 있으며, 필요할 때는 `upload` 응답이나 `admin_help`가 안내합니다.
 
 ## HippoRAG 지식 그래프 (선택)
 
 **관계 기반 / 멀티홉 질문**에 강한 retrieval. SQLite를 source of truth로 쓰고 Kùzu에는 투영만 합니다.
 
 ```
-upload_document(file, auto_hipporag=true)
+upload(path=..., auto_hipporag=true)
    │  ├ 청크 → SQLite/Qdrant (기존 경로)
    │  └ LLM OpenIE → triples → entities → mentions → SQLite
    ▼
 hipporag_refresh_synonyms        (배치 끝에 1회)
    │  └ 엔티티 임베딩 cosine all-pairs → SYNONYM 엣지
    ▼
-hipporag_search(query)
+search(dataset_ids=[...])        # dataset metadata가 hipporag 경로를 선택
    ├ 쿼리 LLM → 핵심 엔티티 추출
    ├ 임베딩 cosine linker → 시드 엔티티
    ├ scipy.sparse PPR (`data_root/ppr_matrix.npz` 디스크 캐시, 그래프 변경 시 자동 무효화)
    └ Σ PPR(e) · log(1+mention_count) → 청크 랭킹
 ```
 
-전제: `LLM_API_URL` + `LLM_MODEL` + `EMBEDDING_API_*` 설정. 엔드포인트는 OpenAI `/v1/chat/completions` 호환이면 됨 (사내 게이트웨이/vLLM 가능).
+전제: `EMBEDDING_API_*` 설정. `LLM_*`가 비어 있으면 OpenAI embedding 설정을 기반으로 LLM 호출도 자동 구성합니다.
+
+- `LLM_API_KEY` 없으면 `EMBEDDING_API_KEY` 재사용
+- `LLM_API_X_DEP_TICKET` 없으면 `EMBEDDING_API_X_DEP_TICKET` 재사용
+- `LLM_API_X_SYSTEM_NAME` 없으면 `EMBEDDING_API_X_SYSTEM_NAME` 재사용
+- `LLM_TIMEOUT_SEC`, `LLM_VERIFY_SSL`도 없으면 `EMBEDDING_*` 값 사용
+- OpenAI 임베딩 엔드포인트를 쓰는 경우 기본 LLM URL은 `/v1/chat/completions`, 기본 모델은 `gpt-4o-mini`
 
 `graph_rebuild`는 이제 **Kùzu COPY FROM 벌크 로더**로 동작 — 청크 1만 + 엔티티 5천 규모도 수 초 안에 재구축. 기존의 청크 1개당 3 Cypher round-trip 방식과 비교하면 약 1-2 orders of magnitude 빠름.
 
@@ -95,13 +133,24 @@ FTS5는 `unicode61` 토크나이저를 쓰지만, 색인·쿼리 양쪽에서 `k
 
 ## 그래프
 
-임베디드 Kùzu (`GraphDB/` 디렉토리, Docker 불필요)로 Document/Chunk/Dataset 노드 + IN_DATASET/HAS_CHUNK/NEXT 엣지를 저장. `graph_rebuild` 후 `graph_query`로 Cypher 사용. `LIMIT` 미지정 시 안전 한도가 자동 부착되며 destructive 키워드(CREATE/DELETE/MERGE/SET/DROP/ALTER/REMOVE)는 거부됩니다.
+임베디드 Kùzu (`GraphDB/` 디렉토리, Docker 불필요)로 Document/Chunk/Dataset 노드 + IN_DATASET/HAS_CHUNK/NEXT 엣지를 저장합니다.
+
+- `graph_query`는 실행 전에 자동 sync를 시도합니다
+- 신규 row는 incremental sync
+- 삭제/재업로드가 섞인 경우는 dirty 표시 후 안전하게 full rebuild
+- `LIMIT` 미지정 시 안전 한도가 자동 부착되며 destructive 키워드(CREATE/DELETE/MERGE/SET/DROP/ALTER/REMOVE)는 거부됩니다.
 
 ## 파이프라인 프로파일
 
-기본 프로파일은 `retriever/pipelines/registry.json`(컴포넌트 그래프 참조 + 오버라이드만 보관). 각 파이프라인의 "언제 사용해야 하는지" 설명은 **해당 토폴로지 JSON의 `metadata.description`** 에 들어 있어 — 사용자 프로파일은 `$RETRIEVER_DATA_ROOT/pipelines.json` 또는 `save_pipeline` MCP 도구로 추가합니다 (이 경우에도 description은 새로 생성되는 토폴로지 JSON의 metadata에 함께 기록됩니다). 파이프라인 폴더의 토폴로지 JSON은 모두 node-centric 형식으로 저장되고, 실행 시점에만 Haystack 형식으로 어댑터 변환됩니다.
+기본 프로파일은 `retriever/pipelines/registry.json`에 있습니다. 파이프라인 폴더의 토폴로지 JSON은 모두 node-centric 형식으로 저장되고, 실행 시점에만 Haystack 형식으로 어댑터 변환됩니다.
 
-`tools/list` 응답에서는 `search` / `upload_document` / `upload_directory`의 `pipeline` 파라미터 description에 현재 등록된 모든 프로파일의 description 목록이 합성되어 노출됩니다. 즉 에이전트가 별도로 `list_pipelines`를 호출하지 않아도 도구 스키마만 보고 "쿼리에 맞는 파이프라인"을 고를 수 있습니다.
+중요한 변경:
+
+- `search`는 더 이상 `pipeline` 파라미터를 노출하지 않습니다
+- `upload`만 `pipeline` 파라미터를 가집니다
+- 즉 **파이프라인 선택은 ingest 단계에서만 사용자에게 보이고**, 검색 단계에서는 dataset metadata 기반 자동 라우팅을 사용합니다
+
+`list_pipelines`, `save_pipeline`, pipeline editor 관련 도구는 관리용이므로 기본 `tools/list`에서는 숨기고 `admin_help`로 안내합니다.
 
 ### 비주얼 파이프라인 편집기
 

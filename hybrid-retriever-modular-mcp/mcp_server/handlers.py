@@ -1049,6 +1049,10 @@ def tool_admin_help(_args: dict) -> dict:
     return text_result({
         "admin_tools": [
             {
+                "name": "get_job",
+                "use_when": "Poll a background job returned by upload or other long-running start responses.",
+            },
+            {
                 "name": "graph_rebuild",
                 "use_when": "The embedded graph is missing or badly stale and automatic sync is not enough.",
             },
