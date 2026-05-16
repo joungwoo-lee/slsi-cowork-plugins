@@ -57,6 +57,7 @@ _ADMIN_ONLY_TOOLS = {
     "hipporag_refresh_synonyms",
     "hipporag_search",
     "hipporag_stats",
+    "pipeline_tutorial",
 }
 
 # Process-wide set of tools dynamically revealed during this MCP session.
@@ -523,12 +524,8 @@ _BASE_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
-        "name": "hipporag_stats",
-        "description": (
-            "[HippoRAG] Report entity/triple/mention/synonym counts and PPR engine "
-            "warmth (cached matrix size + checksum). Run before/after indexing to "
-            "verify state."
-        ),
+        "name": "pipeline_tutorial",
+        "description": "[Admin] Show a step-by-step guide on how to create and register a new RAG pipeline.",
         "inputSchema": {"type": "object", "properties": {}},
     },
 ]

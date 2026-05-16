@@ -586,6 +586,22 @@ def _launch_pipeline_editor(cfg, preferred_port: int, open_browser: bool) -> dic
     raise RuntimeError("pipeline editor failed to start within 10 seconds")
 
 
+def tool_pipeline_tutorial(_args: dict) -> dict:
+    tutorial = (
+        "## How to Create a New RAG Pipeline\n\n"
+        "1. **Implement Components (Optional)**: If you need new logic, create a Python file in `retriever/components/`. "
+        "Decorate your class with `@component` and define a `run` method.\n\n"
+        "2. **Define Topology**: Create a JSON file in `retriever/pipelines/` (e.g., `my_pipeline_unified.json`). "
+        "Use the node-centric schema to define components and their connections.\n\n"
+        "3. **Register Profile**: Add a new entry to `retriever/pipelines/registry.json`. "
+        "Specify your topology file and any runtime overrides.\n\n"
+        "4. **Update Engine (Rare)**: If your component needs new input types from the search/upload API, "
+        "update `retriever/pipelines/engine.py` to forward those inputs.\n\n"
+        "5. **Test**: Run the MCP server and verify your new pipeline appears in `list_pipelines`."
+    )
+    return text_result(tutorial)
+
+
 # ----- search -------------------------------------------------------------
 
 def tool_search(args: dict) -> dict:
@@ -1382,4 +1398,5 @@ HANDLERS = {
     "hipporag_refresh_synonyms": tool_hipporag_refresh_synonyms,
     "hipporag_search": tool_hipporag_search,
     "hipporag_stats": tool_hipporag_stats,
+    "pipeline_tutorial": tool_pipeline_tutorial,
 }
