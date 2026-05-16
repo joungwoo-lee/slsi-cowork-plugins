@@ -4,3 +4,4 @@ __pycache__/
 .env
 .mcp_deps/
 claude_code_install.cmd
+test/email_data/
