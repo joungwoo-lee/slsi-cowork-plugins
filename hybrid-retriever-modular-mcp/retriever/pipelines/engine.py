@@ -16,6 +16,8 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
+import re
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -200,12 +202,44 @@ def sync_profiles_with_disk(cfg: Config) -> None:
 
 # --- Topology loading + runtime injection -----------------------------------
 
+_ENV_VAR_RE = re.compile(r'^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$')
+
+
+def _resolve_env_vars(data: Any) -> Any:
+    """Recursively replace ``${VAR_NAME}`` strings in a JSON-loaded dict with
+    the corresponding os.environ value.  If the resolved value looks like an
+    integer or float it is coerced to the native type so component constructors
+    receive the expected Python type.  Unknown variables are left as-is.
+    """
+    if isinstance(data, dict):
+        return {k: _resolve_env_vars(v) for k, v in data.items()}
+    if isinstance(data, list):
+        return [_resolve_env_vars(item) for item in data]
+    if isinstance(data, str):
+        m = _ENV_VAR_RE.match(data)
+        if m:
+            resolved = os.environ.get(m.group(1))
+            if resolved is None:
+                return data  # var not set — keep placeholder
+            try:
+                return int(resolved)
+            except ValueError:
+                pass
+            try:
+                return float(resolved)
+            except ValueError:
+                pass
+            return resolved
+    return data
+
+
 def _load_pipeline(topology_file: str) -> Pipeline:
     topology_path = PIPELINES_DIR / topology_file
     if not topology_path.is_file():
         raise FileNotFoundError(f"pipeline topology not found: {topology_path}")
     with open(topology_path, "r", encoding="utf-8") as f:
         raw = json.load(f)
+    raw = _resolve_env_vars(raw)
     if is_node_centric(raw):
         raw = to_haystack_dict(raw)
     return Pipeline.from_dict(raw)
