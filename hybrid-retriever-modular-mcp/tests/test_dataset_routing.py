@@ -183,10 +183,22 @@ class DatasetRoutingTest(unittest.TestCase):
         self.assertIn("Use for finance policy questions.", search_desc)
         self.assertIn("finance", upload_desc)
 
-    def test_search_and_upload_do_not_expose_pipeline_param(self) -> None:
+    def test_search_and_upload_expose_pipeline_param_optionally(self) -> None:
+        """Both search and upload accept an optional ``pipeline`` override.
+
+        upload uses it to *record* the dataset's preferred pipeline at ingest
+        time; search uses it to *override* the dataset's recorded preference
+        for a single query. Neither makes pipeline required — when omitted,
+        search falls back to the dataset's preferred_search_pipeline and
+        upload defaults to ``default``.
+        """
         tools = {tool["name"]: tool for tool in build_tools()}
-        self.assertNotIn("pipeline", tools["search"]["inputSchema"]["properties"])
-        self.assertIn("pipeline", tools["upload"]["inputSchema"]["properties"])
+        for tool_name in ("search", "upload"):
+            schema = tools[tool_name]["inputSchema"]
+            self.assertIn("pipeline", schema["properties"],
+                          f"{tool_name} must expose optional 'pipeline'")
+            self.assertNotIn("pipeline", schema.get("required", []),
+                             f"{tool_name}.pipeline must be optional")
 
     def test_default_catalog_is_top_level_entry_points_only(self) -> None:
         # Reset the per-process reveal cache so the test sees the cold

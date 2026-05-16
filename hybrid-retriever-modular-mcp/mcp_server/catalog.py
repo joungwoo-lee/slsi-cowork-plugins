@@ -18,7 +18,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_PIPELINE_AWARE_TOOLS = {"upload"}
+_PIPELINE_AWARE_TOOLS = {"upload", "search"}
 
 # Tools that only make sense as a direct drill-down from another tool.
 # Hidden by default; revealed via ``reveal()`` + tools/list_changed when
@@ -148,6 +148,14 @@ _BASE_TOOLS: list[dict[str, Any]] = [
                     "type": "object",
                     "description": "Server-side metadata filter (forwarded as-is).",
                     "additionalProperties": True,
+                },
+                "pipeline": {
+                    "type": "string",
+                    "description": (
+                        "Named search pipeline profile to override the dataset's "
+                        "preferred pipeline. Omit to let the dataset's "
+                        "preferred_search_pipeline (set at upload time) decide."
+                    ),
                 },
             },
             "required": ["query"],

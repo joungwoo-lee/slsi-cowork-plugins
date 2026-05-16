@@ -169,6 +169,26 @@ class BuildToolsEnrichesPipelineParamTest(unittest.TestCase):
         for name in ("default", "keyword_only", "email", "hippo2"):
             self.assertIn(name, param["enum"])
 
+    def test_search_exposes_optional_pipeline_param(self) -> None:
+        """The handler honours args['pipeline'] for search, so the schema must
+        declare it — otherwise agents can't discover the override."""
+        from mcp_server.catalog import build_tools
+
+        tools = {tool["name"]: tool for tool in build_tools()}
+        search = tools["search"]
+        props = search["inputSchema"]["properties"]
+        self.assertIn("pipeline", props,
+                      "search inputSchema must declare optional 'pipeline' param")
+        # Optional → must NOT appear in `required`.
+        self.assertNotIn("pipeline", search["inputSchema"].get("required", []))
+        param = props["pipeline"]
+        # Same dynamic enrichment as upload: description lists profiles, enum constrains.
+        for name in ("default", "keyword_only", "email", "hippo2"):
+            self.assertIn(name, param["description"])
+        self.assertIn("enum", param)
+        for name in ("default", "keyword_only", "email", "hippo2"):
+            self.assertIn(name, param["enum"])
+
 
 if __name__ == "__main__":
     unittest.main()
