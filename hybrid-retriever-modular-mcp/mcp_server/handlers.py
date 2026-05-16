@@ -636,6 +636,15 @@ def tool_search(args: dict) -> dict:
     fusion = args.get("fusion") if isinstance(args.get("fusion"), str) else None
     parent_chunk_replace = args.get("parent_chunk_replace") if isinstance(args.get("parent_chunk_replace"), bool) else None
     metadata_condition = args.get("metadata_condition") if isinstance(args.get("metadata_condition"), dict) else None
+    # similarity_threshold acts as a server-side score floor applied before
+    # top_n slicing. Clamped to [0,1] so a bogus value can't silently drop
+    # every result.
+    raw_threshold = args.get("similarity_threshold")
+    try:
+        similarity_threshold = float(raw_threshold) if raw_threshold is not None else 0.0
+    except (TypeError, ValueError):
+        similarity_threshold = 0.0
+    similarity_threshold = max(0.0, min(1.0, similarity_threshold))
 
     if pipeline_name in {"hipporag", "hippo2"}:
         try:
@@ -650,6 +659,12 @@ def tool_search(args: dict) -> dict:
                         datasets,
                         top_chunks=_safe_int(args, "top_n", cfg.hipporag.top_chunks, lo=1, hi=100),
                     )
+            if similarity_threshold > 0.0:
+                # HippoRAG returns a dataclass-like result; filter its chunks
+                # in place so the payload builder sees only chunks at/above
+                # the floor.
+                result.chunks = [c for c in result.chunks
+                                 if float(c.get("score") or 0.0) >= similarity_threshold]
             return text_result(_hipporag_to_search_payload(query.strip(), datasets, result, pipeline_name=pipeline_name))
         except Exception as exc:  # noqa: BLE001
             return text_result(f"search failed: {exc}", is_error=True)
@@ -667,6 +682,7 @@ def tool_search(args: dict) -> dict:
             fusion=fusion,
             parent_chunk_replace=parent_chunk_replace,
             metadata_condition=metadata_condition,
+            similarity_threshold=similarity_threshold,
         )
 
     contexts: list[dict[str, Any]] = []

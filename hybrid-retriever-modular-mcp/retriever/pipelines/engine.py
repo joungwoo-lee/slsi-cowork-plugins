@@ -437,6 +437,7 @@ def run_retrieval(
     parent_chunk_replace: bool | None = None,
     metadata_condition: dict | None = None,
     profile: PipelineProfile | None = None,
+    similarity_threshold: float = 0.0,
 ) -> dict:
     topology_file = (profile.unified_topology or profile.retrieval_topology if profile else None) or DEFAULT_UNIFIED_TOPOLOGY
     pipeline = _load_pipeline(topology_file)
@@ -518,6 +519,12 @@ def run_retrieval(
     result = pipeline.run(final_inputs, include_outputs_from={"parent"})
 
     docs = result["parent"]["documents"]
+    # similarity_threshold acts as a score floor applied BEFORE top_n slicing:
+    # if everything is below the floor the caller gets an empty list rather
+    # than top_n weak matches. Pipeline docs are already sorted desc by score.
+    threshold = float(similarity_threshold or 0.0)
+    if threshold > 0.0:
+        docs = [d for d in docs if float(d.score or 0.0) >= threshold]
     items = [_doc_to_item(d, effective_parent) for d in docs[:top_n]]
     return {"total": len(docs), "items": items}
 

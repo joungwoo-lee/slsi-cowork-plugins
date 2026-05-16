@@ -133,6 +133,13 @@ _BASE_TOOLS: list[dict[str, Any]] = [
                     "minimum": 0.0,
                     "maximum": 1.0,
                     "default": 0.0,
+                    "description": (
+                        "Server-side score floor applied to fused similarity "
+                        "BEFORE top_n slicing. Chunks with score < threshold "
+                        "are dropped; if everything is below the floor the "
+                        "response is empty instead of returning weak matches. "
+                        "0 disables filtering."
+                    ),
                 },
                 "keyword": {"type": "boolean", "default": True},
                 "fusion": {"type": "string", "enum": ["linear", "rrf"], "default": "rrf"},

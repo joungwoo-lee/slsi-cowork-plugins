@@ -233,6 +233,27 @@ def main() -> int:
         assert s2["payload"]["total"] >= 1, s2["payload"]
         print(f"[ok] search rrf/english: total={s2['payload']['total']}")
 
+        # 8b. similarity_threshold — floor above all real scores drops everything.
+        # Keyword-only search scores are very small (RRF rank-1 ≈ 0.016), so
+        # 0.99 must filter the lone result out.
+        s_thr_hi = call_tool(
+            "search",
+            {
+                "query": "모듈러",
+                "dataset_ids": [dataset_id],
+                "top_n": 5,
+                "vector_similarity_weight": 0.0,
+                "fusion": "rrf",
+                "similarity_threshold": 0.99,
+            },
+        )
+        assert not s_thr_hi["isError"], s_thr_hi
+        assert s_thr_hi["payload"]["total"] == 0, (
+            f"similarity_threshold=0.99 should drop weak match but got "
+            f"total={s_thr_hi['payload']['total']}"
+        )
+        print(f"[ok] similarity_threshold=0.99 → total=0 (floor honored)")
+
         # 9. list_pipelines (now includes registered profiles)
         lp = call_tool("list_pipelines")
         assert not lp["isError"], lp

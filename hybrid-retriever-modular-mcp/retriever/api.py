@@ -65,6 +65,7 @@ def hybrid_search(
     fusion: str | None = None,
     parent_chunk_replace: bool | None = None,
     metadata_condition: dict | None = None,
+    similarity_threshold: float = 0.0,
 ) -> dict:
     """Public search entrypoint -- forwards to the retrieval pipeline.
 
@@ -103,4 +104,5 @@ def hybrid_search(
         parent_chunk_replace=effective_parent,
         metadata_condition=metadata_condition,
         profile=profile,
+        similarity_threshold=float(similarity_threshold or 0.0),
     )
