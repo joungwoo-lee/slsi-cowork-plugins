@@ -53,8 +53,8 @@
       "name": "qdrant_writer",
       "module": "retriever.components.vector_retriever.LocalQdrantWriter",
       "params": {
-        "data_root": "",
-        "collection": "retriever_chunks"
+        "data_root": "${RETRIEVER_DATA_ROOT}",
+        "collection": "${QDRANT_COLLECTION}"
       },
       "inputs": [
         {
@@ -86,15 +86,15 @@
       "name": "fts5",
       "module": "retriever.components.fts5_retriever.Fts5Retriever",
       "params": {
-        "data_root": ""
+        "data_root": "${RETRIEVER_DATA_ROOT}"
       }
     },
     {
       "name": "vector",
       "module": "retriever.components.vector_retriever.LocalQdrantRetriever",
       "params": {
-        "data_root": "",
-        "collection": "retriever_chunks"
+        "data_root": "${RETRIEVER_DATA_ROOT}",
+        "collection": "${QDRANT_COLLECTION}"
       },
       "inputs": [
         {

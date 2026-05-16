@@ -252,13 +252,13 @@ def _iter_components(pipeline: Pipeline):
             yield name, instance
 
 
-def _inject_indexing_runtime(pipeline: Pipeline, cfg: Config, opts: dict[str, Any]) -> None:
-    """Apply cfg + per-call options to the components of an indexing pipeline.
+def _inject_indexing_runtime(pipeline: Pipeline, opts: dict[str, Any]) -> None:
+    """Apply per-call options to indexing pipeline components.
 
-    The JSON topology cannot embed runtime values (data_root, api_key, ...)
-    so each instance is updated in place before pipeline.run().
+    Static config (api keys, urls, data paths) is resolved from env vars
+    directly in the JSON topology via _resolve_env_vars(). Only call-specific
+    overrides (max_file_chars, chunk sizes) are applied here.
     """
-    emb = cfg.embedding
     for name, inst in _iter_components(pipeline):
         if hasattr(inst, "max_chars") and "max_file_chars" in opts:
             inst.max_chars = int(opts["max_file_chars"])
@@ -268,41 +268,6 @@ def _inject_indexing_runtime(pipeline: Pipeline, cfg: Config, opts: dict[str, An
                          "child_chunk_chars", "child_chunk_overlap"):
                 if attr in opts and hasattr(inst, attr):
                     setattr(inst, attr, int(opts[attr]))
-        if name == "embedder" and hasattr(inst, "api_url"):
-            inst.api_url = emb.api_url if emb else ""
-            inst.api_key = emb.api_key if emb else ""
-            inst.model = emb.model if emb else ""
-            inst.dim = emb.dim if emb else 0
-            if emb:
-                inst.x_dep_ticket = emb.x_dep_ticket
-                inst.x_system_name = emb.x_system_name
-                inst.batch_size = emb.batch_size
-                inst.timeout_sec = emb.timeout_sec
-                inst.verify_ssl = emb.verify_ssl
-        if name in ("writer", "qdrant_writer", "vector") and hasattr(inst, "data_root"):
-            inst.data_root = str(cfg.data_root)
-            if hasattr(inst, "collection"):
-                inst.collection = cfg.qdrant.collection
-
-
-def _inject_retrieval_runtime(pipeline: Pipeline, cfg: Config) -> None:
-    emb = cfg.embedding
-    for name, inst in _iter_components(pipeline):
-        if name == "query_embedder" and hasattr(inst, "api_url"):
-            inst.api_url = emb.api_url if emb else ""
-            inst.api_key = emb.api_key if emb else ""
-            inst.model = emb.model if emb else ""
-            inst.dim = emb.dim if emb else 0
-            if emb:
-                inst.x_dep_ticket = emb.x_dep_ticket
-                inst.x_system_name = emb.x_system_name
-                inst.batch_size = emb.batch_size
-                inst.timeout_sec = emb.timeout_sec
-                inst.verify_ssl = emb.verify_ssl
-        if name in ("fts5", "graph", "vector") and hasattr(inst, "data_root"):
-            inst.data_root = str(cfg.data_root)
-            if name == "vector" and hasattr(inst, "collection"):
-                inst.collection = cfg.qdrant.collection
 
 
 # --- Indexing ---------------------------------------------------------------
@@ -383,7 +348,7 @@ def run_indexing(
 
     topology_file = (profile.unified_topology or profile.indexing_topology if profile else None) or DEFAULT_UNIFIED_TOPOLOGY
     pipeline = _load_pipeline(topology_file)
-    _inject_indexing_runtime(pipeline, cfg, indexing_opts)
+    _inject_indexing_runtime(pipeline, indexing_opts)
 
     skip_embedding = bool(indexing_opts.get("skip_embedding") or cfg.embedding is None)
     run_inputs: dict[str, dict] = {
@@ -478,7 +443,7 @@ def run_retrieval(
 ) -> dict:
     topology_file = (profile.unified_topology or profile.retrieval_topology if profile else None) or DEFAULT_UNIFIED_TOPOLOGY
     pipeline = _load_pipeline(topology_file)
-    _inject_retrieval_runtime(pipeline, cfg)
+
 
     weight = float(
         vector_similarity_weight if vector_similarity_weight is not None

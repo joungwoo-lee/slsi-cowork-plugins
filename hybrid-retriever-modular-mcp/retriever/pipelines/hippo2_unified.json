@@ -55,7 +55,7 @@
       "name": "writer",
       "module": "retriever.components.fts5_writer.SqliteFts5Writer",
       "params": {
-        "data_root": ""
+        "data_root": "${RETRIEVER_DATA_ROOT}"
       },
       "inputs": [
         {
@@ -68,8 +68,8 @@
       "name": "qdrant_writer",
       "module": "retriever.components.vector_retriever.LocalQdrantWriter",
       "params": {
-        "data_root": "",
-        "collection": "retriever_chunks"
+        "data_root": "${RETRIEVER_DATA_ROOT}",
+        "collection": "${QDRANT_COLLECTION}"
       },
       "inputs": [
         {
@@ -86,7 +86,7 @@
       "name": "hippo2_indexer",
       "module": "retriever.components.hippo2_indexer.Hippo2Indexer",
       "params": {
-        "data_root": "",
+        "data_root": "${RETRIEVER_DATA_ROOT}",
         "rebuild_synonyms": false,
         "max_workers": 4
       },
@@ -124,22 +124,22 @@
       "name": "fts5",
       "module": "retriever.components.fts5_retriever.Fts5Retriever",
       "params": {
-        "data_root": ""
+        "data_root": "${RETRIEVER_DATA_ROOT}"
       }
     },
     {
       "name": "graph",
       "module": "retriever.components.hippo2_retriever.Hippo2Retriever",
       "params": {
-        "data_root": ""
+        "data_root": "${RETRIEVER_DATA_ROOT}"
       }
     },
     {
       "name": "vector",
       "module": "retriever.components.vector_retriever.LocalQdrantRetriever",
       "params": {
-        "data_root": "",
-        "collection": "retriever_chunks"
+        "data_root": "${RETRIEVER_DATA_ROOT}",
+        "collection": "${QDRANT_COLLECTION}"
       },
       "inputs": [
         {

@@ -34,7 +34,7 @@
       "name": "writer",
       "module": "retriever.components.fts5_writer.SqliteFts5Writer",
       "params": {
-        "data_root": ""
+        "data_root": "${RETRIEVER_DATA_ROOT}"
       },
       "inputs": [
         {
@@ -47,7 +47,7 @@
       "name": "fts5",
       "module": "retriever.components.fts5_retriever.Fts5Retriever",
       "params": {
-        "data_root": ""
+        "data_root": "${RETRIEVER_DATA_ROOT}"
       }
     },
     {
