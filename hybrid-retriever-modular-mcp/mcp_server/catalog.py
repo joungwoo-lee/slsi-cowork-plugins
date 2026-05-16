@@ -18,9 +18,20 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Tools whose `pipeline` parameter description should be enriched with the
-# list of registered pipelines at tools/list time.
-_PIPELINE_AWARE_TOOLS = {"search", "upload_document", "upload_directory", "start_upload_document", "start_upload_directory"}
+_PIPELINE_AWARE_TOOLS = {"upload"}
+_ADMIN_ONLY_TOOLS = {
+    "list_pipelines",
+    "save_pipeline",
+    "open_pipeline_editor",
+    "get_pipeline_editor",
+    "close_pipeline_editor",
+    "graph_rebuild",
+    "hipporag_index",
+    "hipporag_index_document",
+    "hipporag_refresh_synonyms",
+    "hipporag_search",
+    "hipporag_stats",
+}
 
 _BASE_TOOLS: list[dict[str, Any]] = [
     # --- Search / retrieval ---------------------------------------------
@@ -76,11 +87,6 @@ _BASE_TOOLS: list[dict[str, Any]] = [
                     "description": "Server-side metadata filter (forwarded as-is).",
                     "additionalProperties": True,
                 },
-                "pipeline": {
-                    "type": "string",
-                    "default": "default",
-                    "description": "Named pipeline profile (see list_pipelines.profiles). 'default' = legacy hybrid; alternative profiles change fusion/embedding behavior.",
-                },
             },
             "required": ["query"],
         },
@@ -116,6 +122,7 @@ _BASE_TOOLS: list[dict[str, Any]] = [
             "properties": {
                 "name": {"type": "string"},
                 "description": {"type": "string"},
+                "use_when": {"type": "string", "description": "Short guidance for when this dataset should be searched."},
             },
             "required": ["name"],
         },
@@ -134,128 +141,30 @@ _BASE_TOOLS: list[dict[str, Any]] = [
     },
     # --- Documents -------------------------------------------------------
     {
-        "name": "upload_document",
+        "name": "upload",
         "description": (
-            "[Ingestion] Upload one local file into a dataset. Supports TXT, MD, PDF, "
-            "DOCX, XLSX, and CSV. Parses, chunks, and indexes synchronously; creates "
-            "the dataset automatically if it does not exist."
+            "[Ingestion] Upload one file or one directory into a dataset. The server "
+            "detects whether path is a file or directory. Defaults to async=true so "
+            "large embedding/LLM-backed ingests do not block the MCP request."
         ),
         "inputSchema": {
             "type": "object",
             "properties": {
                 "dataset_id": {"type": "string", "description": "Target dataset/knowledge-base id."},
-                "file_path": {
-                    "type": "string",
-                    "description": "Absolute path to a local file on the MCP-server host.",
-                },
-                "use_hierarchical": {
-                    "type": "string",
-                    "enum": ["true", "false", "full"],
-                    "description": "Parent-Child chunking. 'full' = full-doc parent. Omit to use server default.",
-                },
+                "path": {"type": "string", "description": "Absolute local file or directory path on the MCP-server host."},
+                "async": {"type": "boolean", "default": True, "description": "true = background job, false = synchronous result."},
+                "file_extension": {"type": "string", "description": "Optional extension filter when path is a directory."},
+                "use_hierarchical": {"type": "string", "enum": ["true", "false", "full"], "description": "Parent-Child chunking. 'full' = full-doc parent. Omit to use server default."},
                 "skip_embedding": {"type": "boolean", "default": False},
-                "metadata": {
-                    "type": "object",
-                    "description": "Optional document metadata stored with every chunk.",
-                    "additionalProperties": True,
-                },
+                "metadata": {"type": "object", "additionalProperties": True},
                 "pipeline": {
                     "type": "string",
                     "default": "default",
-                    "description": "Named pipeline profile (see list_pipelines.profiles).",
+                    "description": "Named ingest pipeline profile used to define the dataset's indexing behavior.",
                 },
-                "auto_hipporag": {
-                    "type": "boolean",
-                    "default": False,
-                    "description": "Run HippoRAG OpenIE on the uploaded chunks immediately after ingest. Requires LLM_API_URL and EMBEDDING_API_URL. Skips synonym rebuild (run hipporag_refresh_synonyms at the end of a batch).",
-                },
-            },
-            "required": ["dataset_id", "file_path"],
-        },
-    },
-    {
-        "name": "start_upload_document",
-        "description": (
-            "[Ingestion Job] Start a background upload of one local file into a dataset. "
-            "Use this instead of upload_document for slow embedding/LLM-backed ingest."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "dataset_id": {"type": "string", "description": "Target dataset/knowledge-base id."},
-                "file_path": {"type": "string", "description": "Absolute path to a local file on the MCP-server host."},
-                "use_hierarchical": {"type": "string", "enum": ["true", "false", "full"]},
-                "skip_embedding": {"type": "boolean", "default": False},
-                "metadata": {"type": "object", "additionalProperties": True},
-                "pipeline": {"type": "string", "default": "default", "description": "Named pipeline profile (see list_pipelines.profiles)."},
                 "auto_hipporag": {"type": "boolean", "default": False},
             },
-            "required": ["dataset_id", "file_path"],
-        },
-    },
-    {
-        "name": "upload_directory",
-        "description": (
-            "[Ingestion] Upload all supported files in a local directory into a dataset. "
-            "Use this for bulk ingest; it walks the directory recursively and indexes "
-            "each supported file synchronously."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "dataset_id": {"type": "string", "description": "Target dataset/knowledge-base id."},
-                "dir_path": {
-                    "type": "string",
-                    "description": "Absolute path to a local directory on the MCP-server host.",
-                },
-                "file_extension": {
-                    "type": "string",
-                    "description": "Optional specific extension to filter by (e.g. '.md' or '.pdf'). If omitted, processes all supported text/document files.",
-                },
-                "use_hierarchical": {
-                    "type": "string",
-                    "enum": ["true", "false", "full"],
-                    "description": "Parent-Child chunking. 'full' = full-doc parent. Omit to use server default.",
-                },
-                "skip_embedding": {"type": "boolean", "default": False},
-                "metadata": {
-                    "type": "object",
-                    "description": "Optional shared metadata stored with every chunk in the directory.",
-                    "additionalProperties": True,
-                },
-                "pipeline": {
-                    "type": "string",
-                    "default": "default",
-                    "description": "Named pipeline profile (see list_pipelines.profiles).",
-                },
-                "auto_hipporag": {
-                    "type": "boolean",
-                    "default": False,
-                    "description": "Run HippoRAG OpenIE + synonym rebuild after the bulk ingest. Requires LLM_API_URL and EMBEDDING_API_URL. Skips per-document synonym work and consolidates it once at the end of the batch.",
-                },
-            },
-            "required": ["dataset_id", "dir_path"],
-        },
-    },
-    {
-        "name": "start_upload_directory",
-        "description": (
-            "[Ingestion Job] Start a background upload of all supported files in a local "
-            "directory. Use this instead of upload_directory for large folders."
-        ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "dataset_id": {"type": "string", "description": "Target dataset/knowledge-base id."},
-                "dir_path": {"type": "string", "description": "Absolute path to a local directory on the MCP-server host."},
-                "file_extension": {"type": "string"},
-                "use_hierarchical": {"type": "string", "enum": ["true", "false", "full"]},
-                "skip_embedding": {"type": "boolean", "default": False},
-                "metadata": {"type": "object", "additionalProperties": True},
-                "pipeline": {"type": "string", "default": "default", "description": "Named pipeline profile (see list_pipelines.profiles)."},
-                "auto_hipporag": {"type": "boolean", "default": False},
-            },
-            "required": ["dataset_id", "dir_path"],
+            "required": ["dataset_id", "path"],
         },
     },
     {
@@ -434,6 +343,11 @@ _BASE_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "admin_help",
+        "description": "[Admin] Show hidden maintenance tools and when to use them.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "get_job",
         "description": "[Job] Fetch one background job's current status, progress, and result/error.",
         "inputSchema": {
@@ -570,43 +484,25 @@ _BASE_TOOLS: list[dict[str, Any]] = [
 
 
 def _pipeline_param_description() -> str:
-    """Build the ``pipeline`` schema description from the live pipeline registry.
-
-    The retriever package is imported lazily so this module stays importable
-    even when its heavyweight optional deps (haystack et al) are still being
-    installed by ``boot_doctor``.
-    """
     try:
         from retriever.config import load_config
         from retriever.pipelines import profiles as pipeline_profiles
-    except Exception as exc:  # noqa: BLE001 — boot-time deps not ready yet
+    except Exception as exc:  # noqa: BLE001
         logger.debug("pipeline registry unavailable: %s", exc)
-        return (
-            "Named pipeline profile. Call list_pipelines to see available "
-            "profiles and their use-cases."
-        )
-
+        return "Named ingest pipeline profile."
     try:
         cfg = load_config()
         pipeline_profiles.sync_with_disk(cfg)
         entries = pipeline_profiles.describe()
-    except Exception as exc:  # noqa: BLE001 — never break tools/list
+    except Exception as exc:  # noqa: BLE001
         logger.debug("pipeline registry sync failed: %s", exc)
-        return (
-            "Named pipeline profile. Call list_pipelines to see available "
-            "profiles and their use-cases."
-        )
-
-    lines = [
-        "Named pipeline profile. Pick the one whose 'Use when' clause best "
-        "matches the query (default = general-purpose hybrid)."
-    ]
+        return "Named ingest pipeline profile."
+    lines = ["Named ingest pipeline profile. This is recorded onto the dataset during ingest."]
     for entry in entries:
         name = entry.get("name") or ""
         desc = (entry.get("description") or "").strip()
-        if not name:
-            continue
-        lines.append(f"- '{name}': {desc}" if desc else f"- '{name}'")
+        if name:
+            lines.append(f"- '{name}': {desc}" if desc else f"- '{name}'")
     return "\n".join(lines)
 
 
@@ -625,25 +521,93 @@ def _pipeline_enum() -> list[str] | None:
     return names or None
 
 
+def _dataset_entries() -> list[dict[str, str]]:
+    try:
+        from retriever.config import load_config
+        from retriever import storage
+    except Exception:
+        return []
+    try:
+        cfg = load_config()
+        with storage.sqlite_session(cfg) as conn:
+            rows = conn.execute(
+                "SELECT dataset_id, name, description, metadata_json FROM datasets ORDER BY created_at DESC"
+            ).fetchall()
+    except Exception as exc:
+        logger.debug("dataset registry unavailable: %s", exc)
+        return []
+    out: list[dict[str, str]] = []
+    for dataset_id, name, description, metadata_json in rows:
+        use_when = ""
+        try:
+            import json
+            meta = json.loads(metadata_json or "{}") or {}
+            use_when = str(meta.get("use_when") or "").strip()
+        except Exception:
+            use_when = ""
+        out.append({
+            "id": str(dataset_id or ""),
+            "name": str(name or dataset_id or ""),
+            "description": str(description or ""),
+            "use_when": use_when,
+        })
+    return out
+
+
+def _dataset_param_description(is_many: bool) -> str:
+    entries = _dataset_entries()
+    head = (
+        "Dataset IDs to search. Choose the dataset whose recorded 'use when' note best matches the request."
+        if is_many
+        else "Target dataset id. Choose the dataset whose recorded 'use when' note best matches the request."
+    )
+    if not entries:
+        return head
+    lines = [head, "Available datasets:"]
+    for item in entries:
+        label = item["id"]
+        use_when = item["use_when"] or item["description"] or "No usage note recorded."
+        lines.append(f"- '{label}': {use_when}")
+    return "\n".join(lines)
+
+
+def _dataset_enum() -> list[str] | None:
+    entries = _dataset_entries()
+    names = [item["id"] for item in entries if item["id"]]
+    return names or None
+
+
 def build_tools() -> list[dict[str, Any]]:
-    """Return the tool catalog with the pipeline parameter enriched.
+    """Return the tool catalog with dataset guidance enriched.
 
     Called every time the server handles ``tools/list``, so newly-saved
-    profiles show up immediately without restarting the MCP server.
+    datasets show up immediately without restarting the MCP server.
     """
-    description = _pipeline_param_description()
-    enum = _pipeline_enum()
-    tools = copy.deepcopy(_BASE_TOOLS)
+    dataset_description_single = _dataset_param_description(False)
+    dataset_description_many = _dataset_param_description(True)
+    dataset_enum = _dataset_enum()
+    pipeline_description = _pipeline_param_description()
+    pipeline_enum = _pipeline_enum()
+    tools = [tool for tool in copy.deepcopy(_BASE_TOOLS) if tool.get("name") not in _ADMIN_ONLY_TOOLS]
     for tool in tools:
-        if tool.get("name") not in _PIPELINE_AWARE_TOOLS:
-            continue
         props = tool.get("inputSchema", {}).get("properties", {})
-        param = props.get("pipeline")
-        if not isinstance(param, dict):
-            continue
-        param["description"] = description
-        if enum:
-            param["enum"] = enum
+        if tool.get("name") in _PIPELINE_AWARE_TOOLS:
+            param = props.get("pipeline")
+            if isinstance(param, dict):
+                param["description"] = pipeline_description
+                if pipeline_enum:
+                    param["enum"] = pipeline_enum
+        ds_one = props.get("dataset_id")
+        if isinstance(ds_one, dict):
+            ds_one["description"] = dataset_description_single
+            if dataset_enum:
+                ds_one["enum"] = dataset_enum
+        ds_many = props.get("dataset_ids")
+        if isinstance(ds_many, dict):
+            ds_many["description"] = dataset_description_many
+            items = ds_many.get("items")
+            if isinstance(items, dict) and dataset_enum:
+                items["enum"] = dataset_enum
     return tools
 
 

@@ -88,6 +88,124 @@ def _job_progress(cfg, job_id: str, progress: int, message: str) -> None:
     job_manager.update_job(cfg, job_id, progress=progress, message=message)
 
 
+def _mark_dataset_ingest_profile(
+    cfg,
+    dataset_id: str,
+    *,
+    pipeline_name: str,
+    content_kind: str,
+    has_vectors: bool,
+    hipporag_ready: bool | None = None,
+) -> None:
+    with storage.sqlite_session(cfg) as conn:
+        current = storage.get_dataset_metadata(conn, dataset_id)
+        supported = set(current.get("supported_search_pipelines") or ["default"])
+        supported.add("default")
+        if pipeline_name == "email":
+            supported.add("email")
+        if hipporag_ready or current.get("has_hipporag"):
+            supported.add("hipporag")
+        metadata = {
+            **current,
+            "first_ingest_pipeline": current.get("first_ingest_pipeline") or pipeline_name,
+            "last_ingest_pipeline": pipeline_name,
+            "content_kind": content_kind,
+            "has_vectors": bool(has_vectors or current.get("has_vectors")),
+            "has_hipporag": bool(current.get("has_hipporag") if hipporag_ready is None else hipporag_ready),
+            "supported_search_pipelines": sorted(supported),
+            "preferred_search_pipeline": (
+                "hipporag"
+                if (hipporag_ready or current.get("has_hipporag"))
+                else ("email" if pipeline_name == "email" else "default")
+            ),
+        }
+        storage.update_dataset_metadata(conn, dataset_id, metadata)
+
+
+def _dataset_search_pipeline(cfg, dataset_ids: list[str], requested: str | None) -> str:
+    if requested and requested.strip():
+        return requested.strip()
+    if not dataset_ids:
+        return "default"
+    with storage.sqlite_session(cfg) as conn:
+        preferred: set[str] = set()
+        for dataset_id in dataset_ids:
+            meta = storage.get_dataset_metadata(conn, dataset_id)
+            preferred.add(str(meta.get("preferred_search_pipeline") or "default"))
+    return preferred.pop() if len(preferred) == 1 else "default"
+
+
+def _hipporag_to_search_payload(query: str, dataset_ids: list[str], result) -> dict:
+    contexts: list[dict[str, Any]] = []
+    citations: list[dict[str, Any]] = []
+    for c in result.chunks:
+        contexts.append({
+            "text": c["content"],
+            "source": {
+                "dataset_id": c["dataset_id"],
+                "document_id": c["document_id"],
+                "document_name": c["document_name"],
+                "position": c["position"],
+                "chunk_id": c["chunk_id"],
+                "similarity": c["score"],
+                "vector_similarity": 0.0,
+                "term_similarity": 0.0,
+                "metadata": {},
+                "search_pipeline": "hipporag",
+                "matched_entities": c.get("matched_entities", []),
+            },
+        })
+        citations.append({
+            "document_name": c["document_name"],
+            "position": c["position"],
+            "score": c["score"],
+            "chunk_id": c["chunk_id"],
+        })
+    return {
+        "query": query,
+        "dataset_ids": dataset_ids,
+        "total": len(result.chunks),
+        "contexts": contexts,
+        "citations": citations,
+        "search_pipeline": "hipporag",
+        "query_entities": result.query_entities,
+    }
+
+
+def _upload_args_from_unified(args: dict) -> dict:
+    ds = _require_str(args, "dataset_id")
+    path_str = _require_str(args, "path")
+    if not ds:
+        raise ValueError("dataset_id is required")
+    if not path_str:
+        raise ValueError("path is required")
+    path = Path(path_str)
+    if path.is_file():
+        return {
+            "dataset_id": ds,
+            "file_path": str(path),
+            "use_hierarchical": args.get("use_hierarchical"),
+            "skip_embedding": bool(args.get("skip_embedding", False)),
+            "metadata": args.get("metadata") if isinstance(args.get("metadata"), dict) else None,
+            "pipeline": _pipeline_name(args),
+            "auto_hipporag": bool(args.get("auto_hipporag", False)),
+        }
+    if path.is_dir():
+        payload = {
+            "dataset_id": ds,
+            "dir_path": str(path),
+            "use_hierarchical": args.get("use_hierarchical"),
+            "skip_embedding": bool(args.get("skip_embedding", False)),
+            "metadata": args.get("metadata") if isinstance(args.get("metadata"), dict) else None,
+            "pipeline": _pipeline_name(args),
+            "auto_hipporag": bool(args.get("auto_hipporag", False)),
+        }
+        if isinstance(args.get("file_extension"), str) and args.get("file_extension"):
+            payload["file_extension"] = args.get("file_extension")
+        return payload
+    raise ValueError(f"Path not found or unsupported: {path}")
+
+
 def _run_upload_document(cfg, args: dict, *, job_id: str | None = None) -> dict:
     ds = _require_str(args, "dataset_id")
     fp = _require_str(args, "file_path")
@@ -124,6 +242,14 @@ def _run_upload_document(cfg, args: dict, *, job_id: str | None = None) -> dict:
                         )
             except Exception as exc:  # noqa: BLE001
                 hipporag_summary = {"error": str(exc)}
+    _mark_dataset_ingest_profile(
+        cfg,
+        ds,
+        pipeline_name=pipeline_name,
+        content_kind="email" if pipeline_name == "email" else "document",
+        has_vectors=bool(isinstance(out, dict) and out.get("has_vector")),
+        hipporag_ready=bool(hipporag_summary and not hipporag_summary.get("error")),
+    )
     if job_id:
         _job_progress(cfg, job_id, 95, "finalizing")
     return {
@@ -198,6 +324,14 @@ def _run_upload_directory(cfg, args: dict, *, job_id: str | None = None) -> dict
                     )
         except Exception as exc:  # noqa: BLE001
             hipporag_summary = {"error": str(exc)}
+    _mark_dataset_ingest_profile(
+        cfg,
+        ds,
+        pipeline_name=pipeline_name,
+        content_kind="email" if pipeline_name == "email" else "document",
+        has_vectors=any(bool((item.get("response") or {}).get("has_vector")) for item in results),
+        hipporag_ready=bool(hipporag_summary and not hipporag_summary.get("error")),
+    )
     if job_id:
         _job_progress(cfg, job_id, 95, "finalizing")
     return {
@@ -228,10 +362,23 @@ def _run_hipporag_index(cfg, args: dict, *, document: bool) -> dict:
                 doc_id = _require_str(args, "document_id")
                 if not doc_id:
                     raise ValueError("document_id is required")
+                row = sconn.execute(
+                    "SELECT dataset_id FROM documents WHERE document_id = ?",
+                    (doc_id,),
+                ).fetchone()
                 result = hipporag_index.index_document(
                     cfg, sconn, doc_id, rebuild_synonyms_after=rebuild_syn, max_workers=max_workers,
                 )
                 payload = {"status": "ok", "document_id": doc_id, **result}
+                if row and row[0]:
+                    _mark_dataset_ingest_profile(
+                        cfg,
+                        row[0],
+                        pipeline_name="default",
+                        content_kind="document",
+                        has_vectors=True,
+                        hipporag_ready=True,
+                    )
             else:
                 ds = _require_str(args, "dataset_id")
                 if not ds:
@@ -240,6 +387,14 @@ def _run_hipporag_index(cfg, args: dict, *, document: bool) -> dict:
                     cfg, sconn, ds, rebuild_synonyms_after=rebuild_syn, max_workers=max_workers,
                 )
                 payload = {"status": "ok", "dataset_id": ds, **result}
+                _mark_dataset_ingest_profile(
+                    cfg,
+                    ds,
+                    pipeline_name="default",
+                    content_kind="document",
+                    has_vectors=True,
+                    hipporag_ready=True,
+                )
     _ppr_engine(cfg).invalidate()
     return payload
 
@@ -407,10 +562,28 @@ def tool_search(args: dict) -> dict:
         )
 
     cfg = load_config()
-    pipeline_name = _pipeline_name(args)
+    requested_pipeline = args.get("pipeline") if isinstance(args.get("pipeline"), str) else None
+    pipeline_name = _dataset_search_pipeline(cfg, datasets, requested_pipeline)
     fusion = args.get("fusion") if isinstance(args.get("fusion"), str) else None
     parent_chunk_replace = args.get("parent_chunk_replace") if isinstance(args.get("parent_chunk_replace"), bool) else None
     metadata_condition = args.get("metadata_condition") if isinstance(args.get("metadata_condition"), dict) else None
+
+    if pipeline_name == "hipporag":
+        try:
+            with silenced_stdout():
+                with storage.sqlite_session(cfg) as sconn:
+                    engine = _ppr_engine(cfg)
+                    result = hipporag_query.search(
+                        cfg,
+                        sconn,
+                        engine,
+                        query.strip(),
+                        datasets,
+                        top_chunks=_safe_int(args, "top_n", cfg.hipporag.top_chunks, lo=1, hi=100),
+                    )
+            return text_result(_hipporag_to_search_payload(query.strip(), datasets, result))
+        except Exception as exc:  # noqa: BLE001
+            return text_result(f"search failed: {exc}", is_error=True)
 
     with silenced_stdout():
         data = retriever_api.hybrid_search(
@@ -453,6 +626,7 @@ def tool_search(args: dict) -> dict:
     return text_result({
         "query": query.strip(),
         "dataset_ids": datasets,
+        "search_pipeline": pipeline_name,
         "total": data["total"],
         "contexts": contexts,
         "citations": citations,
@@ -465,10 +639,17 @@ def tool_list_datasets(_args: dict) -> dict:
     cfg = load_config()
     with storage.sqlite_session(cfg) as conn:
         rows = conn.execute(
-            "SELECT dataset_id, name, description, created_at FROM datasets ORDER BY created_at DESC"
+            "SELECT dataset_id, name, description, metadata_json, created_at FROM datasets ORDER BY created_at DESC"
         ).fetchall()
-    cols = ["id", "name", "description", "created_at"]
-    return text_result([_row_dict(row, cols) for row in rows])
+    items = []
+    for row in rows:
+        obj = _row_dict(row, ["id", "name", "description", "metadata_json", "created_at"])
+        try:
+            obj["metadata"] = json.loads(obj.pop("metadata_json") or "{}")
+        except (TypeError, ValueError):
+            obj["metadata"] = {}
+        items.append(obj)
+    return text_result(items)
 
 
 def tool_get_dataset(args: dict) -> dict:
@@ -478,12 +659,17 @@ def tool_get_dataset(args: dict) -> dict:
     cfg = load_config()
     with storage.sqlite_session(cfg) as conn:
         row = conn.execute(
-            "SELECT dataset_id, name, description, created_at FROM datasets WHERE dataset_id = ?",
+            "SELECT dataset_id, name, description, metadata_json, created_at FROM datasets WHERE dataset_id = ?",
             (ds,),
         ).fetchone()
     if not row:
         return text_result(f"dataset not found: {ds}", is_error=True)
-    return text_result(_row_dict(row, ["id", "name", "description", "created_at"]))
+    obj = _row_dict(row, ["id", "name", "description", "metadata_json", "created_at"])
+    try:
+        obj["metadata"] = json.loads(obj.pop("metadata_json") or "{}")
+    except (TypeError, ValueError):
+        obj["metadata"] = {}
+    return text_result(obj)
 
 
 def tool_create_dataset(args: dict) -> dict:
@@ -491,11 +677,19 @@ def tool_create_dataset(args: dict) -> dict:
     if not name:
         return text_result("name is required", is_error=True)
     dataset_id = storage.slug(name)
+    use_when = _require_str(args, "use_when") or ""
     cfg = load_config()
     with storage.sqlite_session(cfg) as conn:
         storage.ensure_dataset(conn, dataset_id, name, str(args.get("description") or ""))
+        if use_when:
+            storage.merge_dataset_metadata(conn, dataset_id, {"use_when": use_when})
     cfg.dataset_dir(dataset_id).mkdir(parents=True, exist_ok=True)
-    return text_result({"id": dataset_id, "name": name, "description": args.get("description") or ""})
+    return text_result({
+        "id": dataset_id,
+        "name": name,
+        "description": args.get("description") or "",
+        "metadata": ({"use_when": use_when} if use_when else {}),
+    })
 
 
 def tool_delete_dataset(args: dict) -> dict:
@@ -527,6 +721,38 @@ def tool_upload_document(args: dict) -> dict:
     cfg = load_config()
     try:
         return text_result(_run_upload_document(cfg, args))
+    except Exception as exc:  # noqa: BLE001
+        return text_result(str(exc), is_error=True)
+
+
+def tool_upload(args: dict) -> dict:
+    cfg = load_config()
+    try:
+        normalized = _upload_args_from_unified(args)
+        run_async = bool(args.get("async", True))
+        if "file_path" in normalized:
+            if run_async:
+                return text_result(
+                    job_manager.start_job(
+                        cfg,
+                        job_type="upload_document",
+                        args=args,
+                        dataset_id=normalized["dataset_id"],
+                        runner=lambda job_id: _run_upload_document(cfg, normalized, job_id=job_id),
+                    )
+                )
+            return text_result(_run_upload_document(cfg, normalized))
+        if run_async:
+            return text_result(
+                job_manager.start_job(
+                    cfg,
+                    job_type="upload_directory",
+                    args=args,
+                    dataset_id=normalized["dataset_id"],
+                    runner=lambda job_id: _run_upload_directory(cfg, normalized, job_id=job_id),
+                )
+            )
+        return text_result(_run_upload_directory(cfg, normalized))
     except Exception as exc:  # noqa: BLE001
         return text_result(str(exc), is_error=True)
 
@@ -819,6 +1045,58 @@ def tool_health(_args: dict) -> dict:
     })
 
 
+def tool_admin_help(_args: dict) -> dict:
+    return text_result({
+        "admin_tools": [
+            {
+                "name": "graph_rebuild",
+                "use_when": "The embedded graph is missing or badly stale and automatic sync is not enough.",
+            },
+            {
+                "name": "hipporag_index",
+                "use_when": "A dataset needs entity/triple extraction or full HippoRAG refresh after bulk ingest.",
+            },
+            {
+                "name": "hipporag_index_document",
+                "use_when": "Re-index one document's HippoRAG state only.",
+            },
+            {
+                "name": "hipporag_refresh_synonyms",
+                "use_when": "Rebuild synonym edges after a batch of HippoRAG indexing jobs.",
+            },
+            {
+                "name": "hipporag_search",
+                "use_when": "Directly test HippoRAG retrieval without normal search auto-routing.",
+            },
+            {
+                "name": "hipporag_stats",
+                "use_when": "Inspect HippoRAG entity/triple/synonym counts and PPR cache warmth.",
+            },
+            {
+                "name": "list_pipelines",
+                "use_when": "Inspect available ingest pipeline profiles and their settings.",
+            },
+            {
+                "name": "save_pipeline",
+                "use_when": "Create or update a reusable pipeline profile.",
+            },
+            {
+                "name": "open_pipeline_editor",
+                "use_when": "Open the visual pipeline editor for advanced pipeline editing.",
+            },
+            {
+                "name": "get_pipeline_editor",
+                "use_when": "Check whether the pipeline editor is already running.",
+            },
+            {
+                "name": "close_pipeline_editor",
+                "use_when": "Stop the pipeline editor process.",
+            },
+        ],
+        "note": "These tools are intentionally hidden from the default tools/list output.",
+    })
+
+
 # ----- graph --------------------------------------------------------------
 
 def tool_graph_query(args: dict) -> dict:
@@ -985,10 +1263,7 @@ HANDLERS = {
     "get_dataset": tool_get_dataset,
     "create_dataset": tool_create_dataset,
     "delete_dataset": tool_delete_dataset,
-    "upload_document": tool_upload_document,
-    "upload_directory": tool_upload_directory,
-    "start_upload_document": tool_start_upload_document,
-    "start_upload_directory": tool_start_upload_directory,
+    "upload": tool_upload,
     "get_job": tool_get_job,
     "list_documents": tool_list_documents,
     "get_document": tool_get_document,
@@ -1001,6 +1276,7 @@ HANDLERS = {
     "get_pipeline_editor": tool_get_pipeline_editor,
     "close_pipeline_editor": tool_close_pipeline_editor,
     "health": tool_health,
+    "admin_help": tool_admin_help,
     "graph_query": tool_graph_query,
     "graph_rebuild": tool_graph_rebuild,
     "hipporag_index": tool_hipporag_index,

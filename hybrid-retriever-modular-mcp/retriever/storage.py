@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS datasets (
     dataset_id  TEXT PRIMARY KEY,
     name        TEXT NOT NULL,
     description TEXT DEFAULT '',
+    metadata_json TEXT DEFAULT '{}',
     created_at  TEXT DEFAULT (datetime('now')),
     kuzu_synced INTEGER DEFAULT 0
 );
@@ -184,6 +185,9 @@ def open_sqlite(cfg: Config) -> sqlite3.Connection:
 
 def _migrate(conn: sqlite3.Connection) -> None:
     existing = {row[1] for row in conn.execute("PRAGMA table_info(documents)").fetchall()}
+    existing_ds = {row[1] for row in conn.execute("PRAGMA table_info(datasets)").fetchall()}
+    if "metadata_json" not in existing_ds:
+        conn.execute("ALTER TABLE datasets ADD COLUMN metadata_json TEXT DEFAULT '{}' ")
     if "metadata_json" not in existing:
         conn.execute("ALTER TABLE documents ADD COLUMN metadata_json TEXT DEFAULT '{}'")
     existing = {row[1] for row in conn.execute("PRAGMA table_info(chunks)").fetchall()}
@@ -287,9 +291,36 @@ def slug(value: str) -> str:
 
 def ensure_dataset(conn: sqlite3.Connection, dataset_id: str, name: str | None = None, description: str = "") -> None:
     conn.execute(
-        "INSERT OR IGNORE INTO datasets(dataset_id, name, description) VALUES (?, ?, ?)",
+        "INSERT OR IGNORE INTO datasets(dataset_id, name, description, metadata_json) VALUES (?, ?, ?, '{}')",
         (dataset_id, name or dataset_id, description or ""),
     )
+
+
+def get_dataset_metadata(conn: sqlite3.Connection, dataset_id: str) -> dict:
+    row = conn.execute(
+        "SELECT metadata_json FROM datasets WHERE dataset_id = ?",
+        (dataset_id,),
+    ).fetchone()
+    if not row or not row[0]:
+        return {}
+    try:
+        return json.loads(row[0]) or {}
+    except (TypeError, ValueError):
+        return {}
+
+
+def update_dataset_metadata(conn: sqlite3.Connection, dataset_id: str, metadata: dict) -> None:
+    conn.execute(
+        "UPDATE datasets SET metadata_json = ? WHERE dataset_id = ?",
+        (json.dumps(metadata or {}, ensure_ascii=False), dataset_id),
+    )
+
+
+def merge_dataset_metadata(conn: sqlite3.Connection, dataset_id: str, patch: dict) -> dict:
+    current = get_dataset_metadata(conn, dataset_id)
+    merged = {**current, **(patch or {})}
+    update_dataset_metadata(conn, dataset_id, merged)
+    return merged
 
 
 def upsert_document(
