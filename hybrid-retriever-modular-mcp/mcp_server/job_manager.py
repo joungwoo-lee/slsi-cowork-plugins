@@ -53,12 +53,20 @@ def start_job(
     with _LOCK:
         _ACTIVE_JOBS[job_id] = thread
     thread.start()
+    # Late import to avoid a circular reference at module load.
+    from . import handlers as _h  # noqa: WPS433
+    _h._reveal_and_notify("get_job")
     return {
         "job_id": job_id,
         "job_type": job_type,
         "status": "queued",
         "submitted_at": submitted_at,
         "next_step": f"Call get_job with job_id='{job_id}' to poll progress.",
+        "next_action": {
+            "tool": "get_job",
+            "arguments": {"job_id": job_id},
+            "use_when": "Poll until status='completed' or 'failed'.",
+        },
     }
 
 

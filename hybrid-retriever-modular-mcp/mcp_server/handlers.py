@@ -24,9 +24,31 @@ from retriever.pipelines import editor_store
 from retriever.pipelines import profiles as pipeline_profiles
 
 from . import bootstrap
+from . import catalog
 from . import job_manager
-from .protocol import text_result
-from .runtime import silenced_stdout
+from .protocol import text_result, write_message
+from .runtime import log, silenced_stdout
+
+
+def _reveal_and_notify(*names: str) -> None:
+    """Reveal follow-up tools and tell the client to re-fetch tools/list.
+
+    Safe to call multiple times; reveal() is idempotent and only emits the
+    list_changed notification when the visible catalog actually grew.
+    """
+    if catalog.reveal(*names):
+        try:
+            write_message({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
+        except Exception as exc:  # noqa: BLE001
+            log(f"failed to send tools/list_changed: {exc}")
+
+
+def _reveal_admin_and_notify() -> None:
+    if catalog.reveal_admin():
+        try:
+            write_message({"jsonrpc": "2.0", "method": "notifications/tools/list_changed"})
+        except Exception as exc:  # noqa: BLE001
+            log(f"failed to send tools/list_changed: {exc}")
 
 # Process-wide PPR engine. ``warm()`` is lazy and re-checks the SQLite
 # checksum on every call, so reloading after ingest happens automatically.
@@ -637,14 +659,26 @@ def tool_search(args: dict) -> dict:
             "score": c["similarity"],
             "chunk_id": c["chunk_id"],
         })
-    return text_result({
+    _reveal_and_notify("get_document_content")
+    payload = {
         "query": query.strip(),
         "dataset_ids": datasets,
         "search_pipeline": pipeline_name,
         "total": data["total"],
         "contexts": contexts,
         "citations": citations,
-    })
+    }
+    if contexts:
+        first_ds = contexts[0]["source"]["dataset_id"]
+        first_doc = contexts[0]["source"]["document_id"]
+        payload["next_actions"] = {
+            "get_full_document": {
+                "tool": "get_document_content",
+                "arguments": {"dataset_id": first_ds, "document_id": first_doc},
+                "use_when": "Need the original full source text for a cited document.",
+            }
+        }
+    return text_result(payload)
 
 
 # ----- datasets -----------------------------------------------------------
@@ -663,7 +697,23 @@ def tool_list_datasets(_args: dict) -> dict:
         except (TypeError, ValueError):
             obj["metadata"] = {}
         items.append(obj)
-    return text_result(items)
+    _reveal_and_notify("list_documents", "get_dataset")
+    example_ds = items[0]["id"] if items else ""
+    return text_result({
+        "datasets": items,
+        "next_actions": {
+            "browse_documents": {
+                "tool": "list_documents",
+                "arguments": {"dataset_id": example_ds},
+                "use_when": "Browse the documents inside a dataset.",
+            },
+            "inspect_dataset": {
+                "tool": "get_dataset",
+                "arguments": {"dataset_id": example_ds},
+                "use_when": "Re-fetch one dataset's metadata.",
+            },
+        },
+    })
 
 
 def tool_get_dataset(args: dict) -> dict:
@@ -1060,6 +1110,7 @@ def tool_health(_args: dict) -> dict:
 
 
 def tool_admin_help(_args: dict) -> dict:
+    _reveal_admin_and_notify()
     return text_result({
         "admin_tools": [
             {
@@ -1139,7 +1190,11 @@ def tool_admin_help(_args: dict) -> dict:
                 "use_when": "Stop the pipeline editor process.",
             },
         ],
-        "note": "These tools are intentionally hidden from the default tools/list output.",
+        "note": (
+            "These tools are hidden from the default tools/list. Calling admin_help "
+            "reveals them via a tools/list_changed notification, so the next "
+            "tools/list will include them and they become directly callable."
+        ),
     })
 
 

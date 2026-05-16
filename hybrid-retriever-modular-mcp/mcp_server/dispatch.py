@@ -41,7 +41,7 @@ def handle_initialize(params: dict) -> dict:
     )
     return {
         "protocolVersion": version,
-        "capabilities": {"tools": {"listChanged": False}},
+        "capabilities": {"tools": {"listChanged": True}},
         "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
     }
 

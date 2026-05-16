@@ -134,27 +134,53 @@ class DatasetRoutingTest(unittest.TestCase):
         self.assertNotIn("pipeline", tools["search"]["inputSchema"]["properties"])
         self.assertIn("pipeline", tools["upload"]["inputSchema"]["properties"])
 
-    def test_admin_tools_are_hidden_from_public_catalog(self) -> None:
+    def test_default_catalog_is_top_level_entry_points_only(self) -> None:
+        # Reset the per-process reveal cache so the test sees the cold
+        # default surface, not whatever earlier tests revealed.
+        from mcp_server import catalog as _cat
+        _cat._REVEALED.clear()
         tools = {tool["name"]: tool for tool in build_tools()}
-        self.assertIn("admin_help", tools)
-        # get_job is public because upload defaults to async=true and its
-        # next_step tells the agent to call get_job — hiding it would force
-        # an extra admin_help round-trip on every async upload.
-        self.assertIn("get_job", tools)
-        self.assertNotIn("create_dataset", tools)
-        self.assertNotIn("health", tools)
-        self.assertNotIn("graph_query", tools)
-        self.assertNotIn("list_pipelines", tools)
-        self.assertNotIn("graph_rebuild", tools)
-        self.assertNotIn("hipporag_index", tools)
+        # Top-level entry points the small model always needs.
+        for required in ("search", "upload", "list_datasets", "admin_help"):
+            self.assertIn(required, tools)
+        # Follow-up tools are hidden by default; the parent tool reveals
+        # them via tools/list_changed.
+        for hidden in (
+            "get_job",
+            "get_dataset",
+            "list_documents",
+            "get_document_content",
+            "create_dataset",
+            "health",
+            "graph_query",
+            "list_pipelines",
+            "hipporag_index",
+        ):
+            self.assertNotIn(hidden, tools)
 
-    def test_admin_help_lists_hidden_tools(self) -> None:
+    def test_admin_help_reveals_admin_and_flow_tools(self) -> None:
+        from mcp_server import catalog as _cat
+        _cat._REVEALED.clear()
+        handlers.tool_admin_help({})
+        tools = {tool["name"]: tool for tool in build_tools()}
+        # After admin_help, every admin + flow follow-up is callable.
+        for revealed in (
+            "get_job",
+            "list_documents",
+            "get_dataset",
+            "get_document_content",
+            "graph_rebuild",
+            "list_pipelines",
+            "health",
+        ):
+            self.assertIn(revealed, tools, f"admin_help did not reveal {revealed}")
+
+    def test_admin_help_listing_includes_descriptions(self) -> None:
         result = handlers.tool_admin_help({})
         body = _payload(result)
         names = [item["name"] for item in body["admin_tools"]]
         self.assertIn("graph_rebuild", names)
         self.assertIn("list_pipelines", names)
-        self.assertNotIn("get_job", names)
 
 
 if __name__ == "__main__":

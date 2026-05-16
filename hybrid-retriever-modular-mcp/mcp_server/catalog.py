@@ -19,6 +19,20 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _PIPELINE_AWARE_TOOLS = {"upload"}
+
+# Tools that only make sense as a follow-up to another tool. They start
+# hidden so a small-context model sees ~4 tools by default. Each is added
+# to the visible catalog (via ``reveal()`` + tools/list_changed) after the
+# parent tool runs, and the parent response always echoes a structured
+# ``next_actions`` so the model has the exact next call even before the
+# refreshed list arrives.
+_FLOW_REVEALED_TOOLS = {
+    "get_job",                # revealed by: upload (async=true)
+    "list_documents",         # revealed by: list_datasets
+    "get_dataset",            # revealed by: list_datasets
+    "get_document_content",   # revealed by: search
+}
+
 _ADMIN_ONLY_TOOLS = {
     "create_dataset",
     "delete_dataset",
@@ -40,6 +54,31 @@ _ADMIN_ONLY_TOOLS = {
     "hipporag_search",
     "hipporag_stats",
 }
+
+# Process-wide set of tools dynamically revealed during this MCP session.
+# Stdio MCP has a single client per process, so a module-level set is
+# sufficient. Cleared on next server start.
+_REVEALED: set[str] = set()
+
+
+def reveal(*names: str) -> bool:
+    """Add tools to the visible catalog. Returns True if anything new."""
+    added = False
+    for name in names:
+        if name in _FLOW_REVEALED_TOOLS or name in _ADMIN_ONLY_TOOLS:
+            if name not in _REVEALED:
+                _REVEALED.add(name)
+                added = True
+    return added
+
+
+def reveal_admin() -> bool:
+    """Reveal the full admin set + flow tools. Called by admin_help."""
+    return reveal(*_FLOW_REVEALED_TOOLS, *_ADMIN_ONLY_TOOLS)
+
+
+def is_hidden(name: str) -> bool:
+    return (name in _ADMIN_ONLY_TOOLS or name in _FLOW_REVEALED_TOOLS) and name not in _REVEALED
 
 _BASE_TOOLS: list[dict[str, Any]] = [
     # --- Search / retrieval ---------------------------------------------
@@ -596,7 +635,7 @@ def build_tools() -> list[dict[str, Any]]:
     dataset_enum = _dataset_enum()
     pipeline_description = _pipeline_param_description()
     pipeline_enum = _pipeline_enum()
-    tools = [tool for tool in copy.deepcopy(_BASE_TOOLS) if tool.get("name") not in _ADMIN_ONLY_TOOLS]
+    tools = [tool for tool in copy.deepcopy(_BASE_TOOLS) if not is_hidden(tool.get("name", ""))]
     for tool in tools:
         props = tool.get("inputSchema", {}).get("properties", {})
         if tool.get("name") in _PIPELINE_AWARE_TOOLS:

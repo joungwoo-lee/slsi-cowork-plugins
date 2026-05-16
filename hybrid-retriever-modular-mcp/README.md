@@ -2,31 +2,32 @@
 
 자체 완결형 로컬 RAG MCP 서버. `py server.py`가 stdio MCP를 띄우고, 도구 호출은 in-process로 **SQLite FTS5 (kiwipiepy 한국어 형태소) + 선택적 Qdrant 벡터 + 임베디드 Kùzu 그래프**를 사용합니다. 별도 백엔드 불필요.
 
-## 도구 노출
+## 도구 노출 — 동작 흐름 기반 점진 노출
 
-`tools/list`는 **공개 8개만** 노출합니다. 컨텍스트 비용·라우팅 정확도 양쪽에 유리합니다. 그 외 도구는 `admin_help`로 카탈로그를 끌어와 `tools/call`로 바로 호출합니다.
+`tools/list` cold start = **4개**: `search`, `upload`, `list_datasets`, `admin_help`. 후속 도구는 부모 도구가 실행된 직후 `notifications/tools/list_changed`로 자동 노출됩니다. 작은 모델이 받는 시작 컨텍스트를 최소화하면서, 도구가 필요해진 순간에는 카탈로그가 늘어나 있습니다.
 
-| 공개 | 역할 |
+| 부모 호출 | 노출되는 후속 도구 |
 |---|---|
-| `search` | dataset metadata가 검색 경로(hybrid / email / HippoRAG)를 자동 선택 |
-| `list_datasets` / `get_dataset` | dataset 목록·상세 (`use_when` 노트 포함) |
-| `upload` | 파일/폴더 자동 판별 ingest. 기본 `async=true` |
-| `list_documents` / `get_document_content` | 문서 브라우징 · 원문 조회 |
-| `get_job` | `upload` async 응답의 `job_id` 폴링 (공개라 한 round-trip에 닫힘) |
-| `admin_help` | 숨겨진 관리 도구 카탈로그 게이트웨이 |
+| `upload(async=true)` | `get_job` (응답에 `next_action: {tool, arguments}` 동봉) |
+| `list_datasets` | `list_documents`, `get_dataset` |
+| `search` | `get_document_content` |
+| `admin_help` | 위 4개 + 모든 관리/진단/그래프/HippoRAG/파이프라인 도구 |
 
-`admin_help`로 노출되는 도구군: **파괴적**(`create_dataset`, `delete_dataset`, `delete_document`) · **진단**(`health`, `get_document`, `list_chunks`) · **그래프**(`graph_query`, `graph_rebuild`) · **HippoRAG**(`hipporag_index`, `hipporag_search`, `hipporag_stats`, …) · **파이프라인**(`list_pipelines`, `save_pipeline`, `open_pipeline_editor`, …).
+`admin_help` 게이트 뒤 도구군: **파괴적**(`create_dataset`, `delete_dataset`, `delete_document`) · **진단**(`health`, `get_document`, `list_chunks`) · **그래프**(`graph_query`, `graph_rebuild`) · **HippoRAG**(`hipporag_index`, `hipporag_search`, `hipporag_stats`, …) · **파이프라인**(`list_pipelines`, `save_pipeline`, `open_pipeline_editor`, …).
+
+부모 응답에는 항상 구조화된 `next_action`/`next_actions`(`{tool, arguments, use_when}`)이 포함되어, 클라이언트가 `tools/list_changed`를 무시하는 경우에도 다음 호출 모양을 그대로 받아쓸 수 있습니다.
 
 ## 동작 흐름
 
 ```
-upload(path, [pipeline])  →  ingest 파이프라인 → SQLite/Qdrant/그래프 투영
+upload(path, [pipeline])  →  ingest → SQLite/Qdrant/그래프 투영
    ├ 동기:  결과 즉시 반환
-   └ async: { job_id, next_step: "Call get_job(...)" }  →  get_job 폴링
+   └ async: { job_id, next_action: {tool: "get_job", arguments: {job_id}} }
+              ↳ 서버가 tools/list_changed 송출 → get_job 노출
 
-search(query, dataset_ids?)
-   └ dataset metadata.preferred_search_pipeline에 따라
-       default(hybrid) · email · hipporag 경로 자동 선택
+search(query, dataset_ids?)  →  dataset metadata가 경로 선택
+   └ 결과 + next_actions: {get_full_document: {tool: "get_document_content", ...}}
+              ↳ get_document_content 노출
 ```
 
 `tools/list`의 `dataset_id` / `dataset_ids` 파라미터에는 **현재 등록된 dataset과 각 `use_when` 노트**가 동적으로 들어갑니다. 에이전트는 파이프라인이 아닌 dataset만 고르면 됩니다.

@@ -88,24 +88,19 @@ def main() -> int:
         send("notifications/initialized", {}, is_notification=True)
         print("[ok] initialize")
 
-        # 2. tools/list — only public tools must be advertised.
-        # Admin tools (health/graph_*/list_chunks/list_pipelines/...) stay
-        # hidden behind admin_help but remain callable via tools/call.
+        # 2. tools/list — cold start exposes only top-level entry points.
+        # Follow-up tools (get_job, list_documents, ...) are hidden until
+        # the parent tool reveals them via tools/list_changed.
         listing = send("tools/list")
         tools = listing["result"]["tools"]
         names = {t["name"] for t in tools}
-        for required in (
-            "search",
-            "upload",
-            "list_datasets",
+        for required in ("search", "upload", "list_datasets", "admin_help"):
+            assert required in names, f"missing default tool: {required}"
+        for hidden in (
+            "get_job",
             "get_dataset",
             "list_documents",
             "get_document_content",
-            "get_job",
-            "admin_help",
-        ):
-            assert required in names, f"missing public tool: {required}"
-        for hidden in (
             "health",
             "list_chunks",
             "list_pipelines",
@@ -115,8 +110,22 @@ def main() -> int:
             "delete_dataset",
             "delete_document",
         ):
-            assert hidden not in names, f"admin tool leaked into public catalog: {hidden}"
-        print(f"[ok] tools/list ({len(tools)} public tools)")
+            assert hidden not in names, f"tool leaked into default catalog: {hidden}"
+        print(f"[ok] tools/list cold start ({len(tools)} tools)")
+
+        # 2b. admin_help reveals the full admin + flow follow-up set.
+        ah = call_tool("admin_help")
+        assert not ah["isError"], ah
+        listing2 = send("tools/list")
+        names2 = {t["name"] for t in listing2["result"]["tools"]}
+        for revealed in (
+            "get_job", "get_dataset", "list_documents", "get_document_content",
+            "create_dataset", "delete_dataset", "delete_document",
+            "list_chunks", "health", "graph_query", "graph_rebuild",
+            "list_pipelines",
+        ):
+            assert revealed in names2, f"admin_help did not reveal {revealed}"
+        print(f"[ok] admin_help revealed full catalog ({len(names2)} tools)")
 
         # 3. create_dataset
         create = call_tool("create_dataset", {"name": "e2e docs"})
@@ -151,6 +160,25 @@ def main() -> int:
             f"[ok] upload (file, sync) -> doc {document_id}, "
             f"chunks={doc['chunks_count']}, has_vector={doc['has_vector']}"
         )
+
+        # 4b. upload async: response must embed a structured next_action so
+        #     a small model can call get_job without re-reading tools/list.
+        async_sample = data_root / "sample_async.md"
+        async_sample.write_text("async test doc.", encoding="utf-8")
+        up_async = call_tool(
+            "upload",
+            {
+                "dataset_id": dataset_id,
+                "path": str(async_sample),
+                "skip_embedding": True,
+                "async": True,
+            },
+        )
+        assert not up_async["isError"], up_async
+        na = up_async["payload"].get("next_action") or {}
+        assert na.get("tool") == "get_job", up_async["payload"]
+        assert na.get("arguments", {}).get("job_id"), up_async["payload"]
+        print(f"[ok] upload async next_action -> {na['tool']}({na['arguments']})")
 
         # 5. list_documents
         ld = call_tool("list_documents", {"dataset_id": dataset_id})
