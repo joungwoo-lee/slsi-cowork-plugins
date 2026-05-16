@@ -529,19 +529,393 @@ def _launch_pipeline_editor(cfg, preferred_port: int, open_browser: bool) -> dic
     raise RuntimeError("pipeline editor failed to start within 10 seconds")
 
 
-def tool_pipeline_tutorial(_args: dict) -> dict:
-    tutorial = (
-        "## How to Create a New RAG Pipeline\n\n"
-        "1. **Implement Components (Optional)**: If you need new logic, create a Python file in `retriever/components/`. "
-        "Decorate your class with `@component` and define a `run` method.\n\n"
-        "2. **Define Topology**: Create a JSON file in `retriever/pipelines/` (e.g., `my_pipeline_unified.json`). "
-        "Use the node-centric schema to define components and their connections.\n\n"
-        "3. **Register Profile**: Add a new entry to `retriever/pipelines/registry.json`. "
-        "Specify your topology file and any runtime overrides.\n\n"
-        "4. **Update Engine (Rare)**: If your component needs new input types from the search/upload API, "
-        "update `retriever/pipelines/engine.py` to forward those inputs.\n\n"
-        "5. **Test**: Run the MCP server and verify your new pipeline appears in `list_pipelines`."
-    )
+def tool_pipeline_tutorial(_args: dict) -> dict:  # noqa: C901
+    tutorial = r"""# How to Create a New RAG Pipeline
+
+This guide is **normative** — every rule here is enforced by the engine.
+Deviating from it will cause silent data loss or runtime crashes.
+
+---
+
+## CRITICAL CONSTRAINTS (read first)
+
+### 1. Reserved node names — do NOT rename these
+
+`engine.py` hardcodes the following names. If you rename any of them
+the engine will fail to inject inputs and the pipeline will crash or
+produce empty results.
+
+| Name | Path | Required? |
+|---|---|---|
+| `loader` | Indexing source | Yes (for file pipelines) |
+| `splitter` | Indexing chunker | Yes |
+| `embedder` | Indexing doc embedder | Only if `skip_embedding` is not set |
+| `writer` | FTS5 index writer | Yes |
+| `qdrant_writer` | Vector store writer | Only if using vectors |
+| `query_embedder` | Retrieval query embedder | Only if using vectors |
+| `fts5` | Keyword retriever | Yes |
+| `vector` | Vector retriever | Only if using vectors |
+| `graph` | Graph retriever | Only if using graph |
+| `joiner` | Score fusion | Yes |
+| `reranker` | Cross-encoder reranker | Only if using reranker |
+| `parent` | **Terminal node** (mandatory name) | **Always** |
+| `hippo2_indexer` | Hippo2 entity indexer | Only if using hippo2 |
+
+### 2. `parent` must be the last node — always
+
+Retrieval output is read as `result["parent"]["documents"]`.
+Any other terminal name will raise KeyError at runtime.
+
+### 3. One unified JSON file, not two
+
+All pipelines use a **single** `{name}_unified.json` that contains
+both the indexing path and the retrieval path. The engine runs it
+in two modes using dummy inputs to bypass the inactive path.
+**Never create separate `_indexing.json` / `_retrieval.json` files**
+for new pipelines unless you are extending the engine itself.
+
+### 4. Use node-centric JSON — not Haystack standard dict
+
+Topology files must use the node-centric format (`"nodes": [...]`).
+Do not write raw Haystack `{"components": ..., "connections": ...}` dicts.
+
+### 5. Env vars use `${VAR_NAME}` syntax
+
+Static values resolved from environment:
+- `${EMBEDDING_API_URL}` — embedding server URL
+- `${EMBEDDING_API_KEY}` — embedding API key
+- `${EMBEDDING_MODEL}` — model name string
+- `${EMBEDDING_DIM}` — embedding dimension (int after resolution)
+- `${EMBEDDING_API_X_DEP_TICKET}` — optional auth header
+- `${RETRIEVER_DATA_ROOT}` — data directory (SQLite + Qdrant live here)
+- `${QDRANT_COLLECTION}` — Qdrant collection name
+
+These are resolved at pipeline load time. Leave them as `${...}` placeholders
+in JSON — do not hard-code paths or keys.
+
+---
+
+## Step 1 — Implement a custom component (optional)
+
+Only needed if no existing component fits. Skip if reusing built-ins.
+
+```python
+# retriever/components/my_retriever.py
+from haystack import component, Document
+from typing import List, Optional
+
+@component
+class MyRetriever:
+    def __init__(self, data_root: str, top_k: int = 10) -> None:
+        self.data_root = data_root
+        self.top_k = top_k
+
+    @component.output_types(documents=List[Document])
+    def run(
+        self,
+        query: str,
+        dataset_ids: List[str],
+        top_k: int = 10,
+        enabled: bool = True,
+    ) -> dict:
+        if not enabled or not query:
+            return {"documents": []}
+        # ... retrieval logic ...
+        return {"documents": results}
+```
+
+Rules for custom components:
+- Decorate with `@component` (from `haystack`)
+- Constructor args become `params` in the topology JSON
+- Declare all outputs with `@component.output_types(...)`
+- `run()` returns a `dict` with keys matching `output_types`
+- Support `enabled: bool = True` if the component sits in a path
+  that can be bypassed (e.g. a retriever that may be disabled)
+- Export the class from `retriever/components/__init__.py`
+
+### Available built-in components and their ports
+
+| Module | Input ports | Output ports |
+|---|---|---|
+| `retriever.components.file_loader.LocalFileLoader` | `path` | `text`, `size_bytes` |
+| `retriever.components.email_loader.EmailSourceLoader` | `path` | `raw_emails`, `email_metadata`, `size_bytes` |
+| `retriever.components.email_markdown_converter.EmailMarkdownConverter` | `raw_emails`, `email_metadata` | `text` |
+| `retriever.components.hierarchical_splitter.HierarchicalSplitter` | `text`, `dataset_id`, `document_id`, `document_name`, `use_hierarchical`, `metadata` | `documents`, `chunks_count`, `parent_chunks_count` |
+| `retriever.components.document_embedder.HttpDocumentEmbedder` | `documents` | `documents`, `has_vector` |
+| `retriever.components.document_embedder.HttpTextEmbedder` | `text` | `embedding` |
+| `retriever.components.fts5_writer.SqliteFts5Writer` | `documents` | `written` |
+| `retriever.components.vector_retriever.LocalQdrantWriter` | `documents`, `has_vector` | `written` |
+| `retriever.components.fts5_retriever.Fts5Retriever` | `query`, `dataset_ids`, `top_k`, `enabled` | `documents` |
+| `retriever.components.vector_retriever.LocalQdrantRetriever` | `embedding`, `dataset_ids`, `top_k` | `documents` |
+| `retriever.components.graph_retriever.GraphChunkRetriever` | `query`, `dataset_ids`, `top_k`, `enabled` | `documents` |
+| `retriever.components.rrf_joiner.RrfJoiner` | `keyword_documents`, `semantic_documents`, `graph_documents`(opt), `fusion`, `vector_weight`, `rrf_k`, `metadata_condition` | `documents` |
+| `retriever.components.linear_joiner.LinearJoiner` | same as RrfJoiner | `documents` |
+| `retriever.components.hybrid_joiner.HybridJoiner` | same as RrfJoiner | `documents` |
+| `retriever.components.bge_reranker.BgeReranker` | `documents`, `query`, `top_n`, `enabled` | `documents` |
+| `retriever.components.parent_replace.ParentChunkReplacer` | `documents`, `enabled` | `documents` |
+| `retriever.components.hippo2_indexer.Hippo2Indexer` | `documents`, `dataset_id`, `document_id` | `indexed` |
+| `retriever.components.hippo2_retriever.Hippo2Retriever` | `query`, `dataset_ids`, `top_k`, `enabled` | `documents` |
+
+---
+
+## Step 2 — Write the unified topology JSON
+
+Save as `retriever/pipelines/{name}_unified.json`.
+
+### Minimal hybrid pipeline (FTS5 + Qdrant)
+
+```json
+{
+  "metadata": {
+    "description": "Use when: <describe when to prefer this pipeline over others>."
+  },
+  "max_runs_per_component": 100,
+  "connection_type_validation": true,
+  "nodes": [
+    {
+      "name": "loader",
+      "module": "retriever.components.file_loader.LocalFileLoader",
+      "params": {"max_chars": 2000000}
+    },
+    {
+      "name": "splitter",
+      "module": "retriever.components.hierarchical_splitter.HierarchicalSplitter",
+      "params": {
+        "chunk_chars": 512, "chunk_overlap": 50,
+        "parent_chunk_chars": 1024, "parent_chunk_overlap": 100,
+        "child_chunk_chars": 256, "child_chunk_overlap": 50
+      },
+      "inputs": [{"port": "text", "from": "loader.text"}]
+    },
+    {
+      "name": "embedder",
+      "module": "retriever.components.document_embedder.HttpDocumentEmbedder",
+      "params": {
+        "api_url": "${EMBEDDING_API_URL}", "api_key": "${EMBEDDING_API_KEY}",
+        "model": "${EMBEDDING_MODEL}", "dim": "${EMBEDDING_DIM}",
+        "x_dep_ticket": "${EMBEDDING_API_X_DEP_TICKET}",
+        "x_system_name": "hybrid-retriever-modular-mcp",
+        "batch_size": 16, "timeout_sec": 60, "verify_ssl": false
+      },
+      "inputs": [{"port": "documents", "from": "splitter.documents"}]
+    },
+    {
+      "name": "writer",
+      "module": "retriever.components.fts5_writer.SqliteFts5Writer",
+      "params": {"data_root": "${RETRIEVER_DATA_ROOT}"},
+      "inputs": [{"port": "documents", "from": "splitter.documents"}]
+    },
+    {
+      "name": "qdrant_writer",
+      "module": "retriever.components.vector_retriever.LocalQdrantWriter",
+      "params": {
+        "data_root": "${RETRIEVER_DATA_ROOT}",
+        "collection": "${QDRANT_COLLECTION}"
+      },
+      "inputs": [
+        {"port": "documents", "from": "embedder.documents"},
+        {"port": "has_vector", "from": "embedder.has_vector"}
+      ]
+    },
+    {
+      "name": "query_embedder",
+      "module": "retriever.components.document_embedder.HttpTextEmbedder",
+      "params": {
+        "api_url": "${EMBEDDING_API_URL}", "api_key": "${EMBEDDING_API_KEY}",
+        "model": "${EMBEDDING_MODEL}", "dim": "${EMBEDDING_DIM}",
+        "x_dep_ticket": "${EMBEDDING_API_X_DEP_TICKET}",
+        "x_system_name": "hybrid-retriever-modular-mcp",
+        "batch_size": 16, "timeout_sec": 60, "verify_ssl": false
+      }
+    },
+    {
+      "name": "fts5",
+      "module": "retriever.components.fts5_retriever.Fts5Retriever",
+      "params": {"data_root": "${RETRIEVER_DATA_ROOT}"}
+    },
+    {
+      "name": "vector",
+      "module": "retriever.components.vector_retriever.LocalQdrantRetriever",
+      "params": {
+        "data_root": "${RETRIEVER_DATA_ROOT}",
+        "collection": "${QDRANT_COLLECTION}"
+      },
+      "inputs": [{"port": "embedding", "from": "query_embedder.embedding"}]
+    },
+    {
+      "name": "joiner",
+      "module": "retriever.components.rrf_joiner.RrfJoiner",
+      "params": {},
+      "inputs": [
+        {"port": "keyword_documents", "from": "fts5.documents"},
+        {"port": "semantic_documents", "from": "vector.documents"}
+      ]
+    },
+    {
+      "name": "parent",
+      "module": "retriever.components.parent_replace.ParentChunkReplacer",
+      "params": {},
+      "inputs": [{"port": "documents", "from": "joiner.documents"}],
+      "answer_template": "아래 contexts만 근거로 한국어로 답하라. 각 사실 뒤에 [document_name:position] 형식으로 인용을 붙이고, 근거가 부족하면 '문서에서 확인되지 않습니다'라고 답하라."
+    }
+  ]
+}
+```
+
+### Adding a reranker between joiner and parent
+
+Insert this node between `joiner` and `parent`, then update `parent.inputs`:
+
+```json
+{
+  "name": "reranker",
+  "module": "retriever.components.bge_reranker.BgeReranker",
+  "params": {"model": "BAAI/bge-reranker-v2-m3", "use_fp16": true, "batch_size": 32, "max_length": 512},
+  "inputs": [{"port": "documents", "from": "joiner.documents"}]
+},
+{
+  "name": "parent",
+  ...
+  "inputs": [{"port": "documents", "from": "reranker.documents"}]
+}
+```
+
+### Keyword-only pipeline (no embedding API)
+
+Omit `embedder`, `qdrant_writer`, `query_embedder`, `vector` nodes.
+Connect `fts5.documents` → `joiner.keyword_documents`.
+Set `retrieval_overrides: {"fusion": "rrf"}` and
+`indexing_overrides: {"skip_embedding": true}` in registry.json.
+`joiner` still requires `semantic_documents` input — pass an empty list
+via `retrieval_overrides` or leave it to the engine dummy-input bypass.
+
+### Adding a graph retriever (third lane into joiner)
+
+Add a `graph` node (name must be `"graph"`) and connect its output:
+
+```json
+{
+  "name": "graph",
+  "module": "retriever.components.graph_retriever.GraphChunkRetriever",
+  "params": {"data_root": "${RETRIEVER_DATA_ROOT}"}
+},
+{
+  "name": "joiner",
+  ...
+  "inputs": [
+    {"port": "keyword_documents", "from": "fts5.documents"},
+    {"port": "semantic_documents", "from": "vector.documents"},
+    {"port": "graph_documents",   "from": "graph.documents"}
+  ]
+}
+```
+
+---
+
+## Step 3 — Register the profile in registry.json
+
+Edit `retriever/pipelines/registry.json`:
+
+```json
+{
+  "my_pipeline": {
+    "description": "Optional one-liner; if omitted, read from topology metadata.description.",
+    "indexing_overrides": {},
+    "retrieval_overrides": {
+      "fusion": "rrf"
+    },
+    "search_kwargs": {
+      "fusion": "rrf"
+    },
+    "unified_topology": "my_pipeline_unified.json"
+  }
+}
+```
+
+`indexing_overrides` / `retrieval_overrides` keys are applied via `setattr()`
+on the loaded component instances. They are NOT JSON params — they override
+Python attributes after the pipeline is instantiated.
+
+Common override keys:
+- `skip_embedding: true` — bypass embedder + qdrant_writer during indexing
+- `use_hierarchical: "false"` — flat chunks (no parent-child hierarchy)
+- `fusion: "rrf"` — RRF score fusion (default)
+- `use_reranker: true` — activate BgeReranker
+- `reranker_model: "BAAI/bge-reranker-v2-m3"` — reranker model path
+- `rerank_top_n: 12` — how many docs to rerank
+
+---
+
+## Step 4 — Update engine.py (only when adding a new node role)
+
+**This step is only needed if your pipeline introduces a node with a
+role the engine does not already know about.**
+
+The engine (`retriever/pipelines/engine.py`) maintains two bypass lists:
+
+- **Indexing dummy inputs** (lines ~372–400): bypasses retrieval nodes
+  (`query_embedder`, `fts5`, `graph`, `vector`, `joiner`, `reranker`, `parent`)
+  by injecting empty/disabled inputs so Haystack validation does not fail.
+
+- **Retrieval dummy inputs** (lines ~503–517): bypasses indexing nodes
+  (`loader`, `splitter`, `embedder`, `writer`) the same way.
+
+If you add a node whose name is NOT in either bypass list, Haystack will
+raise a validation error about missing required inputs. In that case:
+
+1. Add the new name to the appropriate bypass block in `engine.py`.
+2. Provide the minimal dummy inputs (empty list, empty string, `False`).
+3. Add the name to `include_outputs_from` in `run_indexing()` if the
+   indexing path needs its output captured.
+
+Do not add the node to the retrieval `run_inputs` dict unless the engine
+needs to pass live query-time data into it.
+
+---
+
+## Step 5 — Test
+
+```bash
+py -3.12 server.py
+```
+
+Then via MCP:
+- `list_pipelines` — confirm your pipeline name appears
+- `upload` with `pipeline="my_pipeline"` — test indexing path
+- `search` with `pipeline="my_pipeline"` — test retrieval path
+
+---
+
+## WHAT NOT TO DO
+
+- **Do not rename** `loader`, `splitter`, `embedder`, `writer`, `qdrant_writer`,
+  `query_embedder`, `fts5`, `vector`, `graph`, `joiner`, `reranker`, `parent`.
+  The engine uses these names literally.
+
+- **Do not rename the terminal node.** It must be `parent`. The engine reads
+  `result["parent"]["documents"]` unconditionally.
+
+- **Do not create separate indexing/retrieval JSON files** — use a single
+  `{name}_unified.json` that combines both paths.
+
+- **Do not hard-code paths or credentials** in JSON. Always use `${ENV_VAR}`.
+
+- **Do not omit `answer_template`** from the `parent` node. Without it the
+  agent falls back to the default pipeline template, which may be wrong for
+  your use case.
+
+- **Do not write the topology in Haystack standard dict format**
+  (`{"components": ..., "connections": ...}`). Use node-centric format only.
+
+- **Do not put a new retriever's output directly into `parent`** without going
+  through `joiner`. The joiner is where score normalisation and fusion happen.
+  Bypassing it produces unnormalised scores.
+
+- **Do not modify `engine.py`** unless your node is genuinely a new role
+  (not covered by the bypass list). Adding a second retriever that feeds into
+  `joiner` via an extra input port does NOT require engine changes — `joiner`
+  accepts `graph_documents` as a third optional input already.
+"""
     return text_result(tutorial)
 
 
